@@ -16,6 +16,16 @@ The backend consists of three main microservices that work together:
 *   **`api-portal`**: This service orchestrates the forecasting challenges. It handles the registration of models, accepts incoming forecasts, and manages the evaluation process against the ground truth data collected by the data-portal.
 *   **`dashboard-api`**: This API serves the frontend application. It retrieves relevant statistics, leaderboard data, and challenge information from the database to be displayed in the user interface.
 
+## Integrated Data Sources
+
+Currently, the following data sources are integrated and active:
+
+### EIA (U.S. Energy Information Administration)
+The data used in this platform are obtained from the [U.S. Energy Information Administration (EIA) Data Portal](https://www.eia.gov/opendata/). The data are accessed for non-commercial, scientific purposes and are used only partially. The EIA is acknowledged as the original source of the data.
+
+### SMARD (Bundesnetzagentur)
+The data used in this platform are obtained from the [SMARD electricity and gas market data platform](https://www.smard.de/home) operated by the German Federal Network Agency (Bundesnetzagentur). The data, licensed under the Creative Commons Attribution 4.0 International Licence (CC BY 4.0), are accessed and partially used for non-commercial, scientific purposes. The original source of the data is acknowledged as "Bundesnetzagentur | SMARD.de", and any modifications or aggregations of the data are the sole responsibility of the authors.
+
 ## Getting Started (Self-Hosting)
 
 To host the TS-Arena backend yourself, you primarily need Docker and Docker Compose.
