@@ -1,0 +1,2006 @@
+timeseries:
+  smard-1223-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-1223-DE-hour
+      description: 'Electricity generation: Lignite'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 1223
+      region: DE
+      resolution: hour
+  smard-1223-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-1223-DE-quarterhour
+      description: 'Electricity generation: Lignite'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 1223
+      region: DE
+      resolution: quarterhour
+  smard-1224-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-1224-DE-hour
+      description: 'Electricity generation: Nuclear energy'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 1224
+      region: DE
+      resolution: hour
+  smard-1224-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-1224-DE-quarterhour
+      description: 'Electricity generation: Nuclear energy'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 1224
+      region: DE
+      resolution: quarterhour
+  smard-1225-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-1225-DE-hour
+      description: 'Electricity generation: Wind Offshore'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 1225
+      region: DE
+      resolution: hour
+  smard-1225-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-1225-DE-quarterhour
+      description: 'Electricity generation: Wind Offshore'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 1225
+      region: DE
+      resolution: quarterhour
+  smard-1226-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-1226-DE-hour
+      description: 'Electricity generation: Hydropower'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 1226
+      region: DE
+      resolution: hour
+  smard-1226-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-1226-DE-quarterhour
+      description: 'Electricity generation: Hydropower'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 1226
+      region: DE
+      resolution: quarterhour
+  smard-1227-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-1227-DE-hour
+      description: 'Electricity generation: Other conventional sources'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 1227
+      region: DE
+      resolution: hour
+  smard-1227-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-1227-DE-quarterhour
+      description: 'Electricity generation: Other conventional sources'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 1227
+      region: DE
+      resolution: quarterhour
+  smard-1228-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-1228-DE-hour
+      description: 'Electricity generation: Other renewable sources'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 1228
+      region: DE
+      resolution: hour
+  smard-1228-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-1228-DE-quarterhour
+      description: 'Electricity generation: Other renewable sources'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 1228
+      region: DE
+      resolution: quarterhour
+  smard-4066-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4066-DE-hour
+      description: 'Electricity generation: Biomass'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 4066
+      region: DE
+      resolution: hour
+  smard-4066-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4066-DE-quarterhour
+      description: 'Electricity generation: Biomass'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 4066
+      region: DE
+      resolution: quarterhour
+  smard-4067-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4067-DE-hour
+      description: 'Electricity generation: Wind Onshore'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 4067
+      region: DE
+      resolution: hour
+  smard-4067-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4067-DE-quarterhour
+      description: 'Electricity generation: Wind Onshore'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 4067
+      region: DE
+      resolution: quarterhour
+  smard-4068-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4068-DE-hour
+      description: 'Electricity generation: Photovoltaics'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 4068
+      region: DE
+      resolution: hour
+  smard-4068-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4068-DE-quarterhour
+      description: 'Electricity generation: Photovoltaics'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 4068
+      region: DE
+      resolution: quarterhour
+  smard-4069-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4069-DE-hour
+      description: 'Electricity generation: Hard coal'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 4069
+      region: DE
+      resolution: hour
+  smard-4069-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4069-DE-quarterhour
+      description: 'Electricity generation: Hard coal'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 4069
+      region: DE
+      resolution: quarterhour
+  smard-4070-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4070-DE-hour
+      description: 'Electricity generation: Pumped storage'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 4070
+      region: DE
+      resolution: hour
+  smard-4070-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4070-DE-quarterhour
+      description: 'Electricity generation: Pumped storage'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 4070
+      region: DE
+      resolution: quarterhour
+  smard-4071-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4071-DE-hour
+      description: 'Electricity generation: Natural gas'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 4071
+      region: DE
+      resolution: hour
+  smard-4071-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4071-DE-quarterhour
+      description: 'Electricity generation: Natural gas'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      filter: 4071
+      region: DE
+      resolution: quarterhour
+  smard-410-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-410-DE-hour
+      description: 'Electricity consumption: Total (grid load)'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: load
+    default_params:
+      filter: 410
+      region: DE
+      resolution: hour
+  smard-410-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-410-DE-quarterhour
+      description: 'Electricity consumption: Total (grid load)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      subdomain: load
+    default_params:
+      filter: 410
+      region: DE
+      resolution: quarterhour
+  smard-4359-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4359-DE-hour
+      description: 'Electricity consumption: Residual load'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: load
+    default_params:
+      filter: 4359
+      region: DE
+      resolution: hour
+  smard-4359-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4359-DE-quarterhour
+      description: 'Electricity consumption: Residual load'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      subdomain: load
+    default_params:
+      filter: 4359
+      region: DE
+      resolution: quarterhour
+  smard-4387-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4387-DE-hour
+      description: 'Electricity consumption: Pumped storage'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: load
+    default_params:
+      filter: 4387
+      region: DE
+      resolution: hour
+  smard-4387-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4387-DE-quarterhour
+      description: 'Electricity consumption: Pumped storage'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      subdomain: load
+    default_params:
+      filter: 4387
+      region: DE
+      resolution: quarterhour
+  smard-4169-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4169-DE-hour
+      description: 'Market price: Germany/Luxembourg'
+      frequency: 1 hour
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 4169
+      region: DE
+      resolution: hour
+  smard-4169-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4169-DE-quarterhour
+      description: 'Market price: Germany/Luxembourg'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 4169
+      region: DE
+      resolution: quarterhour
+  smard-5078-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-5078-DE-hour
+      description: 'Market price: Neighbouring DE/LU regions'
+      frequency: 1 hour
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 5078
+      region: DE
+      resolution: hour
+  smard-5078-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-5078-DE-quarterhour
+      description: 'Market price: Neighbouring DE/LU regions'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 5078
+      region: DE
+      resolution: quarterhour
+  smard-4996-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4996-DE-hour
+      description: 'Market price: Belgium'
+      frequency: 1 hour
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 4996
+      region: DE
+      resolution: hour
+  smard-4996-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4996-DE-quarterhour
+      description: 'Market price: Belgium'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 4996
+      region: DE
+      resolution: quarterhour
+  smard-4997-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4997-DE-hour
+      description: 'Market price: Norway 2'
+      frequency: 1 hour
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 4997
+      region: DE
+      resolution: hour
+  smard-4997-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4997-DE-quarterhour
+      description: 'Market price: Norway 2'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 4997
+      region: DE
+      resolution: quarterhour
+  smard-4170-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4170-DE-hour
+      description: 'Market price: Austria'
+      frequency: 1 hour
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 4170
+      region: DE
+      resolution: hour
+  smard-4170-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4170-DE-quarterhour
+      description: 'Market price: Austria'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 4170
+      region: DE
+      resolution: quarterhour
+  smard-252-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-252-DE-hour
+      description: 'Market price: Denmark 1'
+      frequency: 1 hour
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 252
+      region: DE
+      resolution: hour
+  smard-252-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-252-DE-quarterhour
+      description: 'Market price: Denmark 1'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 252
+      region: DE
+      resolution: quarterhour
+  smard-253-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-253-DE-hour
+      description: 'Market price: Denmark 2'
+      frequency: 1 hour
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 253
+      region: DE
+      resolution: hour
+  smard-253-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-253-DE-quarterhour
+      description: 'Market price: Denmark 2'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 253
+      region: DE
+      resolution: quarterhour
+  smard-254-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-254-DE-hour
+      description: 'Market price: France'
+      frequency: 1 hour
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 254
+      region: DE
+      resolution: hour
+  smard-254-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-254-DE-quarterhour
+      description: 'Market price: France'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 254
+      region: DE
+      resolution: quarterhour
+  smard-255-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-255-DE-hour
+      description: 'Market price: Italy (North)'
+      frequency: 1 hour
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 255
+      region: DE
+      resolution: hour
+  smard-255-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-255-DE-quarterhour
+      description: 'Market price: Italy (North)'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 255
+      region: DE
+      resolution: quarterhour
+  smard-256-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-256-DE-hour
+      description: 'Market price: Netherlands'
+      frequency: 1 hour
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 256
+      region: DE
+      resolution: hour
+  smard-256-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-256-DE-quarterhour
+      description: 'Market price: Netherlands'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 256
+      region: DE
+      resolution: quarterhour
+  smard-257-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-257-DE-hour
+      description: 'Market price: Poland'
+      frequency: 1 hour
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 257
+      region: DE
+      resolution: hour
+  smard-257-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-257-DE-quarterhour
+      description: 'Market price: Poland'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 257
+      region: DE
+      resolution: quarterhour
+  smard-258-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-258-DE-hour
+      description: 'Market price: Poland'
+      frequency: 1 hour
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 258
+      region: DE
+      resolution: hour
+  smard-258-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-258-DE-quarterhour
+      description: 'Market price: Poland'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 258
+      region: DE
+      resolution: quarterhour
+  smard-259-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-259-DE-hour
+      description: 'Market price: Switzerland'
+      frequency: 1 hour
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 259
+      region: DE
+      resolution: hour
+  smard-259-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-259-DE-quarterhour
+      description: 'Market price: Switzerland'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 259
+      region: DE
+      resolution: quarterhour
+  smard-260-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-260-DE-hour
+      description: 'Market price: Slovenia'
+      frequency: 1 hour
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 260
+      region: DE
+      resolution: hour
+  smard-260-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-260-DE-quarterhour
+      description: 'Market price: Slovenia'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 260
+      region: DE
+      resolution: quarterhour
+  smard-261-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-261-DE-hour
+      description: 'Market price: Czech Republic'
+      frequency: 1 hour
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 261
+      region: DE
+      resolution: hour
+  smard-261-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-261-DE-quarterhour
+      description: 'Market price: Czech Republic'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 261
+      region: DE
+      resolution: quarterhour
+  smard-262-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-262-DE-hour
+      description: 'Market price: Hungary'
+      frequency: 1 hour
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 262
+      region: DE
+      resolution: hour
+  smard-262-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-262-DE-quarterhour
+      description: 'Market price: Hungary'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      subdomain: price
+    default_params:
+      filter: 262
+      region: DE
+      resolution: quarterhour
+
+  # EIA Electricity Data
+  
+  eia-caiso-demand:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-CAISO-Demand
+      description: 'California ISO - Hourly Electricity Demand'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: load
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['CISO']
+        fueltype: ['NG']
+  
+  eia-pjm-demand:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-PJM-Demand
+      description: 'PJM Interconnection - Hourly Electricity Demand'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: load
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['PJM']
+        fueltype: ['NG']
+  
+  eia-nyiso-demand:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-NYISO-Demand
+      description: 'New York Independent System Operator - Hourly Electricity Demand'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: load
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['NYIS']
+        fueltype: ['NG']
+  
+  eia-isone-demand:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-ISONE-Demand
+      description: 'ISO New England - Hourly Electricity Demand'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: load
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['ISNE']
+        fueltype: ['NG']
+  
+  eia-ercot-demand:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-ERCOT-Demand
+      description: 'ERCOT - Hourly Electricity Demand'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: load
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['ERCO']
+        fueltype: ['NG']
+  
+  # Solar Generation Data
+  eia-caiso-solar:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-CAISO-Solar
+      description: 'California ISO - Hourly Solar Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['CISO']
+        fueltype: ['SUN']
+
+  eia-ercot-solar:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-ERCOT-Solar
+      description: 'ERCOT - Hourly Solar Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['ERCO']
+        fueltype: ['SUN']
+
+  # Wind Generation Data
+  eia-caiso-wind:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-CAISO-Wind
+      description: 'California ISO - Hourly Wind Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['CISO']
+        fueltype: ['WND']
+
+  eia-ercot-wind:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-ERCOT-Wind
+      description: 'ERCOT - Hourly Wind Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['ERCO']
+        fueltype: ['WND']
+
+  eia-pjm-wind:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-PJM-Wind
+      description: 'PJM Interconnection - Hourly Wind Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['PJM']
+        fueltype: ['WND']
+
+  # Coal Generation Data
+  eia-pjm-coal:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-PJM-Coal
+      description: 'PJM Interconnection - Hourly Coal Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['PJM']
+        fueltype: ['COL']
+
+  eia-miso-coal:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-MISO-Coal
+      description: 'MISO - Hourly Coal Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['MISO']
+        fueltype: ['COL']
+
+  # Nuclear Generation Data
+  eia-pjm-nuclear:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-PJM-Nuclear
+      description: 'PJM Interconnection - Hourly Nuclear Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['PJM']
+        fueltype: ['NUC']
+
+  eia-miso-nuclear:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-MISO-Nuclear
+      description: 'MISO - Hourly Nuclear Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['MISO']
+        fueltype: ['NUC']
+
+  # Hydroelectric Generation Data
+  eia-caiso-hydro:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-CAISO-Hydro
+      description: 'California ISO - Hourly Hydroelectric Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['CISO']
+        fueltype: ['WAT']
+
+  eia-bpa-hydro:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-BPA-Hydro
+      description: 'Bonneville Power Administration - Hourly Hydroelectric Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['BPAT']
+        fueltype: ['WAT']
+
+  # Regional Demand Data (Additional ISOs)
+  eia-miso-demand:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-MISO-Demand
+      description: 'MISO - Hourly Electricity Demand'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: load
+    default_params:
+      frequency: hourly
+      sub_id: region-data
+      facet_args:
+        respondent: ['MISO']
+        type: ['D']
+
+  eia-spp-demand:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-SPP-Demand
+      description: 'Southwest Power Pool - Hourly Electricity Demand'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: load
+    default_params:
+      frequency: hourly
+      sub_id: region-data
+      facet_args:
+        respondent: ['SWPP']
+        type: ['D']
+
+  # Daily Interchange Data (Power flows between regions)
+  eia-caiso-interchange:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-CAISO-Interchange
+      description: 'California ISO - Daily Power Interchange'
+      frequency: 1 day
+      unit: MWh
+      domain: energy
+      subdomain: interchange
+    default_params:
+      frequency: daily
+      sub_id: daily-interchange-data
+      facet_args:
+        fromba: ['CISO']
+
+  eia-pjm-interchange:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-PJM-Interchange
+      description: 'PJM Interconnection - Daily Power Interchange'
+      frequency: 1 day
+      unit: MWh
+      domain: energy
+      subdomain: interchange
+    default_params:
+      frequency: daily
+      sub_id: daily-interchange-data
+      facet_args:
+        fromba: ['PJM']
+
+  # Comprehensive EIA Data Collection - All Major Fuel Types and Regions
+  
+  # Natural Gas Generation - All Major ISOs
+  eia-caiso-naturalgas:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-CAISO-NaturalGas
+      description: 'California ISO - Hourly Natural Gas Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['CISO']
+        fueltype: ['NG']
+
+  eia-ercot-naturalgas:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-ERCOT-NaturalGas
+      description: 'ERCOT - Hourly Natural Gas Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['ERCO']
+        fueltype: ['NG']
+
+  eia-pjm-naturalgas:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-PJM-NaturalGas
+      description: 'PJM Interconnection - Hourly Natural Gas Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['PJM']
+        fueltype: ['NG']
+
+  eia-nyiso-naturalgas:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-NYISO-NaturalGas
+      description: 'New York Independent System Operator - Hourly Natural Gas Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['NYIS']
+        fueltype: ['NG']
+
+  eia-isone-naturalgas:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-ISONE-NaturalGas
+      description: 'ISO New England - Hourly Natural Gas Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['ISNE']
+        fueltype: ['NG']
+
+  eia-miso-naturalgas:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-MISO-NaturalGas
+      description: 'MISO - Hourly Natural Gas Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['MISO']
+        fueltype: ['NG']
+
+  # Coal Generation - Additional ISOs
+  eia-caiso-coal:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-CAISO-Coal
+      description: 'California ISO - Hourly Coal Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['CISO']
+        fueltype: ['COL']
+
+  eia-ercot-coal:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-ERCOT-Coal
+      description: 'ERCOT - Hourly Coal Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['ERCO']
+        fueltype: ['COL']
+
+  eia-nyiso-coal:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-NYISO-Coal
+      description: 'New York Independent System Operator - Hourly Coal Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['NYIS']
+        fueltype: ['COL']
+
+  eia-isone-coal:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-ISONE-Coal
+      description: 'ISO New England - Hourly Coal Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['ISNE']
+        fueltype: ['COL']
+
+  # Solar Generation - Additional ISOs
+  eia-pjm-solar:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-PJM-Solar
+      description: 'PJM Interconnection - Hourly Solar Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['PJM']
+        fueltype: ['SUN']
+
+  eia-nyiso-solar:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-NYISO-Solar
+      description: 'New York Independent System Operator - Hourly Solar Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['NYIS']
+        fueltype: ['SUN']
+
+  eia-isone-solar:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-ISONE-Solar
+      description: 'ISO New England - Hourly Solar Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['ISNE']
+        fueltype: ['SUN']
+
+  eia-miso-solar:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-MISO-Solar
+      description: 'MISO - Hourly Solar Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['MISO']
+        fueltype: ['SUN']
+
+  # Wind Generation - Additional ISOs
+  eia-nyiso-wind:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-NYISO-Wind
+      description: 'New York Independent System Operator - Hourly Wind Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['NYIS']
+        fueltype: ['WND']
+
+  eia-isone-wind:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-ISONE-Wind
+      description: 'ISO New England - Hourly Wind Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['ISNE']
+        fueltype: ['WND']
+
+  eia-miso-wind:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-MISO-Wind
+      description: 'MISO - Hourly Wind Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['MISO']
+        fueltype: ['WND']
+
+  # Nuclear Generation - Additional ISOs
+  eia-caiso-nuclear:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-CAISO-Nuclear
+      description: 'California ISO - Hourly Nuclear Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['CISO']
+        fueltype: ['NUC']
+
+  eia-ercot-nuclear:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-ERCOT-Nuclear
+      description: 'ERCOT - Hourly Nuclear Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['ERCO']
+        fueltype: ['NUC']
+
+  eia-nyiso-nuclear:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-NYISO-Nuclear
+      description: 'New York Independent System Operator - Hourly Nuclear Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['NYIS']
+        fueltype: ['NUC']
+
+  eia-isone-nuclear:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-ISONE-Nuclear
+      description: 'ISO New England - Hourly Nuclear Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['ISNE']
+        fueltype: ['NUC']
+
+  # Hydroelectric Generation - Additional ISOs
+  eia-ercot-hydro:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-ERCOT-Hydro
+      description: 'ERCOT - Hourly Hydroelectric Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['ERCO']
+        fueltype: ['WAT']
+
+  eia-pjm-hydro:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-PJM-Hydro
+      description: 'PJM Interconnection - Hourly Hydroelectric Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['PJM']
+        fueltype: ['WAT']
+
+  eia-nyiso-hydro:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-NYISO-Hydro
+      description: 'New York Independent System Operator - Hourly Hydroelectric Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['NYIS']
+        fueltype: ['WAT']
+
+  eia-isone-hydro:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-ISONE-Hydro
+      description: 'ISO New England - Hourly Hydroelectric Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['ISNE']
+        fueltype: ['WAT']
+
+  eia-miso-hydro:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-MISO-Hydro
+      description: 'MISO - Hourly Hydroelectric Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['MISO']
+        fueltype: ['WAT']
+
+  # Oil/Petroleum Generation
+  eia-caiso-oil:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-CAISO-Oil
+      description: 'California ISO - Hourly Oil Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['CISO']
+        fueltype: ['OIL']
+
+  eia-ercot-oil:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-ERCOT-Oil
+      description: 'ERCOT - Hourly Oil Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['ERCO']
+        fueltype: ['OIL']
+
+  eia-pjm-oil:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-PJM-Oil
+      description: 'PJM Interconnection - Hourly Oil Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['PJM']
+        fueltype: ['OIL']
+
+  eia-nyiso-oil:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-NYISO-Oil
+      description: 'New York Independent System Operator - Hourly Oil Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['NYIS']
+        fueltype: ['OIL']
+
+  eia-isone-oil:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-ISONE-Oil
+      description: 'ISO New England - Hourly Oil Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['ISNE']
+        fueltype: ['OIL']
+
+  # Additional Regional Operators and Balancing Authorities
+
+  # Tennessee Valley Authority (TVA)
+  eia-tva-coal:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-TVA-Coal
+      description: 'Tennessee Valley Authority - Hourly Coal Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['TVA']
+        fueltype: ['COL']
+
+  eia-tva-nuclear:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-TVA-Nuclear
+      description: 'Tennessee Valley Authority - Hourly Nuclear Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['TVA']
+        fueltype: ['NUC']
+
+  eia-tva-hydro:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-TVA-Hydro
+      description: 'Tennessee Valley Authority - Hourly Hydroelectric Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['TVA']
+        fueltype: ['WAT']
+
+  # Southwest Power Pool (SPP) - Generation Data
+  eia-spp-coal:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-SPP-Coal
+      description: 'Southwest Power Pool - Hourly Coal Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['SWPP']
+        fueltype: ['COL']
+
+  eia-spp-wind:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-SPP-Wind
+      description: 'Southwest Power Pool - Hourly Wind Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['SWPP']
+        fueltype: ['WND']
+
+  eia-spp-naturalgas:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-SPP-NaturalGas
+      description: 'Southwest Power Pool - Hourly Natural Gas Generation'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: generation
+    default_params:
+      frequency: hourly
+      sub_id: fuel-type-data
+      facet_args:
+        respondent: ['SWPP']
+        fueltype: ['NG']
+
+  # Additional Regional Demand Data
+  eia-tva-demand:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-TVA-Demand
+      description: 'Tennessee Valley Authority - Hourly Electricity Demand'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: load
+    default_params:
+      frequency: hourly
+      sub_id: region-data
+      facet_args:
+        respondent: ['TVA']
+        type: ['D']
+
+  eia-bpa-demand:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-BPA-Demand
+      description: 'Bonneville Power Administration - Hourly Electricity Demand'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      subdomain: load
+    default_params:
+      frequency: hourly
+      sub_id: region-data
+      facet_args:
+        respondent: ['BPAT']
+        type: ['D']
+
+  # Additional Interchange Data
+  eia-ercot-interchange:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-ERCOT-Interchange
+      description: 'ERCOT - Daily Power Interchange'
+      frequency: 1 day
+      unit: MWh
+      domain: energy
+      subdomain: interchange
+    default_params:
+      frequency: daily
+      sub_id: daily-interchange-data
+      facet_args:
+        fromba: ['ERCO']
+
+  eia-nyiso-interchange:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-NYISO-Interchange
+      description: 'New York Independent System Operator - Daily Power Interchange'
+      frequency: 1 day
+      unit: MWh
+      domain: energy
+      subdomain: interchange
+    default_params:
+      frequency: daily
+      sub_id: daily-interchange-data
+      facet_args:
+        fromba: ['NYIS']
+
+  eia-isone-interchange:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-ISONE-Interchange
+      description: 'ISO New England - Daily Power Interchange'
+      frequency: 1 day
+      unit: MWh
+      domain: energy
+      subdomain: interchange
+    default_params:
+      frequency: daily
+      sub_id: daily-interchange-data
+      facet_args:
+        fromba: ['ISNE']
+
+  eia-miso-interchange:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-MISO-Interchange
+      description: 'MISO - Daily Power Interchange'
+      frequency: 1 day
+      unit: MWh
+      domain: energy
+      subdomain: interchange
+    default_params:
+      frequency: daily
+      sub_id: daily-interchange-data
+      facet_args:
+        fromba: ['MISO']
+
+  eia-spp-interchange:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-SPP-Interchange
+      description: 'Southwest Power Pool - Daily Power Interchange'
+      frequency: 1 day
+      unit: MWh
+      domain: energy
+      subdomain: interchange
+    default_params:
+      frequency: daily
+      sub_id: daily-interchange-data
+      facet_args:
+        fromba: ['SWPP']
+
+  eia-tva-interchange:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-TVA-Interchange
+      description: 'Tennessee Valley Authority - Daily Power Interchange'
+      frequency: 1 day
+      unit: MWh
+      domain: energy
+      subdomain: interchange
+    default_params:
+      frequency: daily
+      sub_id: daily-interchange-data
+      facet_args:
+        fromba: ['TVA']
+
+  eia-bpa-interchange:
+    module: src.plugins.data_sources.eia_plugin
+    class: EIADataSourcePlugin
+    metadata:
+      name: EIA-BPA-Interchange
+      description: 'Bonneville Power Administration - Daily Power Interchange'
+      frequency: 1 day
+      unit: MWh
+      domain: energy
+      subdomain: interchange
+    default_params:
+      frequency: daily
+      sub_id: daily-interchange-data
+      facet_args:
+        fromba: ['BPAT']

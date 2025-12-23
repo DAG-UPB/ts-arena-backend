@@ -1,0 +1,98 @@
+services:
+
+  api-portal:
+    build:
+      context: ./api-portal
+      dockerfile: Dockerfile
+    ports:
+      - "8458:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - API_KEY=${API_KEY}
+    # env_file:
+    #   - .env
+    networks:
+      - default
+    depends_on:
+      - timescaledb
+      - data-portal
+
+  dashboard-api:
+    build:
+      context: ./dashboard-api
+      dockerfile: Dockerfile
+    container_name: ts-arena-dashboard-api
+    ports:
+      - "8485:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - API_KEY=${DASHBOARD_API_KEY}
+      - CORS_ORIGINS=["http://localhost:8501","http://arena-app:8501", "https://huggingface.co/spaces/DAG-UPB/TS-Arena"]
+      - DEBUG=${DEBUG:-false}
+    # env_file:
+    #   - .env
+    networks:
+      - default
+    depends_on:
+      - timescaledb
+    restart: unless-stopped
+
+  data-portal:
+    build:
+      context: ./data-portal
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SCHEDULER_TIMEZONE=${SCHEDULER_TIMEZONE:-UTC}
+      - MAX_RETRIES=${MAX_RETRIES:-3}
+      - RETRY_DELAY_SECONDS=${RETRY_DELAY_SECONDS:-60}
+      - API_KEY_SOURCE_EIA=${API_KEY_SOURCE_EIA}
+      - API_KEY_SOURCE_OPENAQ=${API_KEY_SOURCE_OPENAQ}
+    # env_file:
+    #   - .env
+    volumes:
+      - ..:/workspaces:cached
+    networks:
+      - default
+    depends_on:
+      - timescaledb
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_MAX_CONNECTIONS: "200"
+    volumes:
+      - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+      - dbarena:/var/lib/postgresql/data
+    command: postgres -c max_connections=200
+    # env_file:
+    #   - .env
+    networks:
+      - default
+
+  cloudbeaver:
+    image: dbeaver/cloudbeaver:latest
+    container_name: cloudbeaver
+    restart: unless-stopped
+    ports:
+      - "8979:8978"
+    networks:
+      - default
+    volumes:
+      - ./cloudbeaver:/opt/cloudbeaver/workspace
+    depends_on:
+      - timescaledb
+      - api-portal
+      
+volumes:
+  dbarena:
+
+networks:
+  default:
+  internal:
+    driver: bridge

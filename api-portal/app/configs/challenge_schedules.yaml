@@ -1,0 +1,85 @@
+# List of recurring challenge schedules
+# Cron format: "min hour day-of-month month day-of-week"
+# Examples: "0 15 * * *" -> every day at 15:00 UTC
+schedules:
+  - id: continous_6h_utc_load
+    cron: "0 0,6,12,18 * * *"  # every 6 hours
+    run_on_startup: false
+    params:
+      description: "Load challenge every 6 hours with hourly frequency and 3 days horizon"
+      domain: energy
+      subdomain: load
+      required_time_series: [13,63,64,65,66,67]  # List of time series IDs that must always be predicted (empty for random)
+      n_time_series: 6
+      frequency: "1 hour"
+      context_length: 1000
+      forecast_horizon: "3 days"
+      announce_lead: "3 hours"
+      registration_duration: "50 minutes"
+      evaluation_delay: "0 hours"
+
+  - id: continous_6h_utc_generation
+    cron: "0 3,9,15,21 * * *"  # every 6 hours
+    run_on_startup: false
+    params:
+      description: "Generation challenge every 6 hours with hourly frequency and 3 days horizon"
+      domain: energy
+      subdomain: generation
+      required_time_series: [3, 23, 24, 20, 15, 68, 79, 86, 97]  # List of time series IDs that must always be predicted (empty for random)
+      n_time_series: 9
+      frequency: "1 hour"
+      context_length: 1000
+      forecast_horizon: "3 days"
+      announce_lead: "3 hours"
+      registration_duration: "50 minutes"
+      evaluation_delay: "0 hours"
+
+  - id: continous_6h_utc_market_price
+    cron: "0 0,6,12,18 * * *"
+    run_on_startup: false
+    params:
+      description: "Market price challenge with random markets every 6 hours with hourly frequency and 3 days horizon"
+      domain: energy
+      subdomain: price
+      required_time_series: []  # List of time series IDs that must always be predicted (empty for random)
+      n_time_series: 15
+      frequency: "1 hour"
+      context_length: 1000
+      forecast_horizon: "3 days"
+      announce_lead: "3 hours"
+      registration_duration: "50 minutes"
+      evaluation_delay: "0 hours"
+
+  - id: daily_12_utc_load
+    cron: "0 12 * * *"
+    run_on_startup: false
+    params:
+      description: "Load challenge at 12:00 UTC with hourly frequency and 7 days horizon"
+      domain: energy
+      subdomain: load
+      required_time_series: [13,63,64,65,66,67]  # List of time series IDs that must always be predicted (empty for random)
+      n_time_series: 6
+      frequency: "1 hour"
+      context_length: 1000
+      forecast_horizon: "7 days"
+      announce_lead: "3 hours"
+      registration_duration: "50 minutes"
+      evaluation_delay: "0 hours"
+
+  - id: random_hourly_with_15_min_freq
+    cron: "0 * * * *"
+    run_on_startup: false
+    params:
+      description: "Random challenge every hour with 1 day horizon"
+      domain: mixed
+      subdomain: mixed
+      required_time_series: []  # List of time series IDs that must always be predicted (empty for random)
+      n_time_series: 5
+      frequency: "15 minutes"
+      context_length: 1000
+      forecast_horizon: "1 day"
+      announce_lead: "1 hour"
+      registration_duration: "55 minutes"
+      evaluation_delay: "0 hours"
+
+

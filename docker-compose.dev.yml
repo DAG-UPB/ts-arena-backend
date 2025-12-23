@@ -1,0 +1,20 @@
+services:
+  arena-app:
+    env_file:
+      - .env
+
+  api-portal:
+    env_file:
+      - .env
+
+  data-portal:
+    env_file:
+      - .env
+
+  timescaledb:
+    env_file:
+      - .env
+
+  cloudbeaver:
+    env_file:
+      - .env

@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  api-portal:
+    build:
+      context: ./api-portal
+      dockerfile: Dockerfile
+    ports:
+      - "8457:8000"    # regulärer HTTP-Port exposed
+      - "5678:5678"    # Debug-Port exposed
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://myuser:mysecretpassword@timescaledb:5432/tsfm_arena
+    command: >
+      sh -c "pip install debugpy &&
+      python -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m uvicorn main:app --host 0.0.0.0 --port 8000"
+    networks:
+      - default
+    depends_on:
+      - timescaledb
+
+  # Falls weitere Services benötigt, kannst du sie hier im Debug-Setup mitkopieren.
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    restart: always
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: tsfm_arena
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - default
+
+networks:
+  default:
+
+volumes:
+  timescale_data:
+  arena-db:
+    name: arena-db
