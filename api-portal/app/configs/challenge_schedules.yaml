@@ -51,7 +51,7 @@ schedules:
       evaluation_delay: "0 hours"
 
   - id: daily_12_utc_load
-    cron: "0 12 * * *"
+    cron: "0 9 * * *"
     run_on_startup: false
     params:
       description: "Load challenge at 12:00 UTC with hourly frequency and 7 days horizon"
