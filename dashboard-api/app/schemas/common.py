@@ -8,7 +8,6 @@ class ModelRankingSchema(BaseModel):
     model_config = {"protected_namespaces": ()}
     
     model_name: str
-    organisation: Optional[str] = None
     n_completed: int
     avg_mase: float
 
@@ -23,7 +22,6 @@ class EnhancedModelRankingSchema(BaseModel):
     model_config = {"protected_namespaces": ()}
     
     model_name: str = Field(..., description="Name of the model")
-    organisation: Optional[str] = Field(None, description="Organization/User of the model")
     n_series_evaluated: int = Field(..., description="Number of unique time series evaluated", ge=0)
     avg_mase: Optional[float] = Field(None, description="Average MASE score across all series")
     stddev_mase: Optional[float] = Field(None, description="Standard deviation of MASE scores")

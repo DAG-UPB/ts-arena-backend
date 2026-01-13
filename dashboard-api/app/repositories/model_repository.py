@@ -91,7 +91,6 @@ class ModelRepository:
                 query = """
                     SELECT
                         mi.name AS model_name,
-                        u.organisation,
                         COUNT(cs.challenge_id) AS n_completed,
                         AVG(cs.mase) AS avg_mase
                     FROM forecasts.challenge_scores cs
@@ -106,7 +105,7 @@ class ModelRepository:
                     params.append(since)
                 
                 query += """
-                    GROUP BY mi.name, u.organisation
+                    GROUP BY mi.name
                     ORDER BY avg_mase ASC NULLS LAST, n_completed DESC;
                 """
                 cur.execute(query, tuple(params))
@@ -149,7 +148,6 @@ class ModelRepository:
         query = """
             SELECT
                 model_name,
-                organisation,
                 COUNT(DISTINCT series_id) AS n_series_evaluated,
                 AVG(mase) AS avg_mase,
                 STDDEV(mase) AS stddev_mase,
@@ -233,7 +231,7 @@ class ModelRepository:
         
         # Group and aggregate
         query += """
-            GROUP BY model_name, organisation
+            GROUP BY model_name
             HAVING COUNT(DISTINCT series_id) >= %s
             ORDER BY avg_mase ASC NULLS LAST, n_series_evaluated DESC
             LIMIT %s;

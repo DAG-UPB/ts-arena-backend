@@ -180,7 +180,6 @@ CREATE TABLE auth.users (
     id SERIAL PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
     email TEXT UNIQUE,
-    organisation TEXT, -- Deprecated, use organization_id
     organization_id INTEGER REFERENCES auth.organizations(id),
     user_type TEXT DEFAULT 'external', -- 'external' or 'internal'
     created_at TIMESTAMPTZ DEFAULT now()
@@ -472,7 +471,6 @@ SELECT
     -- Model Info
     mi.name AS model_name,
     u.username,
-    u.organisation,
     -- Time Series Info
     ts.name AS series_name,
     ts.frequency,

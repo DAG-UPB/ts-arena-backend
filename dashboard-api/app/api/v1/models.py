@@ -102,7 +102,6 @@ async def get_filtered_rankings(
       "rankings": [
         {
           "model_name": "ExampleModel",
-          "organisation": "ExampleOrg",
           "n_series_evaluated": 10,
           "avg_mase": 0.85,
           "stddev_mase": 0.12,

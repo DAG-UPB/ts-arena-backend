@@ -9,8 +9,6 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - API_KEY=${API_KEY}
-    # env_file:
-    #   - .env
     networks:
       - default
     depends_on:
@@ -29,8 +27,6 @@ services:
       - API_KEY=${DASHBOARD_API_KEY}
       - CORS_ORIGINS=["http://localhost:8501","http://arena-app:8501", "https://huggingface.co/spaces/DAG-UPB/TS-Arena"]
       - DEBUG=${DEBUG:-false}
-    # env_file:
-    #   - .env
     networks:
       - default
     depends_on:
@@ -49,8 +45,6 @@ services:
       - RETRY_DELAY_SECONDS=${RETRY_DELAY_SECONDS:-60}
       - API_KEY_SOURCE_EIA=${API_KEY_SOURCE_EIA}
       - API_KEY_SOURCE_OPENAQ=${API_KEY_SOURCE_OPENAQ}
-    # env_file:
-    #   - .env
     volumes:
       - ..:/workspaces:cached
     networks:
@@ -70,8 +64,6 @@ services:
       - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
       - dbarena:/var/lib/postgresql/data
     command: postgres -c max_connections=200
-    # env_file:
-    #   - .env
     networks:
       - default
 
