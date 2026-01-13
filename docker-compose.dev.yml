@@ -1,20 +1,16 @@
 services:
-  arena-app:
-    env_file:
-      - .env
-
   api-portal:
-    env_file:
-      - .env
+    ports:
+      - "8460:8000"
 
-  data-portal:
-    env_file:
-      - .env
+  dashboard-api:
+    ports:
+      - "8487:8000"
 
   timescaledb:
-    env_file:
-      - .env
+    ports:
+      - "5433:5432"
 
   cloudbeaver:
-    env_file:
-      - .env
+    ports:
+      - "8980:8978"
