@@ -5,19 +5,16 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.openapi.docs import get_swagger_ui_html
 from app.api.v1 import challenges
 from app.core.config import Config
-from app.database.connection import SessionLocal
 from app.api.v1 import models as models_router
 from app.api.v1 import users
 from app.api.v1 import organizations
 from app.api.v1 import forecasts
-from app.database.challenges.challenge_repository import ChallengeRepository
 # Import all models to ensure SQLAlchemy can resolve relationships
 from app.database.forecasts.models import Forecast, ChallengeScore
 from app.database.challenges.challenge import Challenge, ChallengeParticipant, ChallengeContextData
 from app.database.models.model_info import ModelInfo
 from app.database.auth.user import User
 from app.database.data_portal.time_series import TimeSeriesModel, TimeSeriesDataModel
-from app.services.challenge_service import ChallengeService
 from app.scheduler.scheduler import ChallengeScheduler
 from app.scheduler.dependencies import set_scheduler
 from app.api.v1 import api_keys
@@ -39,49 +36,49 @@ async def lifespan(app: FastAPI):
     logger.setLevel(getattr(logging, Config.LOG_LEVEL, logging.INFO))
     app.state.logger = logger
 
-    async with SessionLocal() as session:
-        app.state.challenge_repo = ChallengeRepository(session)
-
-        # Initialize scheduler first
-        scheduler = None
-        if Config.DATABASE_URL:
-            try:
-                scheduler = ChallengeScheduler(
-                    database_url=Config.DATABASE_URL,
-                    logger=app.state.logger,
-                    max_restart_attempts=5,  # Auto-restart up to 5 times
-                    restart_delay=5.0,  # Wait 5 seconds between restarts
-                )
-                await scheduler.start()
-                # Set global scheduler reference for jobs
-                set_scheduler(scheduler)
-                try:
-                    await scheduler.load_recurring_schedules(Config.CHALLENGE_SCHEDULE_FILE)
-                except Exception:
-                    app.state.logger.exception("Error loading challenge schedule config")
-            except Exception as e:
-                app.state.logger.error(f"Failed to initialize scheduler: {e}", exc_info=True)
-                scheduler = None
-        else:
-            app.state.logger.warning("DATABASE_URL not set – Scheduler is disabled")
-        app.state.challenge_scheduler = scheduler
-        
-        # Create ChallengeService with scheduler reference
-        app.state.challenge_service = ChallengeService(session, scheduler=scheduler)
-
-        yield
-
-    # Cleanup on shutdown
-    cs = getattr(app.state, "challenge_scheduler", None)
-    if cs is not None:
+    # Initialize scheduler (uses its own DB connection pool, not SessionLocal)
+    scheduler = None
+    if Config.DATABASE_URL:
         try:
-            await asyncio.wait_for(cs.shutdown(), timeout=10.0)
-        except asyncio.TimeoutError:
-            app.state.logger.warning("Scheduler shutdown timed out after 10 seconds")
+            scheduler = ChallengeScheduler(
+                database_url=Config.DATABASE_URL,
+                logger=app.state.logger,
+                max_restart_attempts=5,  # Auto-restart up to 5 times
+                restart_delay=5.0,  # Wait 5 seconds between restarts
+            )
+            await scheduler.start()
+            # Set global scheduler reference for jobs
+            set_scheduler(scheduler)
+            try:
+                await scheduler.load_recurring_schedules(Config.CHALLENGE_SCHEDULE_FILE)
+            except Exception:
+                app.state.logger.exception("Error loading challenge schedule config")
         except Exception as e:
-            app.state.logger.error(f"Error during scheduler shutdown: {e}", exc_info=True)
-        finally:
-            set_scheduler(None)  # Clear global reference
+            app.state.logger.error(f"Failed to initialize scheduler: {e}", exc_info=True)
+            scheduler = None
+    else:
+        app.state.logger.warning("DATABASE_URL not set – Scheduler is disabled")
+    app.state.challenge_scheduler = scheduler
+    
+    # Note: ChallengeRepository and ChallengeService should be created per-request,
+    # not stored in app.state with a long-lived session
+    
+    try:
+        yield
+    finally:
+        # Cleanup on shutdown - scheduler first, before any other cleanup
+        cs = getattr(app.state, "challenge_scheduler", None)
+        if cs is not None:
+            try:
+                # Signal shutdown first to stop new jobs
+                set_scheduler(None)
+                await asyncio.wait_for(cs.shutdown(), timeout=10.0)
+            except asyncio.TimeoutError:
+                app.state.logger.warning("Scheduler shutdown timed out after 10 seconds")
+            except asyncio.CancelledError:
+                app.state.logger.warning("Scheduler shutdown was cancelled")
+            except Exception as e:
+                app.state.logger.error(f"Error during scheduler shutdown: {e}", exc_info=True)
 
 
 app = FastAPI(

@@ -66,31 +66,49 @@ class ChallengeScheduler:
 
     async def shutdown(self) -> None:
         """Gracefully shutdown the scheduler and monitoring task."""
+        self.logger.info("Initiating scheduler shutdown...")
         self._shutdown_event.set()
         
-        # Cancel monitoring task
+        # Cancel monitoring task first
         if self._monitor_task and not self._monitor_task.done():
             self._monitor_task.cancel()
             try:
-                await asyncio.wait_for(self._monitor_task, timeout=3.0)
+                await asyncio.wait_for(asyncio.shield(self._monitor_task), timeout=3.0)
             except (asyncio.TimeoutError, asyncio.CancelledError):
-                self.logger.warning("Monitor task cancellation timed out or was cancelled.")
+                self.logger.debug("Monitor task cancellation completed.")
         
         if self._started:
+            self._started = False  # Prevent restart attempts during shutdown
             try:
-                await asyncio.wait_for(self.scheduler.stop(), timeout=5.0)
-                await asyncio.wait_for(self.scheduler.cleanup(), timeout=5.0)
-            except asyncio.TimeoutError:
-                self.logger.warning("Scheduler shutdown timed out.")
-            except Exception as e:
-                self.logger.error(f"Error during scheduler shutdown: {e}", exc_info=True)
+                # First stop accepting new jobs
+                try:
+                    await asyncio.wait_for(self.scheduler.stop(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    self.logger.warning("Scheduler stop timed out.")
+                except asyncio.CancelledError:
+                    self.logger.debug("Scheduler stop was cancelled.")
+                except Exception as e:
+                    self.logger.error(f"Error stopping scheduler: {e}")
+                
+                # Then cleanup resources
+                try:
+                    await asyncio.wait_for(self.scheduler.cleanup(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    self.logger.warning("Scheduler cleanup timed out.")
+                except asyncio.CancelledError:
+                    self.logger.debug("Scheduler cleanup was cancelled.")
+                except Exception as e:
+                    self.logger.error(f"Error during scheduler cleanup: {e}")
             finally:
                 if self._exit_stack:
                     try:
-                        await self._exit_stack.aclose()
+                        await asyncio.wait_for(self._exit_stack.aclose(), timeout=3.0)
+                    except asyncio.TimeoutError:
+                        self.logger.warning("Exit stack close timed out.")
+                    except asyncio.CancelledError:
+                        self.logger.debug("Exit stack close was cancelled.")
                     except Exception as e:
-                        self.logger.error(f"Error closing exit stack: {e}", exc_info=True)
-                self._started = False
+                        self.logger.error(f"Error closing exit stack: {e}")
                 self.logger.info("Scheduler shut down.")
 
     async def load_recurring_schedules(self, config_path: str) -> None:
