@@ -104,6 +104,7 @@ class ScoreEvaluationService:
         # Calculate scores for each model/series combination
         all_scores = []
         missing_data_count = 0
+        all_have_full_coverage = True
         
         for model_id in participant_model_ids:
             for series_id in series_ids:
@@ -118,9 +119,12 @@ class ScoreEvaluationService:
                     
                     if score_data:
                         all_scores.append(score_data)
-                        # Track if this is a partial score (will be logged in _calculate_score_for_model_series)
+                        # Track if any score has incomplete coverage
+                        if score_data.get("data_coverage", 0) < 1.0:
+                            all_have_full_coverage = False
                     else:
                         missing_data_count += 1
+                        all_have_full_coverage = False
                         
                 except Exception as e:
                     logger.exception(
@@ -128,6 +132,7 @@ class ScoreEvaluationService:
                         f"model {model_id}, series {series_id}: {e}"
                     )
                     missing_data_count += 1
+                    all_have_full_coverage = False
         
         # Bulk insert/update scores
         if all_scores:
@@ -138,10 +143,9 @@ class ScoreEvaluationService:
             )
         
         # Check if we should finalize this challenge
-        should_finalize = await self._should_finalize_challenge(
+        should_finalize = self._should_finalize_challenge(
             challenge=challenge,
-            series_ids=series_ids,
-            missing_data_count=missing_data_count
+            all_have_full_coverage=all_have_full_coverage
         )
         
         if should_finalize:
@@ -255,6 +259,8 @@ class ScoreEvaluationService:
         
         if mae_naive > 0:
             mase = mae_model / mae_naive
+        elif mae_naive == 0 and mae_model == 0:
+            mase = 0.0
         else:
             mase = float('inf')
         
@@ -265,51 +271,40 @@ class ScoreEvaluationService:
             "rmse": rmse,
             "mase": mase,
             "final_evaluation": False,  # Will be set to True later when finalized
+            "data_coverage": data_coverage,  # Used to determine if all actuals are available
         }
 
-    async def _should_finalize_challenge(
+    def _should_finalize_challenge(
         self,
         challenge: Any,
-        series_ids: List[int],
-        missing_data_count: int
+        all_have_full_coverage: bool
     ) -> bool:
         """
         Determine if a challenge should be marked as final.
         
         A challenge is finalized when:
-        1. All actual data for the horizon is complete (based on expected frequency)
-        2. All forecasts have been evaluated (no missing data)
+        1. The challenge end_time has passed
+        2. All forecast/actual pairs have 100% data coverage
         
         Args:
             challenge: Challenge object
-            series_ids: List of series IDs in the challenge
-            missing_data_count: Number of model/series combinations with missing data
+            all_have_full_coverage: True if all model/series combinations have 100% coverage
             
         Returns:
             True if challenge should be finalized
         """
-        # Don't finalize if there's still missing data
-        if missing_data_count > 0:
+        # CRITICAL: Never finalize before end_time has passed
+        now = datetime.now(timezone.utc)
+        if now < challenge.end_time:
             logger.debug(
-                f"Challenge {challenge.id}: Not finalizing due to {missing_data_count} missing scores"
+                f"Challenge {challenge.id}: Not finalizing - end_time ({challenge.end_time}) not yet reached"
             )
             return False
         
-        # Check if all actual data is available for the horizon
-        horizon_start = challenge.start_time
-        horizon_end = challenge.end_time
-        expected_frequency = challenge.preparation_params.get("frequency")
-        
-        is_data_complete = await self.time_series_repo.check_data_completeness(
-            series_ids=series_ids,
-            start_time=horizon_start,
-            end_time=horizon_end,
-            expected_frequency=''
-        )
-        
-        if not is_data_complete:
+        # Don't finalize if not all scores have full coverage
+        if not all_have_full_coverage:
             logger.debug(
-                f"Challenge {challenge.id}: Not finalizing - actual data incomplete"
+                f"Challenge {challenge.id}: Not finalizing - not all scores have 100% data coverage"
             )
             return False
         
