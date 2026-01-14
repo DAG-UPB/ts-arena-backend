@@ -22,7 +22,7 @@ class EnhancedModelRankingSchema(BaseModel):
     model_config = {"protected_namespaces": ()}
     
     model_name: str = Field(..., description="Name of the model")
-    n_series_evaluated: int = Field(..., description="Number of unique time series evaluated", ge=0)
+    challenges_participated: int = Field(..., description="Number of challenges the model participated in", ge=0)
     avg_mase: Optional[float] = Field(None, description="Average MASE score across all series")
     stddev_mase: Optional[float] = Field(None, description="Standard deviation of MASE scores")
     min_mase: Optional[float] = Field(None, description="Minimum MASE score")
@@ -42,7 +42,7 @@ class RankingFiltersSchema(BaseModel):
     subcategory: Optional[List[str]] = Field(None, description="Subcategory filters applied")
     frequency: Optional[List[str]] = Field(None, description="Frequency filters applied (ISO 8601)")
     horizon: Optional[List[str]] = Field(None, description="Horizon filters applied (ISO 8601)")
-    min_series: Optional[int] = Field(None, description="Minimum series threshold applied")
+    min_challenges: Optional[int] = Field(None, description="Minimum challenges threshold applied")
     limit: Optional[int] = Field(None, description="Result limit applied")
 
 

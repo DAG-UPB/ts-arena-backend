@@ -126,7 +126,7 @@ class ModelRepository:
         subcategories: Optional[List[str]] = None,
         frequencies: Optional[List[str]] = None,
         horizons: Optional[List[str]] = None,
-        min_series: int = 1,
+        min_challenges: int = 1,
         limit: int = 100
     ) -> List[Dict[str, Any]]:
         """
@@ -139,7 +139,7 @@ class ModelRepository:
             subcategories: List of subcategories (e.g. ["Load", "Generation"])
             frequencies: List of frequencies as ISO 8601 (e.g. ["PT1H", "P1D"])
             horizons: List of horizons as ISO 8601 (e.g. ["PT6H", "P1D"])
-            min_series: Minimum number of evaluated series
+            min_challenges: Minimum number of participated challenges
             limit: Max. number of results
         
         Returns:
@@ -148,7 +148,7 @@ class ModelRepository:
         query = """
             SELECT
                 model_name,
-                COUNT(DISTINCT series_id) AS n_series_evaluated,
+                COUNT(DISTINCT challenge_id) AS challenges_participated,
                 AVG(mase) AS avg_mase,
                 STDDEV(mase) AS stddev_mase,
                 MIN(mase) AS min_mase,
@@ -232,11 +232,11 @@ class ModelRepository:
         # Group and aggregate
         query += """
             GROUP BY model_name
-            HAVING COUNT(DISTINCT series_id) >= %s
-            ORDER BY avg_mase ASC NULLS LAST, n_series_evaluated DESC
+            HAVING COUNT(DISTINCT challenge_id) >= %s
+            ORDER BY avg_mase ASC NULLS LAST, challenges_participated DESC
             LIMIT %s;
         """
-        params.extend([min_series, limit])
+        params.extend([min_challenges, limit])
         
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(query, tuple(params))

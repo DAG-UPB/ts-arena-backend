@@ -59,10 +59,10 @@ async def get_filtered_rankings(
         description="Comma-separated list of horizons in ISO 8601 format (e.g., 'PT6H,P1D')",
         example="PT6H,P1D"
     ),
-    min_series: int = Query(
+    min_challenges: int = Query(
         1,
         ge=1,
-        description="Minimum number of series a model must be evaluated on",
+        description="Minimum number of challenges a model must have participated in",
         example=3
     ),
     limit: int = Query(
@@ -85,7 +85,7 @@ async def get_filtered_rankings(
     - **Subcategory**: Filter by one or more subcategories (e.g., Load, Generation)
     - **Frequency**: Filter by data frequency in ISO 8601 format (e.g., PT1H for 1 hour)
     - **Horizon**: Filter by forecast horizon in ISO 8601 format (e.g., P1D for 1 day)
-    - **Min Series**: Show only models evaluated on at least N series
+    - **Min Challenges**: Show only models that participated in at least N challenges
     
     **Filter Format:**
     - Multiple values: Comma-separated (e.g., `domain=Energy,Finance`)
@@ -102,7 +102,7 @@ async def get_filtered_rankings(
       "rankings": [
         {
           "model_name": "ExampleModel",
-          "n_series_evaluated": 10,
+          "challenges_participated": 10,
           "avg_mase": 0.85,
           "stddev_mase": 0.12,
           "min_mase": 0.65,
@@ -117,7 +117,7 @@ async def get_filtered_rankings(
       "filters_applied": {
         "time_range": "30d",
         "domain": ["Energy", "Finance"],
-        "min_series": 3
+        "min_challenges": 3
       }
     }
     ```
@@ -127,7 +127,7 @@ async def get_filtered_rankings(
     
     **Notes:**
     - Only models with valid MASE scores are included (NULL, NaN, Infinity filtered out)
-    - Rankings are sorted by avg_mase (ascending), then n_series_evaluated (descending)
+    - Rankings are sorted by avg_mase (ascending), then challenges_participated (descending)
     - Empty filters mean no filtering on that dimension (show all)
     """
     # Parse comma-separated parameters
@@ -146,7 +146,7 @@ async def get_filtered_rankings(
         subcategories=subcategories_list,
         frequencies=frequencies_list,
         horizons=horizons_list,
-        min_series=min_series,
+        min_challenges=min_challenges,
         limit=limit
     )
     
@@ -164,8 +164,8 @@ async def get_filtered_rankings(
         filters_applied['frequency'] = frequencies_list
     if horizons_list:
         filters_applied['horizon'] = horizons_list
-    if min_series > 1:
-        filters_applied['min_series'] = min_series
+    if min_challenges > 1:
+        filters_applied['min_challenges'] = min_challenges
     if limit != 100:
         filters_applied['limit'] = limit
     
