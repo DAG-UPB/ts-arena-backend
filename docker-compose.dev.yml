@@ -7,6 +7,10 @@ services:
     ports:
       - "8487:8000"
 
+  data-portal:
+    ports:
+      - "8490:8000"
+
   timescaledb:
     ports:
       - "5433:5432"

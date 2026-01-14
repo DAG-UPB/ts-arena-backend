@@ -1,0 +1,14 @@
+services:
+  api-portal:
+    ports:
+      - "8458:8000"
+
+  dashboard-api:
+    container_name: ts-arena-dashboard-api
+    ports:
+      - "8485:8000"
+
+  cloudbeaver:
+    container_name: cloudbeaver
+    ports:
+      - "8979:8978"

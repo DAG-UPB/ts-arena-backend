@@ -4,8 +4,6 @@ services:
     build:
       context: ./api-portal
       dockerfile: Dockerfile
-    ports:
-      - "8458:8000"
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - API_KEY=${API_KEY}
@@ -19,9 +17,6 @@ services:
     build:
       context: ./dashboard-api
       dockerfile: Dockerfile
-    container_name: ts-arena-dashboard-api
-    ports:
-      - "8485:8000"
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - API_KEY=${DASHBOARD_API_KEY}
@@ -69,10 +64,7 @@ services:
 
   cloudbeaver:
     image: dbeaver/cloudbeaver:latest
-    container_name: cloudbeaver
     restart: unless-stopped
-    ports:
-      - "8979:8978"
     networks:
       - default
     volumes:
