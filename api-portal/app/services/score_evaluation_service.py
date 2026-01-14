@@ -118,11 +118,17 @@ class ScoreEvaluationService:
                     )
                     
                     if score_data:
+                        # Skip model/series combinations with no forecasts (that's OK)
+                        if score_data.get("no_forecasts"):
+                            continue
+                        # Extract coverage before adding to scores (not a DB column)
+                        data_coverage = score_data.pop("data_coverage", 0)
                         all_scores.append(score_data)
                         # Track if any score has incomplete coverage
-                        if score_data.get("data_coverage", 0) < 1.0:
+                        if data_coverage < 1.0:
                             all_have_full_coverage = False
                     else:
+                        # Forecasts exist but actuals are missing - we need to wait
                         missing_data_count += 1
                         all_have_full_coverage = False
                         
@@ -181,8 +187,9 @@ class ScoreEvaluationService:
         )
         
         if not forecasts:
-            logger.debug(f"No forecasts for model {model_id}, series {series_id}")
-            return None
+            # No forecasts submitted - this is OK, just skip this model/series combination
+            logger.debug(f"No forecasts for model {model_id}, series {series_id} - skipping")
+            return {"no_forecasts": True}
         
         # Get actuals
         actuals = await self.time_series_repo.get_data_by_time_range(
