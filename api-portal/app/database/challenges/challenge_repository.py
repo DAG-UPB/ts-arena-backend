@@ -199,3 +199,14 @@ class ChallengeRepository:
         query = select(ChallengeSeriesPseudo.series_id).where(ChallengeSeriesPseudo.challenge_id == challenge_id)
         result = await self.session.execute(query)
         return result.scalars().all()
+
+    async def get_challenge_series_pseudo(self, challenge_id: int, series_id: int) -> Optional[ChallengeSeriesPseudo]:
+        """
+        Retrieves ChallengeSeriesPseudo entry for a specific challenge and series.
+        """
+        query = select(ChallengeSeriesPseudo).where(
+            ChallengeSeriesPseudo.challenge_id == challenge_id,
+            ChallengeSeriesPseudo.series_id == series_id
+        )
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()

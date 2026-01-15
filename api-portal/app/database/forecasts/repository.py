@@ -4,7 +4,6 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import and_, func, desc
-from datetime import datetime
 
 from .models import Forecast, ChallengeScore
 from app.database.data_portal.time_series import TimeSeriesDataModel
@@ -129,6 +128,40 @@ class ForecastRepository:
         )
         return [row[0] for row in result]
 
+    async def get_forecast_stats(
+        self,
+        challenge_id: int,
+        model_id: int,
+        series_id: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get stats (min_ts, max_ts, count) of forecasts for a specific model/series.
+        
+        Returns:
+            Dict with 'min_ts', 'max_ts', 'count' or None if no forecasts found.
+        """
+        result = await self.session.execute(
+            select(
+                func.min(Forecast.ts).label("min_ts"),
+                func.max(Forecast.ts).label("max_ts"),
+                func.count(Forecast.id).label("count")
+            ).where(
+                and_(
+                    Forecast.challenge_id == challenge_id,
+                    Forecast.model_id == model_id,
+                    Forecast.series_id == series_id
+                )
+            )
+        )
+        row = result.first()
+        if row and row.count > 0:
+            return {
+                "min_ts": row.min_ts,
+                "max_ts": row.max_ts,
+                "count": row.count
+            }
+        return None
+
     async def check_existing_forecasts(
         self,
         challenge_id: int,
@@ -182,14 +215,14 @@ class ForecastRepository:
         self,
         challenge_id: int,
         model_id: int,
-        series_id: int,
-        start_time: datetime,
-        end_time: datetime
+        series_id: int
     ) -> List[Dict[str, Any]]:
         """
         Get aligned forecast and actual data for evaluation.
         Performs an INNER JOIN between forecasts and time_series_data on series_id and ts.
         """
+        # Join on series_id and timestamps truncated to the minute to ignore second/microsecond diffs
+        # This makes the evaluation robust against ingestion delays or precision differences
         stmt = (
             select(
                 Forecast.ts,
@@ -200,16 +233,14 @@ class ForecastRepository:
                 TimeSeriesDataModel,
                 and_(
                     Forecast.series_id == TimeSeriesDataModel.series_id,
-                    Forecast.ts == TimeSeriesDataModel.ts
+                    func.date_trunc('minute', Forecast.ts) == func.date_trunc('minute', TimeSeriesDataModel.ts)
                 )
             )
             .where(
                 and_(
                     Forecast.challenge_id == challenge_id,
                     Forecast.model_id == model_id,
-                    Forecast.series_id == series_id,
-                    TimeSeriesDataModel.ts >= start_time,
-                    TimeSeriesDataModel.ts <= end_time
+                    Forecast.series_id == series_id
                 )
             )
             .order_by(Forecast.ts)

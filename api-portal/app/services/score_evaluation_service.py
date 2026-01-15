@@ -84,9 +84,6 @@ class ScoreEvaluationService:
             logger.warning(f"Challenge {challenge_id} not found")
             return False
         
-        horizon_start = challenge.start_time
-        horizon_end = challenge.end_time
-        
         # Get all participants (models that submitted forecasts)
         participant_model_ids = await self.forecast_repo.get_challenge_participants(challenge_id)
         if not participant_model_ids:
@@ -110,9 +107,7 @@ class ScoreEvaluationService:
                     score_data = await self._calculate_score_for_model_series(
                         challenge_id=challenge_id,
                         model_id=model_id,
-                        series_id=series_id,
-                        horizon_start=horizon_start,
-                        horizon_end=horizon_end
+                        series_id=series_id
                     )
                     
                     if score_data:
@@ -161,21 +156,19 @@ class ScoreEvaluationService:
         self,
         challenge_id: int,
         model_id: int,
-        series_id: int,
-        horizon_start: datetime,
-        horizon_end: datetime
+        series_id: int
     ) -> Dict[str, Any] | None:
         """
         Calculate MASE and RMSE for a specific model/series combination.
         """
-        # Get forecast count
-        forecast_count = await self.forecast_repo.check_existing_forecasts(
+        # Get forecast stats (min_ts, max_ts, count)
+        forecast_stats = await self.forecast_repo.get_forecast_stats(
             challenge_id=challenge_id,
             model_id=model_id,
             series_id=series_id
         )
         
-        if forecast_count == 0:
+        if not forecast_stats or forecast_stats['count'] == 0:
             logger.debug(f"No forecasts for model {model_id}, series {series_id}")
             return {
                 "challenge_id": challenge_id,
@@ -192,17 +185,24 @@ class ScoreEvaluationService:
                 "error_message": None,
             }
         
-        # Get actuals (mainly for count, but simple to keep using this)
-        actuals = await self.time_series_repo.get_data_by_time_range(
-            series_id=series_id,
-            start_time=horizon_start,
-            end_time=horizon_end
-        )
+        forecast_count = forecast_stats['count']
         
-        actual_count = len(actuals) if actuals else 0
+        # Get last context point for naive forecast baseline
+        # Try to use ChallengeSeriesPseudo first (most accurate definition of context end)
+        pseudo_info = await self.challenge_repo.get_challenge_series_pseudo(challenge_id, series_id)
+        naive_forecast_value = None
         
-        if not actuals:
-            logger.debug(f"No actuals yet for series {series_id}")
+        if pseudo_info and pseudo_info.max_ts:
+            context_points = await self.time_series_repo.get_data_by_time_range(
+                series_id=series_id,
+                start_time=pseudo_info.max_ts,
+                end_time=pseudo_info.max_ts
+            )
+            if context_points:
+                naive_forecast_value = context_points[0]['value']
+        
+        if naive_forecast_value is None:
+            logger.warning(f"No context point for series {series_id}")
             return {
                 "challenge_id": challenge_id,
                 "model_id": model_id,
@@ -214,30 +214,6 @@ class ScoreEvaluationService:
                 "evaluated_count": 0,
                 "data_coverage": 0.0,
                 "final_evaluation": False,
-                "evaluation_status": "awaiting_actuals",
-                "error_message": None,
-            }
-        
-        # Get last context point for naive forecast baseline
-        last_context_point = await self.time_series_repo.get_last_n_points(
-            series_id=series_id,
-            n=1,
-            before_time=horizon_start
-        )
-        
-        if not last_context_point:
-            logger.warning(f"No context point for series {series_id}")
-            return {
-                "challenge_id": challenge_id,
-                "model_id": model_id,
-                "series_id": series_id,
-                "mase": None,
-                "rmse": None,
-                "forecast_count": forecast_count,
-                "actual_count": actual_count,
-                "evaluated_count": 0,
-                "data_coverage": 0.0,
-                "final_evaluation": False,
                 "evaluation_status": "error",
                 "error_message": "No context point available for naive forecast baseline",
             }
@@ -246,12 +222,11 @@ class ScoreEvaluationService:
         evaluation_data = await self.forecast_repo.get_evaluation_data(
             challenge_id=challenge_id,
             model_id=model_id,
-            series_id=series_id,
-            start_time=horizon_start,
-            end_time=horizon_end
+            series_id=series_id
         )
         
         evaluated_count = len(evaluation_data)
+        actual_count = evaluated_count
         
         if evaluated_count == 0:
             logger.debug(f"No overlapping timestamps for model {model_id}, series {series_id}")
@@ -289,7 +264,7 @@ class ScoreEvaluationService:
         rmse = float(np.sqrt(mean_squared_error(y_true, y_pred)))
         
         # Calculate MASE
-        naive_forecast_value = last_context_point[0]['value']
+        # naive_forecast_value is already determined
         mae_model = float(np.mean(np.abs(y_true - y_pred)))
         mae_naive = float(np.mean(np.abs(y_true - naive_forecast_value)))
         
