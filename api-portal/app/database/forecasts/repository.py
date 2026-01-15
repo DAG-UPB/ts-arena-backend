@@ -63,8 +63,7 @@ class ForecastRepository:
     async def get_challenges_needing_evaluation(self) -> List[Dict[str, Any]]:
         """
         Get all challenges that need score evaluation.
-        Returns challenges with status 'active' or 'completed' that have
-        at least one score entry with final_evaluation=False.
+        Includes challenges with no scores yet OR challenges with non-finalized scores.
         
         Returns:
             List of dicts with challenge_id and status
@@ -74,9 +73,9 @@ class ForecastRepository:
         query = text("""
             SELECT DISTINCT c.id as challenge_id, c.status
             FROM challenges.v_challenges_with_status c
-            INNER JOIN forecasts.challenge_scores cs ON c.id = cs.challenge_id
-            WHERE cs.final_evaluation = FALSE
-              AND c.status IN ('active', 'completed')
+            LEFT JOIN forecasts.challenge_scores cs ON c.id = cs.challenge_id
+            WHERE c.status IN ('active', 'completed')
+              AND (cs.id IS NULL OR cs.final_evaluation = FALSE)
             ORDER BY c.id
         """)
         
