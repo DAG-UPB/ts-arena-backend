@@ -3,10 +3,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy import and_, func
+from sqlalchemy import and_, func, desc
 from datetime import datetime
 
 from .models import Forecast, ChallengeScore
+from app.database.data_portal.time_series import TimeSeriesDataModel
 
 
 class ForecastRepository:
@@ -176,6 +177,53 @@ class ForecastRepository:
             .order_by(Forecast.series_id, Forecast.ts)
         )
         return result.scalars().all()
+
+    async def get_evaluation_data(
+        self,
+        challenge_id: int,
+        model_id: int,
+        series_id: int,
+        start_time: datetime,
+        end_time: datetime
+    ) -> List[Dict[str, Any]]:
+        """
+        Get aligned forecast and actual data for evaluation.
+        Performs an INNER JOIN between forecasts and time_series_data on series_id and ts.
+        """
+        stmt = (
+            select(
+                Forecast.ts,
+                Forecast.predicted_value,
+                TimeSeriesDataModel.value.label("actual_value")
+            )
+            .join(
+                TimeSeriesDataModel,
+                and_(
+                    Forecast.series_id == TimeSeriesDataModel.series_id,
+                    Forecast.ts == TimeSeriesDataModel.ts
+                )
+            )
+            .where(
+                and_(
+                    Forecast.challenge_id == challenge_id,
+                    Forecast.model_id == model_id,
+                    Forecast.series_id == series_id,
+                    TimeSeriesDataModel.ts >= start_time,
+                    TimeSeriesDataModel.ts <= end_time
+                )
+            )
+            .order_by(Forecast.ts)
+        )
+        
+        result = await self.session.execute(stmt)
+        return [
+            {
+                "ts": row.ts, 
+                "predicted_value": row.predicted_value, 
+                "actual_value": row.actual_value
+            } 
+            for row in result
+        ]
 
     async def delete_forecasts(
         self,

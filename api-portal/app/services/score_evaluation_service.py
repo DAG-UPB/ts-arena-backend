@@ -168,16 +168,14 @@ class ScoreEvaluationService:
         """
         Calculate MASE and RMSE for a specific model/series combination.
         """
-        # Get forecasts
-        forecasts = await self.forecast_repo.get_forecasts_by_challenge_and_model(
+        # Get forecast count
+        forecast_count = await self.forecast_repo.check_existing_forecasts(
             challenge_id=challenge_id,
             model_id=model_id,
             series_id=series_id
         )
         
-        forecast_count = len(forecasts) if forecasts else 0
-        
-        if not forecasts:
+        if forecast_count == 0:
             logger.debug(f"No forecasts for model {model_id}, series {series_id}")
             return {
                 "challenge_id": challenge_id,
@@ -194,7 +192,7 @@ class ScoreEvaluationService:
                 "error_message": None,
             }
         
-        # Get actuals
+        # Get actuals (mainly for count, but simple to keep using this)
         actuals = await self.time_series_repo.get_data_by_time_range(
             series_id=series_id,
             start_time=horizon_start,
@@ -244,20 +242,18 @@ class ScoreEvaluationService:
                 "error_message": "No context point available for naive forecast baseline",
             }
         
-        # Normalize timestamps to UTC
-        def normalize_to_utc(dt: datetime) -> datetime:
-            if dt.tzinfo is None:
-                return dt.replace(tzinfo=timezone.utc)
-            return dt.astimezone(timezone.utc)
+        # Get aligned evaluation data directly from DB (INNER JOIN)
+        evaluation_data = await self.forecast_repo.get_evaluation_data(
+            challenge_id=challenge_id,
+            model_id=model_id,
+            series_id=series_id,
+            start_time=horizon_start,
+            end_time=horizon_end
+        )
         
-        forecast_map = {normalize_to_utc(f.ts): f.predicted_value for f in forecasts}
-        actual_map = {normalize_to_utc(a['ts']): a['value'] for a in actuals}
+        evaluated_count = len(evaluation_data)
         
-        # Get overlapping timestamps
-        common_timestamps = sorted(set(forecast_map.keys()) & set(actual_map.keys()))
-        evaluated_count = len(common_timestamps)
-        
-        if not common_timestamps:
+        if evaluated_count == 0:
             logger.debug(f"No overlapping timestamps for model {model_id}, series {series_id}")
             return {
                 "challenge_id": challenge_id,
@@ -286,8 +282,8 @@ class ScoreEvaluationService:
             evaluation_status = "pending"
         
         # Aligned arrays
-        y_pred = np.array([forecast_map[ts] for ts in common_timestamps])
-        y_true = np.array([actual_map[ts] for ts in common_timestamps])
+        y_pred = np.array([item["predicted_value"] for item in evaluation_data])
+        y_true = np.array([item["actual_value"] for item in evaluation_data])
         
         # Calculate RMSE
         rmse = float(np.sqrt(mean_squared_error(y_true, y_pred)))
