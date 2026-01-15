@@ -105,15 +105,41 @@ async def periodic_challenge_scores_evaluation_job() -> None:
     logger.info("Starting periodic challenge scores evaluation job")
     
     try:
+        # Step 1: Retrieve list of Challenges to evaluate (Short-lived Session)
+        challenge_ids = []
         async with SessionLocal() as session:
             score_service = ScoreEvaluationService(session)
-            result = await score_service.evaluate_pending_challenges()
-            
-            logger.info(
-                f"Periodic evaluation complete: "
-                f"{result['evaluated']} challenges evaluated, "
-                f"{result['finalized']} finalized"
-            )
+            challenge_ids = await score_service.get_ids_needing_evaluation()
+        
+        if not challenge_ids:
+            logger.info("No challenges need evaluation at this time.")
+            return
+
+        logger.info(f"Found {len(challenge_ids)} challenge(s) needing evaluation")
+
+        # Step 2: Process each challenge in a separate session
+        # This prevents one long transaction from holding a DB connection for the entire batch.
+        evaluated_count = 0
+        finalized_count = 0
+
+        for challenge_id in challenge_ids:
+            try:
+                async with SessionLocal() as session:
+                    score_service = ScoreEvaluationService(session)
+                    finalized = await score_service.evaluate_challenge_scores(challenge_id)
+                    
+                    evaluated_count += 1
+                    if finalized:
+                        finalized_count += 1
+            except Exception as e:
+                logger.error(f"Error evaluating challenge {challenge_id} in periodic job: {e}")
+                # Continue with next challenge instead of failing the whole job
+
+        logger.info(
+            f"Periodic evaluation complete: "
+            f"{evaluated_count} challenges evaluated, "
+            f"{finalized_count} finalized"
+        )
     
     except Exception as e:
         logger.exception(f"Failed to run periodic challenge scores evaluation: {e}")

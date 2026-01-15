@@ -34,6 +34,14 @@ class ScoreEvaluationService:
         self.forecast_repo = ForecastRepository(db_session)
         self.db_session = db_session
 
+    async def get_ids_needing_evaluation(self) -> List[int]:
+        """
+        Retrieves the IDs of all challenges that currently require evaluation.
+        Useful for batch processing where each evaluation runs in its own transaction.
+        """
+        challenges_to_evaluate = await self.forecast_repo.get_challenges_needing_evaluation()
+        return [c["challenge_id"] for c in challenges_to_evaluate]
+
     async def evaluate_pending_challenges(self) -> Dict[str, Any]:
         """
         Main entry point for periodic evaluation.

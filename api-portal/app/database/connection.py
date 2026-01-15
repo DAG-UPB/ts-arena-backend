@@ -15,6 +15,9 @@ from app.database import models  # noqa: F401
 engine = create_async_engine(
     Config.DATABASE_URL,
     pool_pre_ping=True,
+    pool_size=20,
+    max_overflow=40,
+    pool_recycle=1800,  # Recycle connections every 30 minutes
     echo=getattr(Config, 'DB_ECHO_LOG', False),
 )
 
@@ -31,7 +34,4 @@ SessionLocal = sessionmaker(
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Asynchronous database session dependency"""
     async with SessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+        yield session
