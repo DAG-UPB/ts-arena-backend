@@ -49,7 +49,13 @@ class ChallengeScore(Base):
     series_id = Column(Integer, ForeignKey("data_portal.time_series.series_id", ondelete="CASCADE"), nullable=False)
     mase = Column(Float)
     rmse = Column(Float)
+    forecast_count = Column(Integer, default=0)
+    actual_count = Column(Integer, default=0)
+    evaluated_count = Column(Integer, default=0)
+    data_coverage = Column(Float, default=0.0)
     final_evaluation = Column("final_evaluation", Boolean, server_default="false")
+    evaluation_status = Column(String, default="pending")
+    error_message = Column(String, nullable=True)
     calculated_at = Column(DateTime(timezone=True), server_default=func.now())
 
     challenge = relationship("Challenge", back_populates="scores")

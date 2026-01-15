@@ -316,7 +316,13 @@ CREATE TABLE forecasts.challenge_scores (
     series_id INTEGER REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
     mase DOUBLE PRECISION,
     rmse DOUBLE PRECISION,
+    forecast_count INTEGER DEFAULT 0,
+    actual_count INTEGER DEFAULT 0,
+    evaluated_count INTEGER DEFAULT 0,
+    data_coverage DOUBLE PRECISION DEFAULT 0,
     final_evaluation BOOLEAN DEFAULT FALSE,
+    evaluation_status TEXT DEFAULT 'pending',
+    error_message TEXT,
     calculated_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE (challenge_id, model_id, series_id)
 );

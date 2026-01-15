@@ -5,7 +5,7 @@ for active and completed challenges.
 """
 import logging
 from typing import List, Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import numpy as np
 from sklearn.metrics import mean_squared_error
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -103,8 +103,6 @@ class ScoreEvaluationService:
         
         # Calculate scores for each model/series combination
         all_scores = []
-        missing_data_count = 0
-        all_have_full_coverage = True
         
         for model_id in participant_model_ids:
             for series_id in series_ids:
@@ -118,41 +116,39 @@ class ScoreEvaluationService:
                     )
                     
                     if score_data:
-                        # Skip model/series combinations with no forecasts (that's OK)
-                        if score_data.get("no_forecasts"):
+                        # Skip "no_forecasts" status
+                        if score_data.get("evaluation_status") == "no_forecasts":
                             continue
-                        # Extract coverage before adding to scores (not a DB column)
-                        data_coverage = score_data.pop("data_coverage", 0)
                         all_scores.append(score_data)
-                        # Track if any score has incomplete coverage
-                        if data_coverage < 1.0:
-                            all_have_full_coverage = False
-                    else:
-                        # Forecasts exist but actuals are missing - we need to wait
-                        missing_data_count += 1
-                        all_have_full_coverage = False
                         
                 except Exception as e:
                     logger.exception(
                         f"Error calculating score for challenge {challenge_id}, "
                         f"model {model_id}, series {series_id}: {e}"
                     )
-                    missing_data_count += 1
-                    all_have_full_coverage = False
+                    # Add an error entry
+                    all_scores.append({
+                        "challenge_id": challenge_id,
+                        "model_id": model_id,
+                        "series_id": series_id,
+                        "mase": None,
+                        "rmse": None,
+                        "forecast_count": 0,
+                        "actual_count": 0,
+                        "evaluated_count": 0,
+                        "data_coverage": 0.0,
+                        "final_evaluation": False,
+                        "evaluation_status": "error",
+                        "error_message": str(e)[:500],
+                    })
         
         # Bulk insert/update scores
         if all_scores:
             rows_affected = await self.forecast_repo.bulk_insert_scores(all_scores)
-            logger.info(
-                f"Updated {rows_affected} scores for challenge {challenge_id} "
-                f"({len(all_scores)} calculated, {missing_data_count} missing data)"
-            )
+            logger.info(f"Updated {rows_affected} scores for challenge {challenge_id}")
         
         # Check if we should finalize this challenge
-        should_finalize = self._should_finalize_challenge(
-            challenge=challenge,
-            all_have_full_coverage=all_have_full_coverage
-        )
+        should_finalize = await self._should_finalize_challenge(challenge)
         
         if should_finalize:
             await self.forecast_repo.mark_challenge_scores_final(challenge_id)
@@ -171,13 +167,6 @@ class ScoreEvaluationService:
     ) -> Dict[str, Any] | None:
         """
         Calculate MASE and RMSE for a specific model/series combination.
-        
-        Calculates scores based on available overlapping data points between
-        forecasts and actuals. This allows for incremental scoring as more
-        actual data becomes available.
-        
-        Returns:
-            Dict with score data, or None if calculation not possible
         """
         # Get forecasts
         forecasts = await self.forecast_repo.get_forecasts_by_challenge_and_model(
@@ -186,10 +175,24 @@ class ScoreEvaluationService:
             series_id=series_id
         )
         
+        forecast_count = len(forecasts) if forecasts else 0
+        
         if not forecasts:
-            # No forecasts submitted - this is OK, just skip this model/series combination
-            logger.debug(f"No forecasts for model {model_id}, series {series_id} - skipping")
-            return {"no_forecasts": True}
+            logger.debug(f"No forecasts for model {model_id}, series {series_id}")
+            return {
+                "challenge_id": challenge_id,
+                "model_id": model_id,
+                "series_id": series_id,
+                "mase": None,
+                "rmse": None,
+                "forecast_count": 0,
+                "actual_count": 0,
+                "evaluated_count": 0,
+                "data_coverage": 0.0,
+                "final_evaluation": False,
+                "evaluation_status": "no_forecasts",
+                "error_message": None,
+            }
         
         # Get actuals
         actuals = await self.time_series_repo.get_data_by_time_range(
@@ -198,9 +201,24 @@ class ScoreEvaluationService:
             end_time=horizon_end
         )
         
+        actual_count = len(actuals) if actuals else 0
+        
         if not actuals:
             logger.debug(f"No actuals yet for series {series_id}")
-            return None
+            return {
+                "challenge_id": challenge_id,
+                "model_id": model_id,
+                "series_id": series_id,
+                "mase": None,
+                "rmse": None,
+                "forecast_count": forecast_count,
+                "actual_count": 0,
+                "evaluated_count": 0,
+                "data_coverage": 0.0,
+                "final_evaluation": False,
+                "evaluation_status": "awaiting_actuals",
+                "error_message": None,
+            }
         
         # Get last context point for naive forecast baseline
         last_context_point = await self.time_series_repo.get_last_n_points(
@@ -211,11 +229,23 @@ class ScoreEvaluationService:
         
         if not last_context_point:
             logger.warning(f"No context point for series {series_id}")
-            return None
+            return {
+                "challenge_id": challenge_id,
+                "model_id": model_id,
+                "series_id": series_id,
+                "mase": None,
+                "rmse": None,
+                "forecast_count": forecast_count,
+                "actual_count": actual_count,
+                "evaluated_count": 0,
+                "data_coverage": 0.0,
+                "final_evaluation": False,
+                "evaluation_status": "error",
+                "error_message": "No context point available for naive forecast baseline",
+            }
         
-        # Align data - normalize timestamps to UTC
+        # Normalize timestamps to UTC
         def normalize_to_utc(dt: datetime) -> datetime:
-            """Normalize datetime to UTC."""
             if dt.tzinfo is None:
                 return dt.replace(tzinfo=timezone.utc)
             return dt.astimezone(timezone.utc)
@@ -225,32 +255,35 @@ class ScoreEvaluationService:
         
         # Get overlapping timestamps
         common_timestamps = sorted(set(forecast_map.keys()) & set(actual_map.keys()))
+        evaluated_count = len(common_timestamps)
         
         if not common_timestamps:
-            logger.debug(
-                f"No overlapping timestamps for model {model_id}, series {series_id}"
-            )
-            return None
+            logger.debug(f"No overlapping timestamps for model {model_id}, series {series_id}")
+            return {
+                "challenge_id": challenge_id,
+                "model_id": model_id,
+                "series_id": series_id,
+                "mase": None,
+                "rmse": None,
+                "forecast_count": forecast_count,
+                "actual_count": actual_count,
+                "evaluated_count": 0,
+                "data_coverage": 0.0,
+                "final_evaluation": False,
+                "evaluation_status": "no_overlap",
+                "error_message": "No overlapping timestamps between forecasts and actuals",
+            }
         
-        # Calculate data coverage for informational purposes
-        num_forecasts = len(forecast_map)
-        num_overlapping = len(common_timestamps)
-        data_coverage = num_overlapping / num_forecasts if num_forecasts > 0 else 0
+        # Calculate data coverage
+        data_coverage = evaluated_count / forecast_count if forecast_count > 0 else 0.0
         
-        # Log incremental scoring (INFO level for partial data, less verbose when complete)
-        if data_coverage < 1.0:
-            logger.info(
-                f"Calculating partial score for challenge {challenge_id}, "
-                f"model {model_id}, series {series_id}: "
-                f"{num_overlapping}/{num_forecasts} data points available "
-                f"({data_coverage:.1%} coverage)"
-            )
+        # Determine evaluation status
+        if data_coverage >= 1.0:
+            evaluation_status = "complete"
+        elif data_coverage > 0:
+            evaluation_status = "partial"
         else:
-            logger.debug(
-                f"Calculating score for challenge {challenge_id}, "
-                f"model {model_id}, series {series_id}: "
-                f"{num_overlapping} data points (100% coverage)"
-            )
+            evaluation_status = "pending"
         
         # Aligned arrays
         y_pred = np.array([forecast_map[ts] for ts in common_timestamps])
@@ -275,47 +308,36 @@ class ScoreEvaluationService:
             "challenge_id": challenge_id,
             "model_id": model_id,
             "series_id": series_id,
-            "rmse": rmse,
             "mase": mase,
-            "final_evaluation": False,  # Will be set to True later when finalized
-            "data_coverage": data_coverage,  # Used to determine if all actuals are available
+            "rmse": rmse,
+            "forecast_count": forecast_count,
+            "actual_count": actual_count,
+            "evaluated_count": evaluated_count,
+            "data_coverage": data_coverage,
+            "final_evaluation": False,
+            "evaluation_status": evaluation_status,
+            "error_message": None,
         }
 
-    def _should_finalize_challenge(
-        self,
-        challenge: Any,
-        all_have_full_coverage: bool
-    ) -> bool:
+    async def _should_finalize_challenge(self, challenge: Any) -> bool:
         """
         Determine if a challenge should be marked as final.
-        
-        A challenge is finalized when:
-        1. The challenge end_time has passed
-        2. All forecast/actual pairs have 100% data coverage
-        
-        Args:
-            challenge: Challenge object
-            all_have_full_coverage: True if all model/series combinations have 100% coverage
-            
-        Returns:
-            True if challenge should be finalized
         """
-        # CRITICAL: Never finalize before end_time has passed
         now = datetime.now(timezone.utc)
-        if now < challenge.end_time:
-            logger.debug(
-                f"Challenge {challenge.id}: Not finalizing - end_time ({challenge.end_time}) not yet reached"
-            )
+        
+        end_time = challenge.end_time
+        if end_time.tzinfo is None:
+            end_time = end_time.replace(tzinfo=timezone.utc)
+        else:
+            end_time = end_time.astimezone(timezone.utc)
+        
+        # 1 hour buffer
+        finalization_buffer = timedelta(hours=1)
+        
+        if now < end_time + finalization_buffer:
             return False
         
-        # Don't finalize if not all scores have full coverage
-        if not all_have_full_coverage:
-            logger.debug(
-                f"Challenge {challenge.id}: Not finalizing - not all scores have 100% data coverage"
-            )
-            return False
+        # Check if all scores are complete
+        all_complete = await self.forecast_repo.check_all_scores_complete(challenge.id)
         
-        logger.info(
-            f"Challenge {challenge.id}: All conditions met for finalization"
-        )
-        return True
+        return all_complete

@@ -222,6 +222,12 @@ class ForecastRepository:
             set_={
                 "mase": stmt.excluded.mase,
                 "rmse": stmt.excluded.rmse,
+                "forecast_count": stmt.excluded.forecast_count,
+                "actual_count": stmt.excluded.actual_count,
+                "evaluated_count": stmt.excluded.evaluated_count,
+                "data_coverage": stmt.excluded.data_coverage,
+                "evaluation_status": stmt.excluded.evaluation_status,
+                "error_message": stmt.excluded.error_message,
                 "final_evaluation": stmt.excluded.final_evaluation,
                 "calculated_at": func.now()
             }
@@ -268,6 +274,12 @@ class ForecastRepository:
             set_={
                 "mase": stmt.excluded.mase,
                 "rmse": stmt.excluded.rmse,
+                "forecast_count": stmt.excluded.forecast_count,
+                "actual_count": stmt.excluded.actual_count,
+                "evaluated_count": stmt.excluded.evaluated_count,
+                "data_coverage": stmt.excluded.data_coverage,
+                "evaluation_status": stmt.excluded.evaluation_status,
+                "error_message": stmt.excluded.error_message,
                 "final_evaluation": stmt.excluded.final_evaluation,
                 "calculated_at": func.now()
             }
@@ -277,3 +289,28 @@ class ForecastRepository:
         await self.session.commit()
         
         return result.rowcount if result.rowcount else 0
+
+    async def check_all_scores_complete(self, challenge_id: int) -> bool:
+        """
+        Check if all scores for a challenge have 100% data coverage.
+        
+        Returns:
+            True if all scores have evaluation_status = 'complete'
+        """
+        from sqlalchemy import text
+        
+        query = text("""
+            SELECT 
+                COUNT(*) as total_scores,
+                COUNT(*) FILTER (WHERE evaluation_status = 'complete') as complete_scores
+            FROM forecasts.challenge_scores
+            WHERE challenge_id = :challenge_id
+        """)
+        
+        result = await self.session.execute(query, {"challenge_id": challenge_id})
+        row = result.fetchone()
+        
+        if not row or row.total_scores == 0:
+            return False
+        
+        return row.complete_scores == row.total_scores
