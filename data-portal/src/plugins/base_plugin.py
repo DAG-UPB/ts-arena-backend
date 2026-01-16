@@ -16,7 +16,8 @@ class TimeSeriesMetadata:
         frequency: str,
         unit: str,
         domain: str,
-        subdomain: str,
+        category: str,
+        subcategory: Optional[str],
         update_frequency: str
     ):
         """
@@ -30,7 +31,8 @@ class TimeSeriesMetadata:
                       This will be stored as INTERVAL type in the database
             unit: Unit of measurement (e.g., 'MWh', '°C')
             domain: Domain category (e.g., 'energy', 'weather')
-            subdomain: Subdomain/category (e.g., 'generation', 'temperature')
+            category: Category (e.g., 'generation', 'temperature')
+            subcategory: Subcategory (e.g., 'nuclear', 'wind')
             update_frequency: How often the data source is updated (PostgreSQL INTERVAL string)
         """
         self.endpoint_prefix = endpoint_prefix
@@ -39,7 +41,8 @@ class TimeSeriesMetadata:
         self.frequency = frequency
         self.unit = unit
         self.domain = domain
-        self.subdomain = subdomain
+        self.category = category
+        self.subcategory = subcategory
         self.update_frequency = update_frequency
 
 

@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Type
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
@@ -6,7 +6,23 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import and_, func, desc
 
 from .models import Forecast, ChallengeScore
-from app.database.data_portal.time_series import TimeSeriesDataModel
+from app.database.data_portal.time_series import (
+    TimeSeriesDataModel,
+    TimeSeriesData15minModel,
+    TimeSeriesData1hModel,
+    TimeSeriesData1dModel
+)
+
+# Maps resolution strings to the appropriate Continuous Aggregate Model for evaluation
+EVALUATION_RESOLUTION_MAP: Dict[str, Type] = {
+    "15min": TimeSeriesData15minModel,
+    "15 minutes": TimeSeriesData15minModel,
+    "1h": TimeSeriesData1hModel,
+    "1 hour": TimeSeriesData1hModel,
+    "1d": TimeSeriesData1dModel,
+    "1 day": TimeSeriesData1dModel,
+    "raw": TimeSeriesDataModel,
+}
 
 
 class ForecastRepository:
@@ -234,6 +250,63 @@ class ForecastRepository:
                 and_(
                     Forecast.series_id == TimeSeriesDataModel.series_id,
                     func.date_trunc('minute', Forecast.ts) == func.date_trunc('minute', TimeSeriesDataModel.ts)
+                )
+            )
+            .where(
+                and_(
+                    Forecast.challenge_id == challenge_id,
+                    Forecast.model_id == model_id,
+                    Forecast.series_id == series_id
+                )
+            )
+            .order_by(Forecast.ts)
+        )
+        
+        result = await self.session.execute(stmt)
+        return [
+            {
+                "ts": row.ts, 
+                "predicted_value": row.predicted_value, 
+                "actual_value": row.actual_value
+            } 
+            for row in result
+        ]
+
+    async def get_evaluation_data_by_resolution(
+        self,
+        challenge_id: int,
+        model_id: int,
+        series_id: int,
+        resolution: str = "1h"
+    ) -> List[Dict[str, Any]]:
+        """
+        Get aligned forecast and actual data for evaluation.
+        Reads actual values from the appropriate continuous aggregate view.
+        
+        Args:
+            challenge_id: Challenge ID
+            model_id: Model ID
+            series_id: Time series ID
+            resolution: Target resolution ("15min", "1h", "1d", "raw")
+            
+        Returns:
+            List of dicts with 'ts', 'predicted_value', 'actual_value'
+        """
+        # Select the appropriate model based on resolution
+        model = EVALUATION_RESOLUTION_MAP.get(resolution, TimeSeriesData1hModel)
+        
+        # Join on series_id and timestamps truncated to the minute
+        stmt = (
+            select(
+                Forecast.ts,
+                Forecast.predicted_value,
+                model.value.label("actual_value")
+            )
+            .join(
+                model,
+                and_(
+                    Forecast.series_id == model.series_id,
+                    func.date_trunc('minute', Forecast.ts) == func.date_trunc('minute', model.ts)
                 )
             )
             .where(

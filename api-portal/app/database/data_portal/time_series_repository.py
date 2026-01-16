@@ -1,15 +1,48 @@
 # app/database/data_portal/time_series_repository.py
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any, Union, Type
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert, desc, and_, text, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from app.database.data_portal.time_series import TimeSeriesModel, TimeSeriesDataModel, DomainCategoryModel
+from app.database.data_portal.time_series import (
+    TimeSeriesModel, 
+    TimeSeriesDataModel, 
+    DomainCategoryModel,
+    TimeSeriesData15minModel,
+    TimeSeriesData1hModel,
+    TimeSeriesData1dModel
+)
 import logging
 import re
 import isodate
 
 logger = logging.getLogger(__name__)
+
+
+# ==========================================================================
+# Resolution to Model Mapping
+# ==========================================================================
+
+# Maps resolution strings to the appropriate Continuous Aggregate Model
+RESOLUTION_MODEL_MAP: Dict[str, Type] = {
+    "15min": TimeSeriesData15minModel,
+    "15 minutes": TimeSeriesData15minModel,
+    "1h": TimeSeriesData1hModel,
+    "1 hour": TimeSeriesData1hModel,
+    "1d": TimeSeriesData1dModel,
+    "1 day": TimeSeriesData1dModel,
+    "raw": TimeSeriesDataModel,  # For Admin/Debug only
+}
+
+# Maps resolution strings to timedelta for validation
+RESOLUTION_INTERVALS: Dict[str, timedelta] = {
+    "15min": timedelta(minutes=15),
+    "15 minutes": timedelta(minutes=15),
+    "1h": timedelta(hours=1),
+    "1 hour": timedelta(hours=1),
+    "1d": timedelta(days=1),
+    "1 day": timedelta(days=1),
+}
 
 
 def parse_interval_string_to_timedelta(interval_str: str) -> timedelta:
@@ -702,3 +735,254 @@ class TimeSeriesRepository:
             logger.error(f"Error calculating context data stats: {e}")
             raise
 
+    # ==========================================================================
+    # Resolution-Based Data Access (Continuous Aggregate Views)
+    # ==========================================================================
+
+    async def get_last_n_points_by_resolution(
+        self,
+        series_id: int,
+        n: int,
+        resolution: str,
+        before_time: Optional[datetime] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieves the last N data points from the appropriate view based on resolution.
+        
+        Args:
+            series_id: ID of the time series
+            n: Number of points to retrieve
+            resolution: Target resolution ("15min", "1h", "1d", "raw")
+            before_time: Optional cutoff time (exclusive)
+            
+        Returns:
+            List of data points ordered by time (ascending)
+            
+        Raises:
+            ValueError: If resolution is not recognized
+        """
+        model = RESOLUTION_MODEL_MAP.get(resolution)
+        if not model:
+            raise ValueError(f"Unknown resolution: {resolution}. Valid: {list(RESOLUTION_MODEL_MAP.keys())}")
+        
+        try:
+            # Build query based on model type (raw vs aggregate)
+            if resolution == "raw":
+                query = select(
+                    model.ts,
+                    model.value
+                ).where(
+                    model.series_id == series_id
+                )
+            else:
+                query = select(
+                    model.ts,
+                    model.value,
+                    model.sample_count
+                ).where(
+                    model.series_id == series_id
+                )
+            
+            if before_time:
+                query = query.where(model.ts < before_time)
+            
+            query = query.order_by(desc(model.ts)).limit(n)
+            
+            result = await self.session.execute(query)
+            
+            if resolution == "raw":
+                data = [{"ts": row.ts, "value": row.value} for row in result.fetchall()]
+            else:
+                data = [{"ts": row.ts, "value": row.value, "sample_count": row.sample_count} for row in result.fetchall()]
+            
+            # Reverse to get chronological order
+            return list(reversed(data))
+        except Exception as e:
+            logger.error(f"Error querying last {n} points for series_id {series_id} with resolution {resolution}: {e}")
+            raise
+
+    async def get_data_by_time_range_by_resolution(
+        self,
+        series_id: int,
+        start_time: datetime,
+        end_time: datetime,
+        resolution: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieves data points for a single time series within a time range
+        from the appropriate view based on resolution.
+        
+        Args:
+            series_id: ID of the time series
+            start_time: Start of the time range (inclusive)
+            end_time: End of the time range (inclusive)
+            resolution: Target resolution ("15min", "1h", "1d", "raw")
+            
+        Returns:
+            List of data points with 'ts', 'value', and optionally 'sample_count' keys
+        """
+        model = RESOLUTION_MODEL_MAP.get(resolution)
+        if not model:
+            raise ValueError(f"Unknown resolution: {resolution}. Valid: {list(RESOLUTION_MODEL_MAP.keys())}")
+        
+        try:
+            if resolution == "raw":
+                query = select(
+                    model.ts,
+                    model.value
+                ).where(
+                    and_(
+                        model.series_id == series_id,
+                        model.ts >= start_time,
+                        model.ts <= end_time
+                    )
+                ).order_by(model.ts)
+            else:
+                query = select(
+                    model.ts,
+                    model.value,
+                    model.sample_count
+                ).where(
+                    and_(
+                        model.series_id == series_id,
+                        model.ts >= start_time,
+                        model.ts <= end_time
+                    )
+                ).order_by(model.ts)
+            
+            result = await self.session.execute(query)
+            
+            if resolution == "raw":
+                return [{"ts": row.ts, "value": row.value} for row in result.fetchall()]
+            else:
+                return [{"ts": row.ts, "value": row.value, "sample_count": row.sample_count} for row in result.fetchall()]
+        except Exception as e:
+            logger.error(f"Error querying time series data for series_id {series_id} with resolution {resolution}: {e}")
+            raise
+
+    async def validate_series_for_resolution(
+        self,
+        series_id: int,
+        resolution: str
+    ) -> bool:
+        """
+        Validates that a series is available in the requested resolution view.
+        A series is available if its native frequency <= target resolution.
+        
+        Args:
+            series_id: ID of the time series
+            resolution: Target resolution ("15min", "1h", "1d")
+            
+        Returns:
+            True if series is available in this resolution, False otherwise
+        """
+        series = await self.get_time_series_by_id(series_id)
+        if not series or not series.frequency:
+            return False
+        
+        target_interval = RESOLUTION_INTERVALS.get(resolution)
+        if not target_interval:
+            logger.warning(f"Unknown resolution for validation: {resolution}")
+            return False
+        
+        # Series is available if native frequency <= target resolution
+        return series.frequency <= target_interval
+
+    async def copy_last_n_to_challenge_by_resolution(
+        self,
+        series_id: int,
+        series_name: str,
+        challenge_id: int,
+        n: int,
+        resolution: str,
+        before_time: Optional[datetime] = None
+    ) -> int:
+        """
+        Copies the last N data points from the appropriate resolution view to challenge context data.
+        
+        Args:
+            series_id: Source time series ID
+            series_name: Series identifier for challenge context data
+            challenge_id: Target challenge ID
+            n: Number of points to copy
+            resolution: Target resolution ("15min", "1h", "1d")
+            before_time: Optional cutoff time (exclusive)
+            
+        Returns:
+            Number of rows copied
+        """
+        try:
+            # Get the last N points from the resolution view
+            data = await self.get_last_n_points_by_resolution(series_id, n, resolution, before_time)
+            
+            if not data:
+                logger.warning(f"No data found to copy for series_id {series_id} with resolution {resolution}")
+                return 0
+            
+            # Prepare bulk insert
+            values = [
+                {
+                    "challenge_id": challenge_id,
+                    "series_id": series_id,
+                    "ts": point["ts"],
+                    "value": point["value"],
+                    "metadata": None
+                }
+                for point in data
+            ]
+            
+            # Use raw SQL for better performance with TimescaleDB
+            stmt = text("""
+                INSERT INTO challenges.challenge_context_data 
+                (challenge_id, series_id, ts, value, metadata)
+                VALUES (:challenge_id, :series_id, :ts, :value, :metadata)
+                ON CONFLICT (challenge_id, series_id, ts) DO NOTHING
+            """)
+            
+            for value in values:
+                await self.session.execute(stmt, value)
+            
+            await self.session.flush()
+            
+            logger.info(f"Copied {len(data)} points from series_id {series_id} (resolution: {resolution}) to challenge {challenge_id}")
+            return len(data)
+        except Exception as e:
+            logger.error(f"Error copying data to challenge with resolution {resolution}: {e}")
+            raise
+
+    async def copy_bulk_to_challenge_by_resolution(
+        self,
+        series_mapping: Dict[int, str],
+        challenge_id: int,
+        n: int,
+        resolution: str,
+        before_time: Optional[datetime] = None
+    ) -> Dict[int, int]:
+        """
+        Copies data from multiple time series (from appropriate resolution view) to challenge context data.
+        
+        Args:
+            series_mapping: Dictionary mapping series_id to series_name for challenge
+            challenge_id: Target challenge ID
+            n: Number of last points to copy per series
+            resolution: Target resolution ("15min", "1h", "1d")
+            before_time: Optional cutoff time (exclusive)
+            
+        Returns:
+            Dictionary mapping series_id to number of rows copied
+        """
+        try:
+            result = {}
+            
+            # Copy last N points for each series from the resolution view
+            for series_id, series_name in series_mapping.items():
+                count = await self.copy_last_n_to_challenge_by_resolution(
+                    series_id, series_name, challenge_id, n, resolution, before_time
+                )
+                result[series_id] = count
+            
+            logger.info(f"Bulk copied data (resolution: {resolution}) to challenge {challenge_id}: {sum(result.values())} total points")
+            return result
+        except Exception as e:
+            logger.error(f"Error in bulk copy to challenge with resolution {resolution}: {e}")
+            raise

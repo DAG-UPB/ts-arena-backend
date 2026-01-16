@@ -91,9 +91,9 @@ class FingridDataSourcePlugin(BasePlugin):
 
     def __init__(self, metadata: TimeSeriesMetadata, default_params: Dict[str, Any]):
         super().__init__(metadata, default_params)
-        self.api_key = os.environ.get("FINGRID_API_KEY")
+        self.api_key = os.getenv("API_KEY_SOURCE_FINGRID")
         if not self.api_key:
-            logger.error("FINGRID_API_KEY not found in environment variables")
+            logger.error("API_KEY_SOURCE_FINGRID not found in environment variables")
         self.client = FingridApiClient(self.api_key or "")
 
     async def get_historical_data(

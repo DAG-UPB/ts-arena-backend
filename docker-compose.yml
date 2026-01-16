@@ -40,6 +40,7 @@ services:
       - RETRY_DELAY_SECONDS=${RETRY_DELAY_SECONDS:-60}
       - API_KEY_SOURCE_EIA=${API_KEY_SOURCE_EIA}
       - API_KEY_SOURCE_OPENAQ=${API_KEY_SOURCE_OPENAQ}
+      - API_KEY_SOURCE_FINGRID=${API_KEY_SOURCE_FINGRID}
     volumes:
       - ..:/workspaces:cached
     networks:
@@ -72,9 +73,10 @@ services:
     depends_on:
       - timescaledb
       - api-portal
-      
+
 volumes:
   dbarena:
+
 
 networks:
   default:

@@ -534,6 +534,114 @@ CREATE INDEX IF NOT EXISTS idx_challenges_time_range
 ON challenges.challenges(registration_start, registration_end, end_time);
 
 -- ==========================================================
+-- 10) Continuous Aggregates für Multi-Granularitäts-Zeitreihen
+-- ==========================================================
+
+-- Viertelstündliche Aggregation (15 Minuten)
+-- Enthält alle Serien mit frequency <= 15 Minuten
+CREATE MATERIALIZED VIEW IF NOT EXISTS data_portal.time_series_15min
+WITH (timescaledb.continuous) AS
+SELECT 
+    series_id,
+    time_bucket('15 minutes', ts) AS ts,
+    AVG(value) AS value,
+    COUNT(*) AS sample_count,
+    MIN(value) AS min_value,
+    MAX(value) AS max_value
+FROM data_portal.time_series_data
+GROUP BY series_id, time_bucket('15 minutes', ts)
+WITH NO DATA;
+
+-- Refresh-Policy: Alle 5 Minuten, schaut 1 Tag zurück
+SELECT add_continuous_aggregate_policy('data_portal.time_series_15min',
+    start_offset => INTERVAL '1 day',
+    end_offset => INTERVAL '15 minutes',
+    schedule_interval => INTERVAL '5 minutes',
+    if_not_exists => TRUE
+);
+
+-- Kompression nach 14 Tagen
+ALTER MATERIALIZED VIEW data_portal.time_series_15min SET (
+    timescaledb.compress = true
+);
+SELECT add_compression_policy('data_portal.time_series_15min', 
+    compress_after => INTERVAL '14 days',
+    if_not_exists => TRUE);
+
+-- ----------------------------------------------------------
+-- Stündliche Aggregation (1 Stunde)
+-- Enthält alle Serien mit frequency <= 1 Stunde
+CREATE MATERIALIZED VIEW IF NOT EXISTS data_portal.time_series_1h
+WITH (timescaledb.continuous) AS
+SELECT 
+    series_id,
+    time_bucket('1 hour', ts) AS ts,
+    AVG(value) AS value,
+    COUNT(*) AS sample_count,
+    MIN(value) AS min_value,
+    MAX(value) AS max_value
+FROM data_portal.time_series_data
+GROUP BY series_id, time_bucket('1 hour', ts)
+WITH NO DATA;
+
+-- Refresh-Policy: Alle 15 Minuten, schaut 2 Tage zurück
+SELECT add_continuous_aggregate_policy('data_portal.time_series_1h',
+    start_offset => INTERVAL '2 days',
+    end_offset => INTERVAL '1 hour',
+    schedule_interval => INTERVAL '15 minutes',
+    if_not_exists => TRUE
+);
+
+-- Kompression nach 30 Tagen
+ALTER MATERIALIZED VIEW data_portal.time_series_1h SET (
+    timescaledb.compress = true
+);
+SELECT add_compression_policy('data_portal.time_series_1h', 
+    compress_after => INTERVAL '30 days',
+    if_not_exists => TRUE);
+
+-- ----------------------------------------------------------
+-- Tägliche Aggregation (1 Tag)
+-- Enthält alle Serien mit frequency <= 1 Tag
+CREATE MATERIALIZED VIEW IF NOT EXISTS data_portal.time_series_1d
+WITH (timescaledb.continuous) AS
+SELECT 
+    series_id,
+    time_bucket('1 day', ts) AS ts,
+    AVG(value) AS value,
+    COUNT(*) AS sample_count,
+    MIN(value) AS min_value,
+    MAX(value) AS max_value
+FROM data_portal.time_series_data
+GROUP BY series_id, time_bucket('1 day', ts)
+WITH NO DATA;
+
+-- Refresh-Policy: Jede Stunde, schaut 7 Tage zurück
+SELECT add_continuous_aggregate_policy('data_portal.time_series_1d',
+    start_offset => INTERVAL '7 days',
+    end_offset => INTERVAL '1 day',
+    schedule_interval => INTERVAL '1 hour',
+    if_not_exists => TRUE
+);
+
+-- Kompression nach 90 Tagen
+ALTER MATERIALIZED VIEW data_portal.time_series_1d SET (
+    timescaledb.compress = true
+);
+SELECT add_compression_policy('data_portal.time_series_1d', 
+    compress_after => INTERVAL '90 days',
+    if_not_exists => TRUE);
+
+COMMENT ON MATERIALIZED VIEW data_portal.time_series_15min IS 
+'Continuous Aggregate für 15-Minuten-Daten. Aggregiert alle Zeitreihen mit frequency <= 15 Minuten.';
+
+COMMENT ON MATERIALIZED VIEW data_portal.time_series_1h IS 
+'Continuous Aggregate für stündliche Daten. Aggregiert alle Zeitreihen mit frequency <= 1 Stunde.';
+
+COMMENT ON MATERIALIZED VIEW data_portal.time_series_1d IS 
+'Continuous Aggregate für tägliche Daten. Aggregiert alle Zeitreihen mit frequency <= 1 Tag.';
+
+-- ==========================================================
 -- Final message
 -- ==========================================================
 DO $$

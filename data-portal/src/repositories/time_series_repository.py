@@ -81,7 +81,8 @@ class TimeSeriesDataRepository:
         frequency: str = "1 hour",
         unit: str = "",
         domain: str = "",
-        subdomain: str = "",
+        category: str = "",
+        subcategory: str = "",
         update_frequency: str = "1 day"
     ) -> int:
         """
@@ -94,14 +95,15 @@ class TimeSeriesDataRepository:
             frequency: Data frequency as ISO 8601 (e.g., 'PT1H', 'PT15M') or PostgreSQL format (e.g., '1 hour', '15 minutes')
             unit: Unit of measurement
             domain: Domain category
-            subdomain: Subdomain category
+            category: Category
+            subcategory: Subcategory
             update_frequency: How often data is updated, as ISO 8601 or PostgreSQL format
             
         Returns:
             series_id
         """
         # Get or create domain_category_id
-        domain_category_id = await self._get_or_create_domain_category_id(domain, subdomain)
+        domain_category_id = await self._get_or_create_domain_category_id(domain, category, subcategory)
         
         # Try to find existing series
         query = text("""
@@ -265,23 +267,56 @@ class TimeSeriesDataRepository:
         row = result.fetchone()
         return row[0] if row else 0
     
-    async def _get_or_create_domain_category_id(self, domain: str, subdomain: str) -> int:
+    async def _get_or_create_domain_category_id(self, domain: str, category: str, subcategory: str) -> int:
         """
         Get existing domain_category_id or create new domain category entry.
         
         Args:
             domain: Domain name
-            subdomain: Subdomain name (used as category)
+            category: Category name
+            subcategory: Subcategory name
             
         Returns:
             domain_category_id
         """
         # Try to find existing domain_category
+        # Use IS NOT DISTINCT FROM for nullable columns to handle NULL/None correctly
+        # Note: In asyncpg/SQLAlchemy text(), we need to handle NULLs explicitly if we used =
+        # but IS NOT DISTINCT FROM works for both NULL and values.
+        # However, for simplicity with empty strings defaulting to '', we check:
+        # If the input is empty string, we treat it as such. 
+        # init_db.sql schema allows NULL for category/subcategory. 
+        # But here we are passing strings (default "").
+        # Let's assume we store empty strings as NULL in DB? 
+        # Or store them as empty strings? 
+        # The schema has strict UNIQUE(domain, category, subcategory).
+        # Typically NULL != NULL in SQL unique constraint (except in recent PG versions with NULLS NOT DISTINCT).
+        # Let's check init_db.sql again.
+        # It's standard UNIQUE. So (A, NULL, NULL) and (A, NULL, NULL) would be duplicate key violation if we insert strictly?
+        # No, standard SQL says unique allows multiple NULLs. 
+        # BUT we want to reuse the ID.
+        # If we insert NULLs, we might get multiple rows which is bad for "domain_category".
+        # So we probably want to treat empty string as NULL or just Use empty string if that's the convention.
+        # The sources.yaml implies strings. 
+        # Let's stick to strings for now. If they are None, we pass None.
+        
+        # Adjust arguments to be optional? The signature above has them as str = "".
+        
         query = text("""
             SELECT id FROM data_portal.domain_category 
-            WHERE domain = :domain AND category = :subdomain
+            WHERE domain = :domain 
+            AND (category = :category OR (category IS NULL AND :category IS NULL))
+            AND (subcategory = :subcategory OR (subcategory IS NULL AND :subcategory IS NULL))
         """)
-        result = await self.session.execute(query, {"domain": domain, "subdomain": subdomain})
+        
+        # Convert empty strings to None if preferred, OR keep as empty strings.
+        # For now, let's keep strict equality but handle the NULL case if passed.
+        
+        result = await self.session.execute(query, {
+            "domain": domain, 
+            "category": category if category else None, 
+            "subcategory": subcategory if subcategory else None
+        })
         row = result.fetchone()
         
         if row:
@@ -289,14 +324,18 @@ class TimeSeriesDataRepository:
         
         # Create new domain_category
         insert_query = text("""
-            INSERT INTO data_portal.domain_category (domain, category)
-            VALUES (:domain, :subdomain)
+            INSERT INTO data_portal.domain_category (domain, category, subcategory)
+            VALUES (:domain, :category, :subcategory)
             RETURNING id
         """)
         
         result = await self.session.execute(
             insert_query,
-            {"domain": domain, "subdomain": subdomain}
+            {
+                "domain": domain, 
+                "category": category if category else None,
+                "subcategory": subcategory if subcategory else None
+            }
         )
         await self.session.commit()
         
@@ -304,7 +343,7 @@ class TimeSeriesDataRepository:
         domain_category_id = row[0] if row else None
         
         if domain_category_id is None:
-            raise ValueError(f"Failed to create domain category for {domain}/{subdomain}")
+            raise ValueError(f"Failed to create domain category for {domain}/{category}/{subcategory}")
         
-        logger.info(f"Created new domain category: {domain}/{subdomain} (id={domain_category_id})")
+        logger.info(f"Created new domain category: {domain}/{category}/{subcategory} (id={domain_category_id})")
         return domain_category_id

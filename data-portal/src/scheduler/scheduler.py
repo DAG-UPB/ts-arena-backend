@@ -191,7 +191,8 @@ class DataPortalScheduler:
                         frequency=metadata.frequency,
                         unit=getattr(metadata, 'unit', ''),
                         domain=getattr(metadata, 'domain', ''),
-                        subdomain=getattr(metadata, 'subdomain', ''),
+                        category=getattr(metadata, 'category', ''),
+                        subcategory=getattr(metadata, 'subcategory', ''),
                         update_frequency=metadata.update_frequency
                     )
                     

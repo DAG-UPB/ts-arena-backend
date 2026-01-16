@@ -16,12 +16,28 @@ from sklearn.metrics import mean_squared_error
 logger = logging.getLogger(__name__)
 
 class ChallengeService:
+    
+    # Mapping from challenge frequency to resolution view
+    FREQUENCY_TO_RESOLUTION = {
+        "15 minutes": "15min",
+        "1 hour": "1h",
+        "1 day": "1d",
+    }
+    
     def __init__(self, db_session, scheduler=None):
         self.repository: ChallengeRepository = ChallengeRepository(db_session)
         self.time_series_repository: TimeSeriesRepository = TimeSeriesRepository(db_session)
         self.forecast_repository: ForecastRepository = ForecastRepository(db_session)
         self.db_session = db_session
         self.scheduler = scheduler
+    
+    def _frequency_to_resolution(self, frequency: str) -> str:
+        """Maps challenge frequency to view resolution."""
+        resolution = self.FREQUENCY_TO_RESOLUTION.get(frequency)
+        if not resolution:
+            logger.warning(f"Unknown frequency '{frequency}', defaulting to '1h'")
+            return "1h"
+        return resolution
 
     async def create_challenge(
         self,
@@ -52,7 +68,7 @@ class ChallengeService:
         logger.info(f"schedule_params keys: {list(schedule_params.keys())}")
 
         # Calculate timings from string durations like "7 days" or "55 minutes"
-        announce_lead_str = schedule_params.get("announce_lead", "1 minute")
+        announce_lead_str = schedule_params.get("announce_lead", "1 minuteute")
         registration_duration_str = schedule_params.get("registration_duration", "1 hour")
         forecast_horizon_str = schedule_params["forecast_horizon"]
         context_length = schedule_params["context_length"]
@@ -325,17 +341,28 @@ class ChallengeService:
                     else:
                         logger.warning(f"Time series {series_id} not found in metadata")
                 
-                # Copy last N points for all selected series
-                logger.info(f"Copying {context_length} context points for {len(series_mapping)} series")
-                copy_result = await self.time_series_repository.copy_bulk_to_challenge(
+                # Copy last N points for all selected series FROM THE APPROPRIATE RESOLUTION VIEW
+                resolution = self._frequency_to_resolution(frequency)
+                logger.info(f"Copying {context_length} context points for {len(series_mapping)} series (resolution: {resolution})")
+                
+                # Validate all series for this resolution and log warnings
+                for series_id in selected_series_ids:
+                    is_valid = await self.time_series_repository.validate_series_for_resolution(
+                        series_id, resolution
+                    )
+                    if not is_valid:
+                        logger.warning(f"Series {series_id} may not be available for resolution {resolution} (native frequency > target)")
+                
+                copy_result = await self.time_series_repository.copy_bulk_to_challenge_by_resolution(
                     series_mapping=series_mapping,
                     challenge_id=challenge_id,
                     n=context_length,
+                    resolution=resolution,
                     before_time=before_time
                 )
                 
                 total_copied = sum(copy_result.values())
-                logger.info(f"Successfully copied {total_copied} total context points to challenge {challenge_id}")
+                logger.info(f"Successfully copied {total_copied} total context points to challenge {challenge_id} (resolution: {resolution})")
 
                 # Calculate statistics for each series and add to pseudo_entries
                 logger.info(f"Calculating statistics for {len(pseudo_entries)} series")

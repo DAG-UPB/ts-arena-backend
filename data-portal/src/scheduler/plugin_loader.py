@@ -49,9 +49,9 @@ def calculate_update_frequency(frequency: str) -> str:
         # Calculate quarter
         quarter_minutes = total_minutes // 4
         
-        # Ensure minimum of 1 minute
-        if quarter_minutes < 1:
-            quarter_minutes = 1
+        # Ensure minimum of 3 minutes
+        if quarter_minutes < 3:
+            quarter_minutes = 3
         
         # Convert back to appropriate unit
         if quarter_minutes >= 1440 and quarter_minutes % 1440 == 0:
@@ -129,7 +129,8 @@ class PluginLoader:
             frequency=metadata_dict.get('frequency', '1 hour'),
             unit=metadata_dict.get('unit', ''),
             domain=metadata_dict.get('domain', ''),
-            subdomain=metadata_dict.get('subdomain', ''),
+            category=metadata_dict.get('category') or metadata_dict.get('subdomain', ''),
+            subcategory=metadata_dict.get('subcategory', ''),
             update_frequency=calculate_update_frequency(metadata_dict.get('frequency', '1 hour'))
         )
         

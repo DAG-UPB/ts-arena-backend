@@ -53,3 +53,46 @@ class TimeSeriesDataModel(Base):
 
     def __repr__(self):
         return f"<TimeSeriesDataModel(series_id='{self.series_id}', ts='{self.ts}')>"
+
+
+# ==========================================================================
+# Read-Only Models for Continuous Aggregate Views
+# ==========================================================================
+
+class TimeSeriesData15minModel(Base):
+    """Read-only model for time_series_15min continuous aggregate."""
+    __tablename__ = "time_series_15min"
+    __table_args__ = {"schema": "data_portal"}
+    
+    series_id = Column(Integer, primary_key=True)
+    ts = Column(DateTime(timezone=True), primary_key=True)
+    value = Column(Float, nullable=False)
+    sample_count = Column(Integer)
+    min_value = Column(Float)
+    max_value = Column(Float)
+
+
+class TimeSeriesData1hModel(Base):
+    """Read-only model for time_series_1h continuous aggregate."""
+    __tablename__ = "time_series_1h"
+    __table_args__ = {"schema": "data_portal"}
+    
+    series_id = Column(Integer, primary_key=True)
+    ts = Column(DateTime(timezone=True), primary_key=True)
+    value = Column(Float, nullable=False)
+    sample_count = Column(Integer)
+    min_value = Column(Float)
+    max_value = Column(Float)
+
+
+class TimeSeriesData1dModel(Base):
+    """Read-only model for time_series_1d continuous aggregate."""
+    __tablename__ = "time_series_1d"
+    __table_args__ = {"schema": "data_portal"}
+    
+    series_id = Column(Integer, primary_key=True)
+    ts = Column(DateTime(timezone=True), primary_key=True)
+    value = Column(Float, nullable=False)
+    sample_count = Column(Integer)
+    min_value = Column(Float)
+    max_value = Column(Float)
