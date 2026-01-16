@@ -230,6 +230,7 @@ CREATE TABLE challenges.challenges (
     registration_start TIMESTAMPTZ,
     registration_end TIMESTAMPTZ,
     horizon INTERVAL NOT NULL,
+    frequency INTERVAL,
     start_time TIMESTAMPTZ,
     end_time TIMESTAMPTZ,
     preparation_params JSONB,
@@ -239,6 +240,9 @@ CREATE TABLE challenges.challenges (
 
 COMMENT ON COLUMN challenges.challenges.context_length IS 
 'Number of historical data points to use as context for forecasting';
+
+COMMENT ON COLUMN challenges.challenges.frequency IS 
+'Target frequency for this challenge (e.g., 15 minutes, 1 hour). Determines which aggregation view to use.';
 
 COMMENT ON COLUMN challenges.challenges.preparation_params IS 
 'JSON object containing parameters for context data preparation';

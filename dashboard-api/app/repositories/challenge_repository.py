@@ -282,22 +282,82 @@ class ChallengeRepository:
                 "subcategories": result['subcategories'] or [],
                 "statuses": result['statuses'] or []
             }
+    # Frequency-to-resolution mapping for auto-derivation
+    FREQUENCY_RESOLUTION_MAP = {
+        # timedelta values mapped to resolution strings
+        # Using seconds for comparison
+        900: "15min",      # 15 minutes
+        3600: "1h",        # 1 hour  
+        86400: "1d",       # 1 day
+    }
+    
+    def get_challenge_frequency(self, challenge_id: int) -> Optional[str]:
+        """
+        Retrieves the challenge frequency and maps it to a resolution string.
+        
+        Args:
+            challenge_id: ID of the challenge
+            
+        Returns:
+            Resolution string ("15min", "1h", "1d") or None if not found
+        """
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT frequency
+                FROM challenges.challenges
+                WHERE id = %s
+                """,
+                (challenge_id,),
+            )
+            row = cur.fetchone()
+            if not row or not row.get('frequency'):
+                return None
+            
+            # frequency is a timedelta from psycopg2
+            frequency = row['frequency']
+            total_seconds = int(frequency.total_seconds())
+            
+            return self.FREQUENCY_RESOLUTION_MAP.get(total_seconds)
     
     def get_challenge_data_for_series(
         self, 
+        challenge_id: int,
         series_id: int, 
         start_time: datetime, 
         end_time: datetime
     ) -> List[Dict[str, Any]]:
-        """Time series data for a series."""
+        """
+        Time series data for a series. Resolution is auto-derived from challenge frequency.
+        
+        Args:
+            challenge_id: ID of the challenge (used to derive resolution)
+            series_id: ID of the series
+            start_time: Start time
+            end_time: End time
+        """
+        # Auto-derive resolution from challenge frequency
+        resolution = self.get_challenge_frequency(challenge_id)
+        
+        # Input validation / Table mapping
+        table_map = {
+            "15min": "data_portal.time_series_15min",
+            "1h": "data_portal.time_series_1h",
+            "1d": "data_portal.time_series_1d",
+        }
+        
+        table_name = table_map.get(resolution)
+        if not table_name:
+            # Default to raw if unknown frequency
+            print(f"WARNING: Unknown resolution '{resolution}' for challenge {challenge_id}, defaulting to raw.", file=sys.stderr)
+            table_name = "data_portal.time_series_data"
+
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(
-                """
+            query = f"""
                 SELECT ts, value
-                FROM data_portal.time_series_data
+                FROM {table_name}
                 WHERE series_id = %s AND ts >= %s AND ts <= %s
                 ORDER BY ts;
-                """,
-                (series_id, start_time, end_time),
-            )
+            """
+            cur.execute(query, (series_id, start_time, end_time))
             return [dict(row) for row in cur.fetchall()]

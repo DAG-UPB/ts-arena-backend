@@ -89,6 +89,10 @@ class ChallengeService:
         registration_duration = parse_duration(registration_duration_str)
         horizon_delta = parse_duration(forecast_horizon_str)
         
+        # Parse challenge frequency for the new dedicated column
+        frequency_str = schedule_params["frequency"]
+        frequency_delta = parse_duration(frequency_str)
+        
         # context_length is the number of data points (integer)
         # No conversion needed - store directly as integer
 
@@ -102,6 +106,7 @@ class ChallengeService:
             description=schedule_params["description"],
             context_length=context_length,
             horizon=horizon_delta,
+            frequency=frequency_delta,
             registration_start=registration_start,
             registration_end=registration_end,
             start_time=start_time,

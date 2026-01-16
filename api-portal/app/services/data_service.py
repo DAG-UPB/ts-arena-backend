@@ -29,10 +29,17 @@ class DataService:
         endpoint_prefix: str,
         start_date: Optional[Union[str, datetime]] = None,
         end_date: Optional[Union[str, datetime]] = None,
+        resolution: str = "raw"
     ) -> List[Dict[str, Any]]:
         """
         Retrieves persisted time series data from the database.
         If no time range is specified, a default time range is calculated.
+        
+        Args:
+            endpoint_prefix: The endpoint prefix of the time series.
+            start_date: Optional start date.
+            end_date: Optional end date.
+            resolution: Data resolution ("raw", "15min", "1h", "1d").
         """
         ts = await self.time_series_repo.get_time_series_by_endpoint_prefix(endpoint_prefix)
         if not ts:
@@ -51,9 +58,12 @@ class DataService:
                 dt = dt.replace(tzinfo=timezone.utc)
             return dt
 
-        filter_params = {
-            "start_date": to_datetime_utc(start_date),
-            "end_date": to_datetime_utc(end_date)
-        }
+        start_dt = to_datetime_utc(start_date)
+        end_dt = to_datetime_utc(end_date)
         
-        return await self.time_series_repo.query_time_series_data(ts.series_id, filter_params)
+        return await self.time_series_repo.get_data_by_time_range_by_resolution(
+            series_id=ts.series_id,
+            start_time=start_dt,
+            end_time=end_dt,
+            resolution=resolution
+        )

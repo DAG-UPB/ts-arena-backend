@@ -195,6 +195,6 @@ async def get_series_data(
     - X-API-Key: Gültiger API-Key
     """
     repo = ChallengeRepository(conn)
-    data = repo.get_challenge_data_for_series(series_id, start_time, end_time)
+    data = repo.get_challenge_data_for_series(challenge_id, series_id, start_time, end_time)
     
     return {"data": data}

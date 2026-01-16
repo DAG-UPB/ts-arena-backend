@@ -7,8 +7,42 @@ import psycopg2.extras
 class ForecastRepository:
     """Repository for forecast data."""
     
+    # Frequency-to-resolution mapping for auto-derivation
+    FREQUENCY_RESOLUTION_MAP = {
+        # timedelta values mapped to resolution strings (using seconds for comparison)
+        900: "15min",      # 15 minutes
+        3600: "1h",        # 1 hour  
+        86400: "1d",       # 1 day
+    }
+    
     def __init__(self, conn):
         self.conn = conn
+    
+    def _get_challenge_resolution(self, challenge_id: int) -> str:
+        """
+        Retrieves the challenge frequency and maps it to a resolution string.
+        
+        Returns:
+            Resolution string ("15min", "1h", "1d") or "raw" if not found
+        """
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT frequency
+                FROM challenges.challenges
+                WHERE id = %s
+                """,
+                (challenge_id,),
+            )
+            row = cur.fetchone()
+            if not row or not row.get('frequency'):
+                return "raw"
+            
+            # frequency is a timedelta from psycopg2
+            frequency = row['frequency']
+            total_seconds = int(frequency.total_seconds())
+            
+            return self.FREQUENCY_RESOLUTION_MAP.get(total_seconds, "raw")
     
     def get_series_forecasts(
         self, 
@@ -17,11 +51,28 @@ class ForecastRepository:
     ) -> Dict[str, Dict[str, Any]]:
         """
         Forecasts for a series, grouped by model.
+        Resolution is auto-derived from challenge frequency.
         Returns Dict: {model_label: {label, current_mase, data: [...]}}
         """
+        # Auto-derive resolution from challenge frequency
+        resolution = self._get_challenge_resolution(challenge_id)
+        
+        # Table mapping
+        table_map = {
+            "raw": "data_portal.time_series_data",
+            "15min": "data_portal.time_series_15min",
+            "1h": "data_portal.time_series_1h",
+            "1d": "data_portal.time_series_1d",
+        }
+        
+        table_name = table_map.get(resolution)
+        if not table_name:
+             print(f"WARNING: Unknown resolution '{resolution}' in get_series_forecasts, defaulting to raw.", file=sys.stderr)
+             table_name = "data_portal.time_series_data"
+
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(
-                """
+            # We use f-string for table name (safe because validated via table_map)
+            query = f"""
                 SELECT
                     f.id as forecast_id,
                     f.created_at,
@@ -36,12 +87,12 @@ class ForecastRepository:
                 FROM forecasts.forecasts f
                 JOIN models.model_info mi ON mi.id = f.model_id
                 JOIN challenges.v_challenge_context_data_range as ccd ON ccd.challenge_id = f.challenge_id AND ccd.series_id = f.series_id
-                LEFT JOIN data_portal.time_series_data tsd ON tsd.series_id = f.series_id AND tsd.ts = f.ts
+                LEFT JOIN {table_name} tsd ON tsd.series_id = f.series_id AND tsd.ts = f.ts
                 WHERE f.challenge_id = %s AND f.series_id = %s
                 ORDER BY f.created_at ASC, f.ts ASC;
-                """,
-                (challenge_id, series_id),
-            )
+            """
+            
+            cur.execute(query, (challenge_id, series_id))
             rows = [dict(row) for row in cur.fetchall()]
             
             if not rows:

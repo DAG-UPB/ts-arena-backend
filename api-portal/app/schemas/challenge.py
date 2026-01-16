@@ -12,6 +12,7 @@ class ChallengeBase(BaseModel):
     registration_start: Optional[datetime] = None
     registration_end: Optional[datetime] = None
     horizon: timedelta
+    frequency: Optional[timedelta] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
 

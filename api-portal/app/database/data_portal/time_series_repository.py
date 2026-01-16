@@ -548,8 +548,9 @@ class TimeSeriesRepository:
             if frequency:
                 # Convert string to timedelta for asyncpg compatibility
                 # asyncpg expects timedelta objects for INTERVAL columns
+                # Use <= to include finer granularity series (e.g., 3min series for 15min challenge)
                 frequency_td = parse_interval_string_to_timedelta(frequency)
-                query_parts.append("AND frequency = :frequency")
+                query_parts.append("AND frequency <= :frequency")
                 params["frequency"] = frequency_td
             
             if only_with_recent_data:
