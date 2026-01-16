@@ -155,7 +155,6 @@ class ModelRepository:
                 MAX(mase) AS max_mase,
                 ARRAY_AGG(DISTINCT domain ORDER BY domain) FILTER (WHERE domain IS NOT NULL) AS domains_covered,
                 ARRAY_AGG(DISTINCT category ORDER BY category) FILTER (WHERE category IS NOT NULL) AS categories_covered,
-                ARRAY_AGG(DISTINCT subcategory ORDER BY subcategory) FILTER (WHERE subcategory IS NOT NULL) AS subcategories_covered,
                 ARRAY_AGG(DISTINCT frequency::INTERVAL ORDER BY frequency) FILTER (WHERE frequency IS NOT NULL) AS frequencies_covered,
                 ARRAY_AGG(DISTINCT horizon::INTERVAL ORDER BY horizon) FILTER (WHERE horizon IS NOT NULL) AS horizons_covered
             FROM forecasts.v_ranking_base

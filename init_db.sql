@@ -494,8 +494,8 @@ LEFT JOIN data_portal.domain_category dc ON ts.domain_category_id = dc.id
 WHERE cs.mase IS NOT NULL
   AND cs.mase != 'NaN'
   AND cs.mase != 'Infinity'
-  AND cs.mase != '-Infinity';
-
+  AND cs.mase != '-Infinity'
+  AND cs.final_evaluation;
 COMMENT ON VIEW forecasts.v_ranking_base IS 
 'Base view for model rankings with all filter dimensions. Filters out invalid MASE values (NULL, NaN, Infinity).';
 
