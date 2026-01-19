@@ -18,7 +18,12 @@ import yaml
 from pathlib import Path
 
 class ChallengeScheduler:
-    """Wraps APScheduler v4 AsyncScheduler and challenge job scheduling with auto-recovery."""
+    """Wraps APScheduler v4 AsyncScheduler and challenge job scheduling with auto-recovery.
+    
+    Note: APScheduler v4 alpha has a known bug where exceptions can cause the scheduler
+    to crash internally. This wrapper implements robust crash detection by tracking the
+    background task and recreating the scheduler instance when needed.
+    """
 
     def __init__(
         self,
@@ -28,17 +33,23 @@ class ChallengeScheduler:
         max_restart_attempts: int = 5,
         restart_delay: float = 5.0,
     ) -> None:
-        data_store = SQLAlchemyDataStore(engine_or_url=database_url)
-        self.scheduler = AsyncScheduler(data_store=data_store)
+        self._database_url = database_url  # Store for recreation after crash
+        self.scheduler = self._create_scheduler()
         self._started = False
         self._exit_stack: AsyncExitStack | None = None
         self.logger = logger or logging.getLogger("challenge-scheduler")
         self._monitor_task: Optional[asyncio.Task] = None
+        self._scheduler_task: Optional[asyncio.Task] = None  # Track the scheduler background task
         self._shutdown_event = asyncio.Event()
         self._max_restart_attempts = max_restart_attempts
         self._restart_delay = restart_delay
         self._restart_count = 0
         self._config_path: Optional[str] = None
+    
+    def _create_scheduler(self) -> AsyncScheduler:
+        """Create a new AsyncScheduler instance with the configured data store."""
+        data_store = SQLAlchemyDataStore(engine_or_url=self._database_url)
+        return AsyncScheduler(data_store=data_store)
 
     async def start(self) -> None:
         """Start the scheduler with automatic recovery monitoring."""
@@ -46,7 +57,14 @@ class ChallengeScheduler:
             try:
                 self._exit_stack = AsyncExitStack()
                 await self._exit_stack.enter_async_context(self.scheduler)
-                await self.scheduler.start_in_background()
+                
+                # Start scheduler in a tracked task instead of using start_in_background()
+                # This allows us to detect when the scheduler crashes internally
+                self._scheduler_task = asyncio.create_task(
+                    self._run_scheduler_with_crash_handling(),
+                    name="scheduler-runner"
+                )
+                
                 self._started = True
                 self._shutdown_event.clear()
                 self.logger.info("Scheduler started in background.")
@@ -57,12 +75,23 @@ class ChallengeScheduler:
                 
                 # Start the monitoring task for auto-recovery
                 if self._monitor_task is None or self._monitor_task.done():
-                    self._monitor_task = asyncio.create_task(self._monitor_scheduler())
+                    self._monitor_task = asyncio.create_task(
+                        self._monitor_scheduler(),
+                        name="scheduler-monitor"
+                    )
                     self.logger.info("Scheduler monitoring task started.")
             except Exception as e:
                 self.logger.error(f"Failed to start scheduler: {e}", exc_info=True)
                 self._started = False
                 raise
+
+    async def _run_scheduler_with_crash_handling(self) -> None:
+        """Run the scheduler and log any crashes."""
+        try:
+            await self.scheduler.run_until_stopped()
+        except Exception as e:
+            self.logger.error(f"Scheduler run_until_stopped crashed: {e}", exc_info=True)
+            raise  # Re-raise so the task shows as failed
 
     async def shutdown(self) -> None:
         """Gracefully shutdown the scheduler and monitoring task."""
@@ -80,17 +109,26 @@ class ChallengeScheduler:
         if self._started:
             self._started = False  # Prevent restart attempts during shutdown
             try:
-                # First stop accepting new jobs
-                try:
-                    await asyncio.wait_for(self.scheduler.stop(), timeout=5.0)
-                except asyncio.TimeoutError:
-                    self.logger.warning("Scheduler stop timed out.")
-                except asyncio.CancelledError:
-                    self.logger.debug("Scheduler stop was cancelled.")
-                except Exception as e:
-                    self.logger.error(f"Error stopping scheduler: {e}")
+                # Stop the scheduler task
+                if self._scheduler_task and not self._scheduler_task.done():
+                    try:
+                        await asyncio.wait_for(self.scheduler.stop(), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        self.logger.warning("Scheduler stop timed out.")
+                    except asyncio.CancelledError:
+                        self.logger.debug("Scheduler stop was cancelled.")
+                    except Exception as e:
+                        self.logger.error(f"Error stopping scheduler: {e}")
+                    
+                    # Wait for the task to complete after stop
+                    try:
+                        await asyncio.wait_for(self._scheduler_task, timeout=3.0)
+                    except (asyncio.TimeoutError, asyncio.CancelledError):
+                        self.logger.debug("Scheduler task completed.")
+                    except Exception:
+                        pass  # Task may have crashed, that's fine during shutdown
                 
-                # Then cleanup resources
+                # Cleanup resources
                 try:
                     await asyncio.wait_for(self.scheduler.cleanup(), timeout=5.0)
                 except asyncio.TimeoutError:
@@ -107,8 +145,9 @@ class ChallengeScheduler:
                         self.logger.warning("Exit stack close timed out.")
                     except asyncio.CancelledError:
                         self.logger.debug("Exit stack close was cancelled.")
-                    except Exception as e:
-                        self.logger.error(f"Error closing exit stack: {e}")
+                    except (Exception, BaseExceptionGroup) as e:
+                        # APScheduler v4 alpha can raise ExceptionGroups during cleanup
+                        self.logger.warning(f"Exit stack close raised: {type(e).__name__}: {e}")
                 self.logger.info("Scheduler shut down.")
 
     async def load_recurring_schedules(self, config_path: str) -> None:
@@ -244,6 +283,9 @@ class ChallengeScheduler:
         """
         Monitors the scheduler and automatically restarts it if it crashes.
         Runs in the background as a separate task.
+        
+        This now properly detects crashes by checking if the scheduler task has
+        completed unexpectedly, rather than just checking scheduler.state.
         """
         self.logger.info("Scheduler monitoring started.")
         
@@ -255,17 +297,28 @@ class ChallengeScheduler:
                 if self._shutdown_event.is_set():
                     break
                 
-                # Check if scheduler is still running
-                if self._started:
-                    try:
-                        # Try to access scheduler state to verify it's alive
-                        _ = self.scheduler.state
-                    except Exception as e:
-                        self.logger.error(
-                            f"Scheduler health check failed: {e}. Attempting restart...",
-                            exc_info=True
-                        )
-                        await self._attempt_restart()
+                # Check if scheduler task has crashed (completed unexpectedly)
+                if self._started and self._scheduler_task:
+                    if self._scheduler_task.done():
+                        # Scheduler task completed - this means it crashed
+                        try:
+                            # This will raise the exception that caused the crash
+                            self._scheduler_task.result()
+                            # If we get here, the task completed normally (shouldn't happen)
+                            self.logger.warning("Scheduler task exited unexpectedly without error")
+                        except asyncio.CancelledError:
+                            # Task was cancelled, likely during shutdown
+                            if not self._shutdown_event.is_set():
+                                self.logger.warning("Scheduler task was cancelled unexpectedly")
+                        except Exception as e:
+                            self.logger.error(
+                                f"Scheduler task crashed with error: {e}",
+                                exc_info=True
+                            )
+                        
+                        # Attempt restart if not shutting down
+                        if not self._shutdown_event.is_set():
+                            await self._attempt_restart()
                 
             except asyncio.CancelledError:
                 self.logger.info("Scheduler monitoring cancelled.")
@@ -279,6 +332,9 @@ class ChallengeScheduler:
     async def _attempt_restart(self) -> None:
         """
         Attempts to restart the scheduler after a crash.
+        
+        Important: APScheduler v4 alpha requires creating a new AsyncScheduler instance
+        after a crash because the internal state becomes corrupted.
         """
         if self._restart_count >= self._max_restart_attempts:
             self.logger.error(
@@ -295,21 +351,40 @@ class ChallengeScheduler:
         try:
             # Clean up current state
             self._started = False
+            
+            # Cancel scheduler task if still running
+            if self._scheduler_task and not self._scheduler_task.done():
+                self._scheduler_task.cancel()
+                try:
+                    await asyncio.wait_for(self._scheduler_task, timeout=3.0)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    pass
+            
+            # Close exit stack to cleanup old scheduler resources
             if self._exit_stack:
                 try:
                     await asyncio.wait_for(self._exit_stack.aclose(), timeout=5.0)
-                except Exception as e:
-                    self.logger.error(f"Error during cleanup before restart: {e}")
+                except (Exception, BaseExceptionGroup) as e:
+                    self.logger.warning(f"Error during cleanup before restart: {type(e).__name__}: {e}")
             
             # Wait before restarting
             await asyncio.sleep(self._restart_delay)
             
-            # Restart scheduler
+            # Create a NEW scheduler instance (required after crash in APScheduler v4 alpha)
+            self.scheduler = self._create_scheduler()
+            self.logger.info("Created new scheduler instance for restart.")
+            
+            # Start the new scheduler
             self._exit_stack = AsyncExitStack()
             await self._exit_stack.enter_async_context(self.scheduler)
-            await self.scheduler.start_in_background()
-            self._started = True
             
+            # Start scheduler in a tracked task
+            self._scheduler_task = asyncio.create_task(
+                self._run_scheduler_with_crash_handling(),
+                name="scheduler-runner"
+            )
+            
+            self._started = True
             self.logger.info("Scheduler restarted successfully.")
             
             # Reschedule periodic evaluation
