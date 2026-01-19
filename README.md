@@ -26,6 +26,9 @@ The data used in this platform are obtained from the [U.S. Energy Information Ad
 ### SMARD (Bundesnetzagentur)
 The data used in this platform are obtained from the [SMARD electricity and gas market data platform](https://www.smard.de/home) operated by the German Federal Network Agency (Bundesnetzagentur). The data, licensed under the Creative Commons Attribution 4.0 International Licence (CC BY 4.0), are accessed and partially used for non-commercial, scientific purposes. The original source of the data is acknowledged as "Bundesnetzagentur | SMARD.de", and any modifications or aggregations of the data are the sole responsibility of the authors.
 
+### Fingrid (Finnish Transmission System Operator)
+The data used in this platform are obtained from [Fingrid's Open Data Platform](https://data.fingrid.fi/en/). The data, licensed under the [Creative Commons Attribution 4.0 International License (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/), are accessed and partially used for non-commercial, scientific purposes. Source: Fingrid / data.fingrid.fi. Any modifications or aggregations of the data are the sole responsibility of the authors. For full license terms, see [Fingrid's Legal Terms](https://www.fingrid.fi/en/legal-terms/).
+
 ## Getting Started (Self-Hosting)
 
 To host the TS-Arena backend yourself, you primarily need Docker and Docker Compose.
