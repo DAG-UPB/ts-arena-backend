@@ -4,7 +4,7 @@ This service runs independently every 10 minutes to calculate and update scores
 for active and completed challenges.
 """
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
 import numpy as np
 from sklearn.metrics import mean_squared_error
@@ -15,6 +15,36 @@ from app.database.data_portal.time_series_repository import TimeSeriesRepository
 from app.database.forecasts.repository import ForecastRepository
 
 logger = logging.getLogger(__name__)
+
+
+# Mapping from timedelta frequency to resolution view
+FREQUENCY_TO_RESOLUTION: Dict[timedelta, str] = {
+    timedelta(minutes=15): "15min",
+    timedelta(hours=1): "1h",
+    timedelta(days=1): "1d",
+}
+
+
+def timedelta_to_resolution(frequency: Optional[timedelta]) -> str:
+    """
+    Maps a timedelta frequency to the corresponding resolution view name.
+    
+    Args:
+        frequency: The frequency as timedelta (e.g., 1 hour, 15 minutes)
+        
+    Returns:
+        Resolution string ("15min", "1h", "1d") for use with materialized views.
+        Defaults to "1h" if frequency is None or unknown.
+    """
+    if frequency is None:
+        logger.warning("Frequency is None, defaulting to '1h' resolution")
+        return "1h"
+    
+    resolution = FREQUENCY_TO_RESOLUTION.get(frequency)
+    if not resolution:
+        logger.warning(f"Unknown frequency {frequency}, defaulting to '1h' resolution")
+        return "1h"
+    return resolution
 
 
 class ScoreEvaluationService:
@@ -106,6 +136,10 @@ class ScoreEvaluationService:
         
         logger.info(f"Challenge {challenge_id}: {len(participant_model_ids)} participants, {len(series_ids)} series")
         
+        # Determine resolution from challenge frequency
+        resolution = timedelta_to_resolution(challenge.frequency)
+        logger.info(f"Challenge {challenge_id}: using resolution '{resolution}' (frequency: {challenge.frequency})")
+        
         # Calculate scores for each model/series combination
         all_scores = []
         
@@ -115,7 +149,8 @@ class ScoreEvaluationService:
                     score_data = await self._calculate_score_for_model_series(
                         challenge_id=challenge_id,
                         model_id=model_id,
-                        series_id=series_id
+                        series_id=series_id,
+                        resolution=resolution
                     )
                     
                     if score_data:
@@ -164,7 +199,8 @@ class ScoreEvaluationService:
         self,
         challenge_id: int,
         model_id: int,
-        series_id: int
+        series_id: int,
+        resolution: str = "1h"
     ) -> Dict[str, Any] | None:
         """
         Calculate MASE and RMSE for a specific model/series combination.
@@ -201,10 +237,11 @@ class ScoreEvaluationService:
         naive_forecast_value = None
         
         if pseudo_info and pseudo_info.max_ts:
-            context_points = await self.time_series_repo.get_data_by_time_range(
+            context_points = await self.time_series_repo.get_data_by_time_range_by_resolution(
                 series_id=series_id,
                 start_time=pseudo_info.max_ts,
-                end_time=pseudo_info.max_ts
+                end_time=pseudo_info.max_ts,
+                resolution=resolution
             )
             if context_points:
                 naive_forecast_value = context_points[0]['value']
@@ -227,10 +264,12 @@ class ScoreEvaluationService:
             }
         
         # Get aligned evaluation data directly from DB (INNER JOIN)
-        evaluation_data = await self.forecast_repo.get_evaluation_data(
+        # Uses the appropriate continuous aggregate view based on resolution
+        evaluation_data = await self.forecast_repo.get_evaluation_data_by_resolution(
             challenge_id=challenge_id,
             model_id=model_id,
-            series_id=series_id
+            series_id=series_id,
+            resolution=resolution
         )
         
         evaluated_count = len(evaluation_data)
