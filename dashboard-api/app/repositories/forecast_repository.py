@@ -71,7 +71,6 @@ class ForecastRepository:
              table_name = "data_portal.time_series_data"
 
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            # We use f-string for table name (safe because validated via table_map)
             query = f"""
                 SELECT
                     f.id as forecast_id,
@@ -98,7 +97,6 @@ class ForecastRepository:
             if not rows:
                 return {}
             
-            # Group by model
             grouped: Dict[str, Dict[str, Any]] = {}
             for r in rows:
                 key = self._format_model_readable_id(r)
@@ -113,14 +111,12 @@ class ForecastRepository:
                         "_mae_count": 0
                     }
                 
-                # Reformat for response     
                 grouped[key]["data"].append({
                     "ts": r["ts"],
                     "y": r["value"],
                     "ci": r["confidence_intervals"]
                 })
 
-                # Prepare MASE calculation
                 current_val = r["current_value"]
                 latest_val = r["latest_observed_value"]
                 pred_val = r["value"]
@@ -130,7 +126,6 @@ class ForecastRepository:
                     grouped[key]["_mae_naive_sum"] += abs(latest_val - current_val)
                     grouped[key]["_mae_count"] += 1
             
-            # Calculate MASE and remove temporary fields
             for key, item in grouped.items():
                 if item["_mae_count"] > 0:
                     mae_model = item["_mae_model_sum"] / item["_mae_count"]
@@ -139,7 +134,6 @@ class ForecastRepository:
                     if mae_naive != 0:
                         item["current_mase"] = mae_model / mae_naive
                 
-                # Cleanup
                 del item["_mae_model_sum"]
                 del item["_mae_naive_sum"]
                 del item["_mae_count"]

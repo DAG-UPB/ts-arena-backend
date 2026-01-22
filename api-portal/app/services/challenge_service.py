@@ -47,7 +47,6 @@ class ChallengeService:
         Creates an initial challenge entry in the database
         """
         challenge_create_dict = challenge_data.model_dump()
-        # Enum to string for the DB
         created = await self.repository.create_challenge(**challenge_create_dict)
         return Challenge.model_validate(created, from_attributes=True)
 
@@ -411,11 +410,6 @@ class ChallengeService:
             logger.error(f"Error preparing challenge context data: {e}")
             await self.db_session.rollback()
             raise
-
-    # ==========================================================================
-    # Read-Only Operations
-    # ==========================================================================
-
 
 
     async def get_context_data_bulk(

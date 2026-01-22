@@ -45,12 +45,10 @@ class DataService:
         if not ts:
             raise ValueError(f"Time series '{endpoint_prefix}' not found.")
 
-        # Calculate default time range if none is specified
         if not start_date or not end_date:
-            start_date = datetime.now(timezone.utc) - timedelta(days=7)  # Default: last 7 days
+            start_date = datetime.now(timezone.utc) - timedelta(days=7)
             end_date = datetime.now(timezone.utc)
 
-        # Date conversion
         def to_datetime_utc(dt):
             if isinstance(dt, str):
                 dt = datetime.fromisoformat(dt.replace('Z', '+00:00'))

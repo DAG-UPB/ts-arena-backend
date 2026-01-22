@@ -18,7 +18,6 @@ class ChallengeRepository:
         status: Optional[List[str]] = None,
         from_date: Optional[datetime] = None,
         to_date: Optional[datetime] = None,
-        # NEW: Filter parameters
         domains: Optional[List[str]] = None,
         categories: Optional[List[str]] = None,
         subcategories: Optional[List[str]] = None,
@@ -38,9 +37,6 @@ class ChallengeRepository:
             frequencies: List of frequencies as ISO 8601 (e.g. ['PT1H', 'P1D'])
             horizons: List of horizons as ISO 8601
         """
-        print(f"DEBUG: list_challenges(status={status}, from={from_date}, to={to_date}, "
-              f"domains={domains}, categories={categories}, subcategories={subcategories}, "
-              f"frequencies={frequencies}, horizons={horizons})", file=sys.stderr)
         
         # Use new view with challenge frequency
         query = """
@@ -70,13 +66,11 @@ class ChallengeRepository:
         
         params = []
         
-        # Filter by status
         if status and len(status) > 0:
             placeholders = ','.join(['%s'] * len(status))
             query += f" AND status IN ({placeholders})"
             params.extend(status)
         
-        # Filter by date
         if from_date:
             query += " AND end_time >= %s"
             params.append(from_date)
@@ -85,19 +79,16 @@ class ChallengeRepository:
             query += " AND end_time <= %s"
             params.append(to_date)
         
-        # NEW: Filter by domain (Array-Overlap)
         if domains and len(domains) > 0:
             placeholders = ','.join(['%s'] * len(domains))
             query += f" AND domains && ARRAY[{placeholders}]::TEXT[]"
             params.extend(domains)
         
-        # NEW: Filter by category
         if categories and len(categories) > 0:
             placeholders = ','.join(['%s'] * len(categories))
             query += f" AND categories && ARRAY[{placeholders}]::TEXT[]"
             params.extend(categories)
         
-        # NEW: Filter by subcategory
         if subcategories and len(subcategories) > 0:
             placeholders = ','.join(['%s'] * len(subcategories))
             query += f" AND subcategories && ARRAY[{placeholders}]::TEXT[]"
@@ -115,7 +106,6 @@ class ChallengeRepository:
                 print(f"ERROR: Invalid frequency format: {e}", file=sys.stderr)
                 # Optional: raise HTTPException or ignore
         
-        # NEW: Filter by horizon (direct comparison, not an array)
         if horizons and len(horizons) > 0:
             try:
                 interval_strings = parse_iso8601_to_interval_list(horizons)
@@ -126,7 +116,6 @@ class ChallengeRepository:
             except ValueError as e:
                 print(f"ERROR: Invalid horizon format: {e}", file=sys.stderr)
         
-        # Sorting
         query += """
             ORDER BY
                 CASE status
@@ -156,7 +145,6 @@ class ChallengeRepository:
                     row_dict['horizon'] = serialize_timedelta_to_iso8601(row_dict['horizon'])
                 
                 results.append(row_dict)
-            print(f"DEBUG: list_challenges found {len(results)} challenges.", file=sys.stderr)
             return results
     
     def get_challenge_meta(self, challenge_id: int) -> Optional[Dict[str, Any]]:
@@ -201,7 +189,6 @@ class ChallengeRepository:
                     c.registration_end as registration_end,
                     cdr.min_ts as context_start_time,
                     cdr.max_ts as context_end_time,
-                    -- NEW: Domain information
                     dc.domain,
                     dc.category,
                     dc.subcategory
@@ -211,7 +198,6 @@ class ChallengeRepository:
                 JOIN challenges.v_challenge_context_data_range cdr 
                     ON cdr.challenge_id = csp.challenge_id 
                     AND cdr.series_id = csp.series_id
-                -- NEW: Domain join
                 LEFT JOIN data_portal.domain_category dc ON ts.domain_category_id = dc.id
                 WHERE csp.challenge_id = %s
                 ORDER BY ts.name ASC;

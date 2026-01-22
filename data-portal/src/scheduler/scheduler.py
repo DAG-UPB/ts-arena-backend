@@ -35,12 +35,10 @@ class DataPortalScheduler:
         """Initialize scheduler and load plugins"""
         logger.info("Initializing Data Portal Scheduler...")
         
-        # Load plugins
         self.plugins = self.plugin_loader.load_plugins()
         if not self.plugins:
             logger.warning("No plugins loaded. Scheduler will run but no jobs will be scheduled.")
         
-        # Configure APScheduler with memory job store (non-persistent)
         jobstores = {
             'default': MemoryJobStore()
         }
@@ -71,18 +69,15 @@ class DataPortalScheduler:
         
         logger.info("Starting scheduler...")
         
-        # Register jobs for each plugin
         for endpoint_prefix, plugin in self.plugins.items():
             try:
                 await self._register_plugin_job(endpoint_prefix, plugin)
             except Exception as e:
                 logger.error(f"Failed to register job for {endpoint_prefix}: {e}", exc_info=True)
         
-        # Start the scheduler
         self.scheduler.start()
         logger.info(f"Scheduler started with {len(self.scheduler.get_jobs())} jobs")
         
-        # Run initial data fetch for all plugins on startup
         logger.info("Triggering initial data fetch for all plugins...")
         await self._run_initial_fetch()
     
@@ -108,7 +103,6 @@ class DataPortalScheduler:
                 )
                 batch_tasks.append(task)
             
-            # Run batch concurrently
             if batch_tasks:
                 results = await asyncio.gather(*batch_tasks, return_exceptions=True)
                 batch_successful = sum(1 for r in results if not isinstance(r, Exception))
@@ -131,17 +125,14 @@ class DataPortalScheduler:
         metadata = plugin.get_metadata()
         update_frequency = metadata.update_frequency
         
-        # Parse frequency into interval parameters
         try:
             interval_params = parse_frequency(update_frequency)
         except ValueError as e:
             logger.error(f"Invalid frequency '{update_frequency}' for {endpoint_prefix}: {e}")
             return
         
-        # Create interval trigger
         trigger = IntervalTrigger(**interval_params)
         
-        # Register job
         job_id = f"fetch_{endpoint_prefix}"
         self.scheduler.add_job(
             self._fetch_and_store_data,
