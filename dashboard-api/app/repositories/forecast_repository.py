@@ -83,7 +83,7 @@ class ForecastRepository:
                     f.predicted_value as value,
                     f.probabilistic_values as confidence_intervals,
                     ccd.latest_value as latest_observed_value,
-                    tsd.value as current_value
+                    tsd.value::FLOAT as current_value
                 FROM forecasts.forecasts f
                 JOIN models.model_info mi ON mi.id = f.model_id
                 JOIN challenges.v_challenge_context_data_range as ccd ON ccd.challenge_id = f.challenge_id AND ccd.series_id = f.series_id
