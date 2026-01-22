@@ -12,4 +12,4 @@ class ForecastDataPoint(BaseModel):
 
 class ForecastsResponseSchema(BaseModel):
     """All forecasts for a series."""
-    forecasts: Dict[str, Dict[str, List[ForecastDataPoint]|str|float]]  # key = readable_id of model
+    forecasts: Dict[str, Dict[str, List[ForecastDataPoint]|str|float|None]]  # key = readable_id of model
