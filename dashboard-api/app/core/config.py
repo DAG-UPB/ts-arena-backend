@@ -8,10 +8,10 @@ class Settings(BaseSettings):
     # API Security
     API_KEY: str
     
-    # Database (bestehende TimescaleDB)
+    # Database (existing TimescaleDB)
     DATABASE_URL: str
     
-    # CORS (für arena-app Zugriff)
+    # CORS (for arena-app access)
     CORS_ORIGINS: list[str] = ["http://localhost:8501", "http://arena-app:8501"]
     
     # App

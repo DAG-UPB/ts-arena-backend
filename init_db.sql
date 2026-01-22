@@ -11,7 +11,7 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 -- ==========================================================
--- 0) Schema-Definition
+-- 0) Schema Definition
 -- ==========================================================
 CREATE SCHEMA IF NOT EXISTS data_portal;
 SET search_path TO data_portal, public;
@@ -28,7 +28,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ==========================================================
--- 2) Domain- / Category-Hierarchie
+-- 2) Domain / Category Hierarchy
 -- ==========================================================
 CREATE TABLE data_portal.domain_category (
   id SERIAL PRIMARY KEY,
@@ -92,7 +92,7 @@ FOR EACH ROW
 EXECUTE FUNCTION data_portal.update_updated_at_column();
 
 -- ==========================================================
--- 5) Historical Time Series Data (SCD Typ 2)
+-- 5) Historical Time Series Data (SCD Type 2)
 -- ==========================================================
 CREATE TABLE data_portal.time_series_data_scd2 (
   sk BIGSERIAL,
@@ -376,10 +376,11 @@ SELECT
     c.end_time,
     c.context_length,
     c.horizon,
+    c.frequency,  -- Challenge frequency (for materialized view selection)
     c.preparation_params,
     c.created_at,
     c.updated_at,
-    -- Status aus v_challenges_with_status
+    -- Status derived from timestamps
     CASE
         WHEN NOW() < c.registration_start THEN 'announced'
         WHEN NOW() >= c.registration_start AND NOW() <= c.registration_end THEN 'registration'
@@ -387,19 +388,16 @@ SELECT
         WHEN NOW() > c.end_time THEN 'completed'
         ELSE 'undefined'
     END AS status,
-    -- Zeitreihen-Statistik
+    -- Time series statistics
     COUNT(DISTINCT csp.series_id) as n_time_series,
-    -- Aggregierte Domain-Informationen (Arrays)
+    -- Aggregated domain information (arrays)
     ARRAY_AGG(DISTINCT dc.domain ORDER BY dc.domain) 
         FILTER (WHERE dc.domain IS NOT NULL) AS domains,
     ARRAY_AGG(DISTINCT dc.category ORDER BY dc.category) 
         FILTER (WHERE dc.category IS NOT NULL) AS categories,
     ARRAY_AGG(DISTINCT dc.subcategory ORDER BY dc.subcategory) 
         FILTER (WHERE dc.subcategory IS NOT NULL) AS subcategories,
-    -- Aggregierte Frequencies (als INTERVAL Array)
-    ARRAY_AGG(DISTINCT ts.frequency ORDER BY ts.frequency) 
-        FILTER (WHERE ts.frequency IS NOT NULL) AS frequencies,
-    -- Model & Forecast Counts (Subqueries für Performance)
+    -- Model & Forecast Counts (subqueries for performance)
     (SELECT COUNT(DISTINCT f.model_id) 
      FROM forecasts.forecasts f 
      WHERE f.challenge_id = c.id) AS model_count,
@@ -412,13 +410,13 @@ LEFT JOIN data_portal.time_series ts ON ts.series_id = csp.series_id
 LEFT JOIN data_portal.domain_category dc ON ts.domain_category_id = dc.id
 GROUP BY 
     c.id, c.name, c.description, c.registration_start, c.registration_end,
-    c.start_time, c.end_time, c.context_length, c.horizon, 
+    c.start_time, c.end_time, c.context_length, c.horizon, c.frequency,
     c.preparation_params, c.created_at, c.updated_at;
 
 COMMENT ON VIEW challenges.v_challenges_with_metadata IS 
-'Challenges mit aggregierten Metadaten für erweiterte Filterung.
-Enthält Arrays von domains, categories, subcategories und frequencies 
-aller zugehörigen Zeitreihen.';
+'Challenges with aggregated metadata for extended filtering.
+Contains c.frequency (challenge frequency) as well as arrays of domains, categories, subcategories 
+from all associated time series.';
 
 -- ==========================================================
 -- 7) View: Data Availability Check
@@ -529,20 +527,20 @@ ON data_portal.domain_category(domain, category, subcategory);
 CREATE INDEX IF NOT EXISTS idx_model_info_user 
 ON models.model_info(user_id);
 
--- Index für challenge_series_pseudo
+-- Index for challenge_series_pseudo
 CREATE INDEX IF NOT EXISTS idx_challenge_series_pseudo_series
 ON challenges.challenge_series_pseudo(series_id);
 
--- Index für challenges (Zeit-basierte Filterung)
+-- Index for challenges (time-based filtering)
 CREATE INDEX IF NOT EXISTS idx_challenges_time_range
 ON challenges.challenges(registration_start, registration_end, end_time);
 
 -- ==========================================================
--- 10) Continuous Aggregates für Multi-Granularitäts-Zeitreihen
+-- 10) Continuous Aggregates for Multi-Granularity Time Series
 -- ==========================================================
 
--- Viertelstündliche Aggregation (15 Minuten)
--- Enthält alle Serien mit frequency <= 15 Minuten
+-- Quarter-hourly aggregation (15 minutes)
+-- Contains all series with frequency <= 15 minutes
 CREATE MATERIALIZED VIEW IF NOT EXISTS data_portal.time_series_15min
 WITH (timescaledb.continuous) AS
 SELECT 
@@ -556,7 +554,7 @@ FROM data_portal.time_series_data
 GROUP BY series_id, time_bucket('15 minutes', ts)
 WITH NO DATA;
 
--- Refresh-Policy: Alle 5 Minuten, schaut 1 Tag zurück
+-- Refresh policy: Every 5 minutes, looks back 1 day
 SELECT add_continuous_aggregate_policy('data_portal.time_series_15min',
     start_offset => INTERVAL '1 day',
     end_offset => INTERVAL '15 minutes',
@@ -564,7 +562,7 @@ SELECT add_continuous_aggregate_policy('data_portal.time_series_15min',
     if_not_exists => TRUE
 );
 
--- Kompression nach 14 Tagen
+-- Compression after 14 days
 ALTER MATERIALIZED VIEW data_portal.time_series_15min SET (
     timescaledb.compress = true
 );
@@ -573,8 +571,8 @@ SELECT add_compression_policy('data_portal.time_series_15min',
     if_not_exists => TRUE);
 
 -- ----------------------------------------------------------
--- Stündliche Aggregation (1 Stunde)
--- Enthält alle Serien mit frequency <= 1 Stunde
+-- Hourly aggregation (1 hour)
+-- Contains all series with frequency <= 1 hour
 CREATE MATERIALIZED VIEW IF NOT EXISTS data_portal.time_series_1h
 WITH (timescaledb.continuous) AS
 SELECT 
@@ -588,7 +586,7 @@ FROM data_portal.time_series_data
 GROUP BY series_id, time_bucket('1 hour', ts)
 WITH NO DATA;
 
--- Refresh-Policy: Alle 15 Minuten, schaut 2 Tage zurück
+-- Refresh policy: Every 15 minutes, looks back 2 days
 SELECT add_continuous_aggregate_policy('data_portal.time_series_1h',
     start_offset => INTERVAL '2 days',
     end_offset => INTERVAL '1 hour',
@@ -596,7 +594,7 @@ SELECT add_continuous_aggregate_policy('data_portal.time_series_1h',
     if_not_exists => TRUE
 );
 
--- Kompression nach 30 Tagen
+-- Compression after 30 days
 ALTER MATERIALIZED VIEW data_portal.time_series_1h SET (
     timescaledb.compress = true
 );
@@ -605,8 +603,8 @@ SELECT add_compression_policy('data_portal.time_series_1h',
     if_not_exists => TRUE);
 
 -- ----------------------------------------------------------
--- Tägliche Aggregation (1 Tag)
--- Enthält alle Serien mit frequency <= 1 Tag
+-- Daily aggregation (1 day)
+-- Contains all series with frequency <= 1 day
 CREATE MATERIALIZED VIEW IF NOT EXISTS data_portal.time_series_1d
 WITH (timescaledb.continuous) AS
 SELECT 
@@ -620,7 +618,7 @@ FROM data_portal.time_series_data
 GROUP BY series_id, time_bucket('1 day', ts)
 WITH NO DATA;
 
--- Refresh-Policy: Jede Stunde, schaut 7 Tage zurück
+-- Refresh policy: Every hour, looks back 7 days
 SELECT add_continuous_aggregate_policy('data_portal.time_series_1d',
     start_offset => INTERVAL '7 days',
     end_offset => INTERVAL '1 day',
@@ -628,7 +626,7 @@ SELECT add_continuous_aggregate_policy('data_portal.time_series_1d',
     if_not_exists => TRUE
 );
 
--- Kompression nach 90 Tagen
+-- Compression after 90 days
 ALTER MATERIALIZED VIEW data_portal.time_series_1d SET (
     timescaledb.compress = true
 );
@@ -637,13 +635,13 @@ SELECT add_compression_policy('data_portal.time_series_1d',
     if_not_exists => TRUE);
 
 COMMENT ON MATERIALIZED VIEW data_portal.time_series_15min IS 
-'Continuous Aggregate für 15-Minuten-Daten. Aggregiert alle Zeitreihen mit frequency <= 15 Minuten.';
+'Continuous aggregate for 15-minute data. Aggregates all time series with frequency <= 15 minutes.';
 
 COMMENT ON MATERIALIZED VIEW data_portal.time_series_1h IS 
-'Continuous Aggregate für stündliche Daten. Aggregiert alle Zeitreihen mit frequency <= 1 Stunde.';
+'Continuous aggregate for hourly data. Aggregates all time series with frequency <= 1 hour.';
 
 COMMENT ON MATERIALIZED VIEW data_portal.time_series_1d IS 
-'Continuous Aggregate für tägliche Daten. Aggregiert alle Zeitreihen mit frequency <= 1 Tag.';
+'Continuous aggregate for daily data. Aggregates all time series with frequency <= 1 day.';
 
 -- ==========================================================
 -- Final message

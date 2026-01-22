@@ -35,6 +35,7 @@ class ChallengeSchema(BaseModel):
     n_time_series: int
     context_length: Optional[Any] = None  # interval type from postgres
     horizon: Optional[str] = None  # ISO 8601 duration string
+    frequency: Optional[str] = None  # Challenge frequency as ISO 8601 duration
     created_at: Optional[datetime] = None
     model_count: Optional[int] = 0
     forecast_count: Optional[int] = 0
@@ -42,7 +43,6 @@ class ChallengeSchema(BaseModel):
     domains: Optional[List[str]] = []
     categories: Optional[List[str]] = []
     subcategories: Optional[List[str]] = []
-    frequencies: Optional[List[str]] = []
 
 
 class ChallengeMetaSchema(BaseModel):

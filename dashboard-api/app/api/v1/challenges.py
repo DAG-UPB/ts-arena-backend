@@ -3,14 +3,14 @@ from typing import List, Optional
 from datetime import datetime
 
 from app.core.dependencies import get_api_key
-from app.core.utils import parse_comma_separated  # NEU
+from app.core.utils import parse_comma_separated
 from app.database.connection import get_db_connection
 from app.repositories.challenge_repository import ChallengeRepository
 from app.schemas.challenge import (
     ChallengeSchema,
     ChallengeMetaSchema,
     ChallengeSeriesSchema,
-    ChallengeMetadataSchema,  # NEU
+    ChallengeMetadataSchema,
     TimeSeriesDataSchema,
     TimeSeriesDataPoint
 )
@@ -97,29 +97,29 @@ async def list_challenges(
     conn = Depends(get_db_connection)
 ):
     """
-    Liste aller Challenges mit optionalen Filtern.
+    List all challenges with optional filters.
     
-    **Filter-Parameter:**
-    - `status`: Komma-separierte Status-Werte (z.B. "active,completed")
-    - `from`: Challenges mit end_time >= from
-    - `to`: Challenges mit end_time <= to
-    - `frequency`: Frequencies in ISO 8601 (z.B. "PT1H" für 1 Stunde, "P1D" für 1 Tag)
-    - `domain`: Domains (z.B. "Energy,Finance")
-    - `category`: Categories (z.B. "Electricity")
-    - `subcategory`: Subcategories (z.B. "Load,Generation")
-    - `horizon`: Forecast horizons in ISO 8601 (z.B. "PT6H,P1D")
+    **Filter Parameters:**
+    - `status`: Comma-separated status values (e.g. "active,completed")
+    - `from`: Challenges with end_time >= from
+    - `to`: Challenges with end_time <= to
+    - `frequency`: Frequencies in ISO 8601 (e.g. "PT1H" for 1 hour, "P1D" for 1 day)
+    - `domain`: Domains (e.g. "Energy,Finance")
+    - `category`: Categories (e.g. "Electricity")
+    - `subcategory`: Subcategories (e.g. "Load,Generation")
+    - `horizon`: Forecast horizons in ISO 8601 (e.g. "PT6H,P1D")
     
-    **ISO 8601 Duration Beispiele:**
-    - `PT15M` = 15 Minuten
-    - `PT1H` = 1 Stunde
-    - `PT6H` = 6 Stunden
-    - `P1D` = 1 Tag
-    - `P7D` = 7 Tage
+    **ISO 8601 Duration Examples:**
+    - `PT15M` = 15 minutes
+    - `PT1H` = 1 hour
+    - `PT6H` = 6 hours
+    - `P1D` = 1 day
+    - `P7D` = 7 days
     
     **Headers:**
-    - X-API-Key: Gültiger API-Key
+    - X-API-Key: Valid API key
     """
-    # Parse komma-separierte Parameter
+    # Parse comma-separated parameters
     status_list = parse_comma_separated(status)
     frequency_list = parse_comma_separated(frequency)
     domain_list = parse_comma_separated(domain)
@@ -148,10 +148,10 @@ async def get_challenge_meta(
     conn = Depends(get_db_connection)
 ):
     """
-    Metadaten für eine Challenge.
+    Metadata for a challenge.
     
     **Headers:**
-    - X-API-Key: Gültiger API-Key
+    - X-API-Key: Valid API key
     """
     repo = ChallengeRepository(conn)
     meta = repo.get_challenge_meta(challenge_id)
@@ -169,10 +169,10 @@ async def get_challenge_series(
     conn = Depends(get_db_connection)
 ):
     """
-    Zeitreihen für eine Challenge.
+    Time series for a challenge.
     
     **Headers:**
-    - X-API-Key: Gültiger API-Key
+    - X-API-Key: Valid API key
     """
     repo = ChallengeRepository(conn)
     series = repo.get_challenge_series(challenge_id)
@@ -189,10 +189,10 @@ async def get_series_data(
     conn = Depends(get_db_connection)
 ):
     """
-    Zeitreihendaten für eine Serie.
+    Time series data for a series.
     
     **Headers:**
-    - X-API-Key: Gültiger API-Key
+    - X-API-Key: Valid API key
     """
     repo = ChallengeRepository(conn)
     data = repo.get_challenge_data_for_series(challenge_id, series_id, start_time, end_time)

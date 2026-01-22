@@ -42,7 +42,7 @@ class ChallengeRepository:
               f"domains={domains}, categories={categories}, subcategories={subcategories}, "
               f"frequencies={frequencies}, horizons={horizons})", file=sys.stderr)
         
-        # Use new view
+        # Use new view with challenge frequency
         query = """
             SELECT 
                 challenge_id,
@@ -56,14 +56,14 @@ class ChallengeRepository:
                 n_time_series,
                 context_length,
                 horizon,
+                frequency,  -- Challenge frequency
                 created_at,
                 model_count,
                 forecast_count,
-                -- NEW: Metadata arrays
+                -- Metadata arrays
                 domains,
                 categories,
-                subcategories,
-                frequencies
+                subcategories
             FROM challenges.v_challenges_with_metadata
             WHERE 1=1
         """
@@ -103,14 +103,14 @@ class ChallengeRepository:
             query += f" AND subcategories && ARRAY[{placeholders}]::TEXT[]"
             params.extend(subcategories)
         
-        # NEW: Filter by frequency (ISO 8601 → INTERVAL)
+        # Filter by challenge frequency (ISO 8601 → INTERVAL, direct comparison)
         if frequencies and len(frequencies) > 0:
             try:
                 interval_strings = parse_iso8601_to_interval_list(frequencies)
-                interval_conditions = []
+                frequency_conditions = []
                 for interval_str in interval_strings:
-                    interval_conditions.append(f"INTERVAL '{interval_str}'")
-                query += f" AND frequencies && ARRAY[{','.join(interval_conditions)}]::INTERVAL[]"
+                    frequency_conditions.append(f"frequency = INTERVAL '{interval_str}'")
+                query += f" AND ({' OR '.join(frequency_conditions)})"
             except ValueError as e:
                 print(f"ERROR: Invalid frequency format: {e}", file=sys.stderr)
                 # Optional: raise HTTPException or ignore
@@ -147,10 +147,9 @@ class ChallengeRepository:
                 # Convert timedelta to ISO 8601 strings
                 from app.schemas.challenge import serialize_timedelta_to_iso8601
                 
-                if row_dict.get('frequencies'):
-                    row_dict['frequencies'] = [
-                        serialize_timedelta_to_iso8601(f) for f in row_dict['frequencies']
-                    ]
+                # Convert challenge frequency timedelta to ISO 8601
+                if row_dict.get('frequency'):
+                    row_dict['frequency'] = serialize_timedelta_to_iso8601(row_dict['frequency'])
                 
                 # Convert horizon timedelta to ISO 8601
                 if row_dict.get('horizon'):
@@ -185,7 +184,7 @@ class ChallengeRepository:
             return dict(row) if row else None
     
     def get_challenge_series(self, challenge_id: int) -> List[Dict[str, Any]]:
-        """Zeitreihen für eine Challenge mit Domain-Informationen."""
+        """Time series for a challenge with domain information."""
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
                 """
@@ -235,7 +234,7 @@ class ChallengeRepository:
                     UNNEST(domains) as domain,
                     UNNEST(categories) as category,
                     UNNEST(subcategories) as subcategory,
-                    UNNEST(frequencies) as frequency,
+                    frequency,  -- Challenge frequency (direct, not unnested)
                     horizon,
                     status
                 FROM challenges.v_challenges_with_metadata
