@@ -13,7 +13,7 @@ from src.scheduler.plugin_loader import PluginLoader
 from src.scheduler.frequency_parser import parse_frequency, get_interval_seconds
 from src.database import SessionLocal
 from src.repositories.time_series_repository import TimeSeriesDataRepository
-from src.plugins.base_plugin import BasePlugin
+from src.plugins.base_plugin import BasePlugin, MultiSeriesPlugin
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,7 @@ class DataPortalScheduler:
         self.plugin_loader = PluginLoader(Config.PLUGIN_CONFIG_PATH)
         self.scheduler: Optional[AsyncIOScheduler] = None
         self.plugins: Dict[str, BasePlugin] = {}
+        self.multi_series_plugins: Dict[str, MultiSeriesPlugin] = {}
         self.max_concurrent_jobs = 10  # Global limit for parallel jobs
         self.job_semaphore = asyncio.Semaphore(self.max_concurrent_jobs)
         
@@ -35,8 +36,18 @@ class DataPortalScheduler:
         """Initialize scheduler and load plugins"""
         logger.info("Initializing Data Portal Scheduler...")
         
+        # Load single-series plugins
         self.plugins = self.plugin_loader.load_plugins()
         if not self.plugins:
+            logger.warning("No single-series plugins loaded.")
+        
+        # Load multi-series plugins
+        self.multi_series_plugins = self.plugin_loader.load_multi_series_plugins()
+        if not self.multi_series_plugins:
+            logger.info("No multi-series plugins loaded.")
+        
+        total_plugins = len(self.plugins) + len(self.multi_series_plugins)
+        if total_plugins == 0:
             logger.warning("No plugins loaded. Scheduler will run but no jobs will be scheduled.")
         
         jobstores = {
@@ -69,11 +80,19 @@ class DataPortalScheduler:
         
         logger.info("Starting scheduler...")
         
+        # Register single-series plugin jobs
         for endpoint_prefix, plugin in self.plugins.items():
             try:
                 await self._register_plugin_job(endpoint_prefix, plugin)
             except Exception as e:
                 logger.error(f"Failed to register job for {endpoint_prefix}: {e}", exc_info=True)
+        
+        # Register multi-series plugin jobs
+        for group_id, plugin in self.multi_series_plugins.items():
+            try:
+                await self._register_multi_series_job(group_id, plugin)
+            except Exception as e:
+                logger.error(f"Failed to register multi-series job for {group_id}: {e}", exc_info=True)
         
         self.scheduler.start()
         logger.info(f"Scheduler started with {len(self.scheduler.get_jobs())} jobs")
@@ -83,18 +102,22 @@ class DataPortalScheduler:
     
     async def _run_initial_fetch(self):
         """Run initial data fetch for all plugins on startup in batches"""
-        plugin_items = list(self.plugins.items())
+        # Combine single-series and multi-series plugins for initial fetch
+        single_items = list(self.plugins.items())
+        multi_items = list(self.multi_series_plugins.items())
+        
         batch_size = 5  # Reduced to prevent "too many clients" errors
         total_successful = 0
         total_failed = 0
         
-        logger.info(f"Running initial fetch for {len(plugin_items)} plugins in batches of {batch_size}")
+        # Process single-series plugins
+        logger.info(f"Running initial fetch for {len(single_items)} single-series plugins in batches of {batch_size}")
         
-        for i in range(0, len(plugin_items), batch_size):
-            batch = plugin_items[i:i + batch_size]
+        for i in range(0, len(single_items), batch_size):
+            batch = single_items[i:i + batch_size]
             batch_tasks = []
             
-            logger.info(f"Processing batch {i//batch_size + 1}/{(len(plugin_items) + batch_size - 1)//batch_size}")
+            logger.info(f"Processing single-series batch {i//batch_size + 1}/{(len(single_items) + batch_size - 1)//batch_size}")
             
             for endpoint_prefix, plugin in batch:
                 logger.info(f"Scheduling initial fetch for {endpoint_prefix}...")
@@ -113,8 +136,21 @@ class DataPortalScheduler:
                 logger.info(f"Batch completed: {batch_successful} successful, {batch_failed} failed")
                 
                 # Small delay between batches to let DB recover
-                if i + batch_size < len(plugin_items):
+                if i + batch_size < len(single_items):
                     await asyncio.sleep(2)
+        
+        # Process multi-series plugins (sequentially since each makes one API call for multiple series)
+        logger.info(f"Running initial fetch for {len(multi_items)} multi-series plugins")
+        
+        for group_id, plugin in multi_items:
+            try:
+                logger.info(f"Scheduling initial fetch for multi-series group {group_id}...")
+                await self._fetch_and_store_multi_series_data(group_id, plugin)
+                total_successful += 1
+            except Exception as e:
+                logger.error(f"Failed initial fetch for multi-series group {group_id}: {e}", exc_info=True)
+                total_failed += 1
+            await asyncio.sleep(1)  # Small delay between groups
         
         logger.info(
             f"Initial data fetch completed: {total_successful} successful, {total_failed} failed"
@@ -146,6 +182,35 @@ class DataPortalScheduler:
         logger.info(
             f"Registered job '{job_id}' with interval {interval_params} "
             f"for {metadata.name}"
+        )
+    
+    async def _register_multi_series_job(self, group_id: str, plugin: MultiSeriesPlugin):
+        """Register a scheduled job for a multi-series plugin"""
+        schedule = plugin.schedule
+        
+        try:
+            interval_params = parse_frequency(schedule)
+        except ValueError as e:
+            logger.error(f"Invalid schedule '{schedule}' for multi-series group {group_id}: {e}")
+            return
+        
+        trigger = IntervalTrigger(**interval_params)
+        
+        job_id = f"fetch_multi_{group_id}"
+        series_count = len(plugin.get_series_definitions())
+        
+        self.scheduler.add_job(
+            self._fetch_and_store_multi_series_data,
+            trigger=trigger,
+            id=job_id,
+            name=f"Fetch multi-series: {group_id} ({series_count} series)",
+            args=[group_id, plugin],
+            replace_existing=True
+        )
+        
+        logger.info(
+            f"Registered multi-series job '{job_id}' with interval {interval_params} "
+            f"for group {group_id} ({series_count} time series)"
         )
     
     async def _fetch_and_store_data(self, endpoint_prefix: str, plugin: BasePlugin):
@@ -230,6 +295,119 @@ class DataPortalScheduler:
                     f"[{endpoint_prefix}] Job failed after {duration:.2f}s: {e}",
                     exc_info=True
                 )
+    
+    async def _fetch_and_store_multi_series_data(self, group_id: str, plugin: MultiSeriesPlugin):
+        """
+        Fetch data from multi-series plugin and store in database.
+        Makes ONE API call and stores data for multiple time series.
+        """
+        job_start = datetime.now()
+        series_definitions = plugin.get_series_definitions()
+        
+        logger.info(f"[{group_id}] Starting multi-series data fetch for {len(series_definitions)} series...")
+        
+        # Use semaphore to limit concurrent jobs
+        async with self.job_semaphore:
+            active_jobs = self.max_concurrent_jobs - self.job_semaphore._value
+            logger.info(f"[{group_id}] Acquired job semaphore (active jobs: {active_jobs}/{self.max_concurrent_jobs})")
+            
+            try:
+                # Get database session using async context manager
+                async with SessionLocal() as session:
+                    repo = TimeSeriesDataRepository(session)
+                    
+                    # Determine start date based on the smallest update frequency
+                    min_interval = min(
+                        get_interval_seconds(s.update_frequency or '15 minutes') 
+                        for s in series_definitions
+                    )
+                    start_date = (datetime.now() - timedelta(seconds=1000 * min_interval)).isoformat()
+                    
+                    logger.info(f"[{group_id}] Fetching data from {start_date} to latest available")
+                    
+                    # Fetch data from plugin with retry logic (ONE API call)
+                    data = await self._fetch_multi_with_retry(plugin, start_date, group_id)
+                    
+                    if not data:
+                        logger.warning(f"[{group_id}] No data returned from multi-series plugin")
+                        return
+                    
+                    # Process each time series from the response
+                    total_rows = 0
+                    for series_def in series_definitions:
+                        endpoint_prefix = series_def.endpoint_prefix
+                        series_data = data.get(endpoint_prefix, [])
+                        
+                        if not series_data:
+                            logger.debug(f"[{group_id}] No data for series {endpoint_prefix}")
+                            continue
+                        
+                        # Get or create series_id
+                        series_id = await repo.get_or_create_series_id(
+                            name=series_def.name,
+                            endpoint_prefix=endpoint_prefix,
+                            description=series_def.description,
+                            frequency=series_def.frequency,
+                            unit=series_def.unit,
+                            domain=series_def.domain,
+                            category=series_def.category,
+                            subcategory=series_def.subcategory or '',
+                            update_frequency=series_def.update_frequency or '15 minutes'
+                        )
+                        
+                        # Store data
+                        rows_affected = await repo.upsert_data_points(series_id, series_data)
+                        total_rows += rows_affected
+                        
+                        # Also write to SCD2 table
+                        from src.repositories.time_series_scd2_repository import TimeSeriesDataSCD2Repository
+                        scd2_repo = TimeSeriesDataSCD2Repository(session)
+                        await scd2_repo.upsert_data_points(series_id, series_data)
+                        
+                        logger.debug(f"[{group_id}] Stored {rows_affected} points for {endpoint_prefix}")
+                    
+                    duration = (datetime.now() - job_start).total_seconds()
+                    logger.info(
+                        f"[{group_id}] Multi-series job completed in {duration:.2f}s. "
+                        f"Stored {total_rows} total data points across {len(series_definitions)} series."
+                    )
+                
+            except Exception as e:
+                duration = (datetime.now() - job_start).total_seconds()
+                logger.error(
+                    f"[{group_id}] Multi-series job failed after {duration:.2f}s: {e}",
+                    exc_info=True
+                )
+    
+    async def _fetch_multi_with_retry(
+        self, 
+        plugin: MultiSeriesPlugin, 
+        start_date: str, 
+        group_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Fetch data from multi-series plugin with exponential backoff retry logic.
+        """
+        max_retries = Config.MAX_RETRIES
+        retry_delay = Config.RETRY_DELAY_SECONDS
+        
+        for attempt in range(max_retries):
+            try:
+                data = await plugin.get_historical_data_multi(start_date)
+                return data
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt)
+                    logger.warning(
+                        f"[{group_id}] Multi-series fetch attempt {attempt + 1} failed: {e}. "
+                        f"Retrying in {wait_time}s..."
+                    )
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.error(
+                        f"[{group_id}] All {max_retries} multi-series fetch attempts failed"
+                    )
+                    raise
     
     async def _fetch_with_retry(
         self, 

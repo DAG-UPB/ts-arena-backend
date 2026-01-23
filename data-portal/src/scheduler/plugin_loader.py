@@ -1,11 +1,11 @@
 """Plugin loader for data sources"""
 
+import os
 import yaml
 import importlib
 import logging
-from typing import Dict, Any
-from pathlib import Path
-from src.plugins.base_plugin import BasePlugin, TimeSeriesMetadata
+from typing import Dict, Any, List
+from src.plugins.base_plugin import BasePlugin, TimeSeriesMetadata, MultiSeriesPlugin, TimeSeriesDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -80,34 +80,139 @@ class PluginLoader:
     def __init__(self, config_path: str = "src/plugins/configs/sources.yaml"):
         self.config_path = config_path
         self.plugins: Dict[str, BasePlugin] = {}
+        self.multi_series_plugins: Dict[str, MultiSeriesPlugin] = {}
         
     def load_plugins(self) -> Dict[str, BasePlugin]:
-        """Load all plugins from configuration file"""
+        """Load all single-series plugins from configuration file"""
         try:
             with open(self.config_path, 'r') as f:
                 config = yaml.safe_load(f)
             
-            if not config or 'timeseries' not in config:
-                logger.warning(f"No timeseries configuration found in {self.config_path}")
+            if not config:
+                logger.warning(f"Empty configuration in {self.config_path}")
                 return {}
             
-            timeseries_config = config['timeseries']
+            # Load legacy single-series plugins
+            if 'timeseries' in config:
+                timeseries_config = config['timeseries']
+                for endpoint_prefix, plugin_config in timeseries_config.items():
+                    try:
+                        plugin = self._load_single_plugin(endpoint_prefix, plugin_config)
+                        if plugin:
+                            self.plugins[endpoint_prefix] = plugin
+                            logger.info(f"Loaded plugin: {endpoint_prefix}")
+                    except Exception as e:
+                        logger.error(f"Failed to load plugin {endpoint_prefix}: {e}", exc_info=True)
             
-            for endpoint_prefix, plugin_config in timeseries_config.items():
-                try:
-                    plugin = self._load_single_plugin(endpoint_prefix, plugin_config)
-                    if plugin:
-                        self.plugins[endpoint_prefix] = plugin
-                        logger.info(f"Loaded plugin: {endpoint_prefix}")
-                except Exception as e:
-                    logger.error(f"Failed to load plugin {endpoint_prefix}: {e}", exc_info=True)
-            
-            logger.info(f"Successfully loaded {len(self.plugins)} plugins")
+            logger.info(f"Successfully loaded {len(self.plugins)} single-series plugins")
             return self.plugins
             
         except Exception as e:
             logger.error(f"Failed to load plugin configuration from {self.config_path}: {e}", exc_info=True)
             return {}
+    
+    def load_multi_series_plugins(self) -> Dict[str, MultiSeriesPlugin]:
+        """Load all multi-series plugins from request_groups configuration"""
+        try:
+            with open(self.config_path, 'r') as f:
+                config = yaml.safe_load(f)
+            
+            if not config or 'request_groups' not in config:
+                logger.info("No request_groups configuration found")
+                return {}
+            
+            request_groups = config['request_groups']
+            
+            for group_id, group_config in request_groups.items():
+                try:
+                    plugin = self._load_multi_series_plugin(group_id, group_config)
+                    if plugin:
+                        self.multi_series_plugins[group_id] = plugin
+                        logger.info(f"Loaded multi-series plugin: {group_id} with {len(plugin.get_series_definitions())} series")
+                except Exception as e:
+                    logger.error(f"Failed to load multi-series plugin {group_id}: {e}", exc_info=True)
+            
+            logger.info(f"Successfully loaded {len(self.multi_series_plugins)} multi-series plugins")
+            return self.multi_series_plugins
+            
+        except Exception as e:
+            logger.error(f"Failed to load request_groups from {self.config_path}: {e}", exc_info=True)
+            return {}
+    
+    def _load_multi_series_plugin(self, group_id: str, config: Dict[str, Any]) -> MultiSeriesPlugin:
+        """Load a single multi-series plugin from configuration"""
+        module_name = config.get('module')
+        class_name = config.get('class')
+        request_params = config.get('request_params', {})
+        schedule = config.get('schedule', '15 minutes')
+        timeseries_list = config.get('timeseries', [])
+        
+        if not module_name or not class_name:
+            raise ValueError(f"Missing module or class for multi-series plugin {group_id}")
+        
+        if not timeseries_list:
+            raise ValueError(f"No timeseries defined for multi-series plugin {group_id}")
+        
+        # Expand environment variables in request_params
+        request_params = self._expand_env_vars(request_params)
+        
+        # Build series definitions
+        series_definitions: List[TimeSeriesDefinition] = []
+        for ts_config in timeseries_list:
+            endpoint_prefix = ts_config.get('endpoint_prefix')
+            if not endpoint_prefix:
+                logger.warning(f"Skipping timeseries without endpoint_prefix in group {group_id}")
+                continue
+            
+            metadata = ts_config.get('metadata', {})
+            extract_filter = ts_config.get('extract_filter', {})
+            
+            # Calculate update_frequency from frequency if not provided
+            frequency = metadata.get('frequency', '1 hour')
+            update_frequency = calculate_update_frequency(frequency)
+            
+            definition = TimeSeriesDefinition(
+                endpoint_prefix=endpoint_prefix,
+                name=metadata.get('name', endpoint_prefix),
+                description=metadata.get('description', ''),
+                frequency=frequency,
+                unit=metadata.get('unit', ''),
+                domain=metadata.get('domain', ''),
+                category=metadata.get('category', ''),
+                subcategory=metadata.get('subcategory'),
+                update_frequency=update_frequency,
+                extract_filter=extract_filter
+            )
+            series_definitions.append(definition)
+        
+        # Dynamically import the plugin class
+        try:
+            module = importlib.import_module(module_name)
+            plugin_class = getattr(module, class_name)
+            plugin_instance = plugin_class(
+                group_id=group_id,
+                request_params=request_params,
+                series_definitions=series_definitions,
+                schedule=schedule
+            )
+            return plugin_instance
+        except Exception as e:
+            raise ImportError(f"Failed to import {class_name} from {module_name}: {e}")
+    
+    def _expand_env_vars(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Expand environment variables in parameter values"""
+        result = {}
+        for key, value in params.items():
+            if isinstance(value, str) and value.startswith('${') and value.endswith('}'):
+                env_var = value[2:-1]
+                result[key] = os.getenv(env_var, '')
+                if not result[key]:
+                    logger.warning(f"Environment variable {env_var} not found")
+            elif isinstance(value, dict):
+                result[key] = self._expand_env_vars(value)
+            else:
+                result[key] = value
+        return result
     
     def _load_single_plugin(self, endpoint_prefix: str, config: Dict[str, Any]) -> BasePlugin:
         """Load a single plugin from configuration"""
@@ -147,10 +252,22 @@ class PluginLoader:
         """Get a loaded plugin by endpoint prefix"""
         return self.plugins.get(endpoint_prefix)
     
+    def get_multi_series_plugin(self, group_id: str) -> MultiSeriesPlugin | None:
+        """Get a loaded multi-series plugin by group ID"""
+        return self.multi_series_plugins.get(group_id)
+    
     def get_all_plugins(self) -> Dict[str, BasePlugin]:
-        """Get all loaded plugins"""
+        """Get all loaded single-series plugins"""
         return self.plugins
     
+    def get_all_multi_series_plugins(self) -> Dict[str, MultiSeriesPlugin]:
+        """Get all loaded multi-series plugins"""
+        return self.multi_series_plugins
+    
     def get_plugin_ids(self) -> list:
-        """Get list of all plugin IDs"""
+        """Get list of all single-series plugin IDs"""
         return list(self.plugins.keys())
+    
+    def get_multi_series_plugin_ids(self) -> list:
+        """Get list of all multi-series plugin group IDs"""
+        return list(self.multi_series_plugins.keys())

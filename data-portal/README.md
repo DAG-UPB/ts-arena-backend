@@ -116,6 +116,136 @@ python -m uvicorn src.main:app --reload
 3. Add configuration to `sources.yaml`
 4. Restart service to load new plugin
 
+### Adding Multi-Series Data Sources
+
+For APIs that return multiple time series per request, use the more efficient `MultiSeriesPlugin`:
+
+#### 1. Create the Plugin
+
+```python
+"""my_multi_plugin.py"""
+
+import asyncio
+import logging
+import os
+from typing import Dict, Any, List, Optional
+from src.plugins.base_plugin import MultiSeriesPlugin, TimeSeriesDefinition
+
+logger = logging.getLogger(__name__)
+
+
+class MyMultiSeriesPlugin(MultiSeriesPlugin):
+    """Plugin that fetches multiple time series efficiently."""
+
+    def __init__(
+        self, 
+        group_id: str,
+        request_params: Dict[str, Any], 
+        series_definitions: List[TimeSeriesDefinition],
+        schedule: str
+    ):
+        super().__init__(group_id, request_params, series_definitions, schedule)
+        
+        # Access common parameters from YAML
+        self.api_key = os.getenv("MY_API_KEY")
+        self.base_url = request_params.get("base_url", "https://api.example.com")
+
+    async def get_historical_data_multi(
+        self, 
+        start_date: str, 
+        end_date: Optional[str] = None
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Fetch data for ALL time series in this group.
+        
+        Returns:
+            Dict mapping endpoint_prefix -> list of data points
+            {
+                "series-1": [{"ts": "2025-01-01T00:00:00Z", "value": 123.4}, ...],
+                "series-2": [{"ts": "2025-01-01T00:00:00Z", "value": 567.8}, ...],
+            }
+        """
+        result: Dict[str, List[Dict[str, Any]]] = {}
+        
+        for series_def in self._series_definitions:
+            # Access extract_filter from YAML
+            dataset_id = series_def.extract_filter.get("dataset_id")
+            
+            try:
+                data = await self._fetch_dataset(dataset_id, start_date, end_date)
+                result[series_def.endpoint_prefix] = data
+            except Exception as e:
+                logger.error(f"Failed to fetch {series_def.endpoint_prefix}: {e}")
+                result[series_def.endpoint_prefix] = []
+        
+        return result
+```
+
+#### 2. Configure in sources.yaml
+
+```yaml
+request_groups:
+  my-api-energy-data:
+    module: src.plugins.data_sources.my_multi_plugin
+    class: MyMultiSeriesPlugin
+    schedule: 15 minutes
+    
+    request_params:
+      base_url: https://api.example.com
+      api_key: ${MY_API_KEY}  # Environment variable expansion
+      page_size: 10000
+    
+    timeseries:
+      - endpoint_prefix: my-series-electricity
+        extract_filter:
+          dataset_id: "elec-001"
+        metadata:
+          name: Electricity Consumption
+          description: "Hourly electricity consumption"
+          frequency: 1 hour
+          unit: MWh
+          domain: energy
+          category: load
+      
+      - endpoint_prefix: my-series-gas
+        extract_filter:
+          dataset_id: "gas-002"
+        metadata:
+          name: Gas Flow Rate
+          description: "Natural gas flow measurements"
+          frequency: 15 minutes
+          unit: m³/h
+          domain: energy
+          category: transmission
+```
+
+#### Multi-Series vs Single-Series
+
+| Use **Multi-Series** (`request_groups`) when... | Use **Single-Series** (`timeseries`) when... |
+|------------------------------------------------|---------------------------------------------|
+| One API call returns multiple time series | One API call = one time series |
+| Need to share rate-limiting across series | Simple, independent sources |
+| Same API structure, different dataset IDs | Different API structures per source |
+
+#### Available Properties in Plugin
+
+```python
+# In plugin constructor:
+self._group_id           # "my-api-energy-data"
+self._request_params     # {"base_url": "...", "api_key": "...", ...}
+self._series_definitions # List[TimeSeriesDefinition]
+self._schedule           # "15 minutes"
+
+# Per TimeSeriesDefinition:
+series_def.endpoint_prefix   # "my-series-electricity"
+series_def.name              # "Electricity Consumption"
+series_def.frequency         # "1 hour"
+series_def.extract_filter    # {"dataset_id": "elec-001"}
+series_def.unit              # "MWh"
+series_def.domain            # "energy"
+series_def.category          # "load"
+```
+
 ## Docker Deployment
 
 ```bash
