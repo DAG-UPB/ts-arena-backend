@@ -187,15 +187,16 @@ class DataPortalScheduler:
                         update_frequency=metadata.update_frequency
                     )
                     
-                    # Determine date range to fetch - always get last 1000 values based on frequency
+                    # Determine start date to fetch - always get last 1000 values based on frequency
+                    # No end_date is provided as APIs may operate in different timezones
+                    # and should return data up to the latest available
                     interval_seconds = get_interval_seconds(metadata.update_frequency)
                     start_date = (datetime.now() - timedelta(seconds=1000 * interval_seconds)).isoformat()
-                    end_date = datetime.now().isoformat()
                     
-                    logger.info(f"[{endpoint_prefix}] Fetching last 1000 values from {start_date} to {end_date}")
+                    logger.info(f"[{endpoint_prefix}] Fetching data from {start_date} to latest available")
                     
-                    # Fetch data from plugin with retry logic
-                    data = await self._fetch_with_retry(plugin, start_date, end_date, endpoint_prefix)
+                    # Fetch data from plugin with retry logic (no end_date)
+                    data = await self._fetch_with_retry(plugin, start_date, endpoint_prefix)
                     
                     if not data or 'data' not in data:
                         logger.warning(f"[{endpoint_prefix}] No data returned from plugin")
@@ -234,18 +235,18 @@ class DataPortalScheduler:
         self, 
         plugin: BasePlugin, 
         start_date: str, 
-        end_date: str,
         endpoint_prefix: str
     ) -> Optional[Dict[str, Any]]:
         """
         Fetch data from plugin with exponential backoff retry logic.
+        No end_date is provided - plugins should return data up to the latest available.
         """
         max_retries = Config.MAX_RETRIES
         retry_delay = Config.RETRY_DELAY_SECONDS
         
         for attempt in range(max_retries):
             try:
-                data = await plugin.get_historical_data(start_date, end_date)
+                data = await plugin.get_historical_data(start_date)
                 return data
             except Exception as e:
                 if attempt < max_retries - 1:

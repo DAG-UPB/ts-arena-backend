@@ -107,13 +107,19 @@ class EntsoeDataSourcePlugin(BasePlugin):
     async def get_historical_data(
         self,
         start_date: str,
-        end_date: str,
+        end_date: Optional[str] = None,
         metrics: Optional[List[str]] = None
     ) -> Dict[str, Any]:
-        """Fetch historical data from ENTSO-E API"""
+        """
+        Fetch historical data from ENTSO-E API.
+        
+        Note: ENTSO-E API requires an end_date. If not provided, 
+        current time will be used as fallback.
+        """
         # ENTSO-E expects time in format YYYYMMDDHHMM
         start_dt = pd.Timestamp(start_date)
-        end_dt = pd.Timestamp(end_date)
+        # ENTSO-E requires end_date, fallback to current time if not provided
+        end_dt = pd.Timestamp(end_date) if end_date else pd.Timestamp.now(tz='UTC')
         period_start = start_dt.strftime("%Y%m%d%H%M")
         period_end = end_dt.strftime("%Y%m%d%H%M")
         

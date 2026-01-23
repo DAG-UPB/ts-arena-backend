@@ -99,13 +99,22 @@ class FingridDataSourcePlugin(BasePlugin):
     async def get_historical_data(
         self, 
         start_date: str, 
-        end_date: str, 
+        end_date: Optional[str] = None, 
         metrics: Optional[List[str]] = None
     ) -> Dict[str, Any]:
-        """Fetch data from Fingrid using provided API client."""
+        """
+        Fetch data from Fingrid using provided API client.
+        
+        Note: Fingrid API requires an end_date. If not provided,
+        current time will be used as fallback.
+        """
         dataset_id = self._defaults.get("dataset_id")
         if not dataset_id:
             return {"data": []}
+
+        # Fingrid requires end_date, fallback to current time + 2 days if not provided
+        if not end_date:
+            end_date = (pd.Timestamp.now(tz='UTC') + pd.Timedelta(days=2)).isoformat()
 
         # Convert dates to ISO with 'Z' as expected by Fingrid
         # start_date/end_date from repo already ISO, but ensure format

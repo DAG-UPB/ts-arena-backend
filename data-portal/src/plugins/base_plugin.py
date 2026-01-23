@@ -69,7 +69,7 @@ class BasePlugin(ABC):
     async def get_historical_data(
         self, 
         start_date: str, 
-        end_date: str, 
+        end_date: Optional[str] = None, 
         metrics: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
@@ -77,7 +77,9 @@ class BasePlugin(ABC):
         
         Args:
             start_date: Start date in ISO format
-            end_date: End date in ISO format
+            end_date: Optional end date in ISO format. If not provided, 
+                      the API should return data up to the latest available.
+                      This is preferred as APIs may operate in different timezones.
             metrics: Optional list of metrics to fetch
             
         Returns:
