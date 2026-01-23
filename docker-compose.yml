@@ -72,7 +72,6 @@ services:
       - ./cloudbeaver:/opt/cloudbeaver/workspace
     depends_on:
       - timescaledb
-      - api-portal
 
 volumes:
   dbarena:
