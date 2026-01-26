@@ -39,15 +39,21 @@ class TimeSeriesDataSCD2Repository:
         if not data_points:
             return {'inserted': 0, 'updated': 0, 'unchanged': 0}
 
-        # Prepare data for bulk processing
-        values_to_upsert = [
-            {
-                "series_id": series_id,
-                "ts": datetime.fromisoformat(p['ts'].replace('Z', '+00:00')) if isinstance(p['ts'], str) else p['ts'],
-                "value": float(p['value'])
-            }
-            for p in data_points if p.get('ts') is not None and p.get('value') is not None
-        ]
+        # Prepare data for bulk processing and deduplicate by timestamp.
+        # If multiple values exist for the same timestamp, keep only the last one.
+        # This prevents unique constraint violations when input data contains duplicates.
+        temp_dict = {}
+        for p in data_points:
+            if p.get('ts') is not None and p.get('value') is not None:
+                ts = datetime.fromisoformat(p['ts'].replace('Z', '+00:00')) if isinstance(p['ts'], str) else p['ts']
+                # Overwrite with later value if duplicate timestamp exists
+                temp_dict[ts] = {
+                    "series_id": series_id,
+                    "ts": ts,
+                    "value": float(p['value'])
+                }
+        
+        values_to_upsert = list(temp_dict.values())
 
         if not values_to_upsert:
             return {'inserted': 0, 'updated': 0, 'unchanged': 0}

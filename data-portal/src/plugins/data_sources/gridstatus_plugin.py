@@ -1,10 +1,10 @@
 """GridStatus Data Portal Plugin
 
-Multi-Series plugin for fetching data from US electricity grid ISOs.
+Multi-Series plugin for fetching data from US/Canadian electricity grid ISOs.
 Uses MultiSeriesPlugin pattern for efficient batch data fetching.
 
-Supported ISOs: CAISO, MISO, NYISO
-Supported datasets: load, fuel_mix, lmp
+Supported ISOs: CAISO, MISO, NYISO, PJM, ISONE, SPP, IESO
+Supported datasets: load, fuel_mix, lmp (availability varies by ISO)
 
 One API call returns multiple time series (e.g., fuel_mix returns Solar, Wind, Nuclear, etc.)
 which are then extracted into separate time series based on extract_filter configuration.
@@ -64,6 +64,10 @@ class GridStatusApiClient:
         "CAISO": gridstatus.CAISO,
         "MISO": gridstatus.MISO,
         "NYISO": gridstatus.NYISO,
+        "PJM": gridstatus.PJM,
+        "ISONE": gridstatus.ISONE,
+        "SPP": gridstatus.SPP,
+        "IESO": gridstatus.IESO,
     }
     
     def __init__(self, iso_name: str):
