@@ -14,6 +14,7 @@ from src.scheduler.frequency_parser import parse_frequency, get_interval_seconds
 from src.database import SessionLocal
 from src.repositories.time_series_repository import TimeSeriesDataRepository
 from src.plugins.base_plugin import BasePlugin, MultiSeriesPlugin
+from src.services.imputation_service import ImputationService, parse_frequency_to_timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -273,13 +274,31 @@ class DataPortalScheduler:
                         logger.info(f"[{endpoint_prefix}] No new data points to store")
                         return
                     
-                    # Store data in both regular and SCD2 tables
-                    rows_affected = await repo.upsert_data_points(series_id, data_points)
+                    # Apply imputation to fill gaps
+                    imputation_service = ImputationService()
+                    frequency_td = parse_frequency_to_timedelta(metadata.frequency)
+                    imputed_data, n_interpolated, n_null = imputation_service.impute_gaps(
+                        data_points, frequency_td
+                    )
                     
-                    # Also write to SCD2 table for history tracking
+                    if n_interpolated > 0 or n_null > 0:
+                        logger.info(
+                            f"[{endpoint_prefix}] Imputation: {n_interpolated} interpolated, "
+                            f"{n_null} NULL markers added"
+                        )
+                    
+                    # Store data in operational table (without quality_code)
+                    # Filter out NULL values for operational table
+                    operational_data = [
+                        {'ts': p['ts'], 'value': p['value']} 
+                        for p in imputed_data if p.get('value') is not None
+                    ]
+                    rows_affected = await repo.upsert_data_points(series_id, operational_data)
+                    
+                    # Store in SCD2 table with quality_code
                     from src.repositories.time_series_scd2_repository import TimeSeriesDataSCD2Repository
                     scd2_repo = TimeSeriesDataSCD2Repository(session)
-                    scd2_stats = await scd2_repo.upsert_data_points(series_id, data_points)
+                    scd2_stats = await scd2_repo.upsert_data_points(series_id, imputed_data)
                     
                     duration = (datetime.now() - job_start).total_seconds()
                     logger.info(
@@ -315,6 +334,7 @@ class DataPortalScheduler:
                 # Get database session using async context manager
                 async with SessionLocal() as session:
                     repo = TimeSeriesDataRepository(session)
+                    imputation_service = ImputationService()
                     
                     # Determine start date based on the smallest update frequency
                     min_interval = min(
@@ -334,6 +354,9 @@ class DataPortalScheduler:
                     
                     # Process each time series from the response
                     total_rows = 0
+                    total_interpolated = 0
+                    total_null = 0
+                    
                     for series_def in series_definitions:
                         endpoint_prefix = series_def.endpoint_prefix
                         series_data = data.get(endpoint_prefix, [])
@@ -355,21 +378,36 @@ class DataPortalScheduler:
                             update_frequency=series_def.update_frequency or '15 minutes'
                         )
                         
-                        # Store data
-                        rows_affected = await repo.upsert_data_points(series_id, series_data)
+                        # Apply imputation to fill gaps
+                        frequency_td = parse_frequency_to_timedelta(series_def.frequency)
+                        imputed_data, n_interpolated, n_null = imputation_service.impute_gaps(
+                            series_data, frequency_td
+                        )
+                        total_interpolated += n_interpolated
+                        total_null += n_null
+                        
+                        # Store data in operational table (without quality_code, filter NULL values)
+                        operational_data = [
+                            {'ts': p['ts'], 'value': p['value']} 
+                            for p in imputed_data if p.get('value') is not None
+                        ]
+                        rows_affected = await repo.upsert_data_points(series_id, operational_data)
                         total_rows += rows_affected
                         
-                        # Also write to SCD2 table
+                        # Store in SCD2 table with quality_code
                         from src.repositories.time_series_scd2_repository import TimeSeriesDataSCD2Repository
                         scd2_repo = TimeSeriesDataSCD2Repository(session)
-                        await scd2_repo.upsert_data_points(series_id, series_data)
+                        await scd2_repo.upsert_data_points(series_id, imputed_data)
                         
                         logger.debug(f"[{group_id}] Stored {rows_affected} points for {endpoint_prefix}")
                     
                     duration = (datetime.now() - job_start).total_seconds()
+                    imputation_msg = ""
+                    if total_interpolated > 0 or total_null > 0:
+                        imputation_msg = f" Imputation: {total_interpolated} interpolated, {total_null} NULL markers."
                     logger.info(
                         f"[{group_id}] Multi-series job completed in {duration:.2f}s. "
-                        f"Stored {total_rows} total data points across {len(series_definitions)} series."
+                        f"Stored {total_rows} total data points across {len(series_definitions)} series.{imputation_msg}"
                     )
                 
             except Exception as e:

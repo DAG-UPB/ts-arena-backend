@@ -45,3 +45,8 @@ class Config:
     RETRY_DELAY_SECONDS = int(os.getenv("RETRY_DELAY_SECONDS", "60"))
     
     HEALTHCHECK_INTERVAL_SECONDS = int(os.getenv("HEALTHCHECK_INTERVAL_SECONDS", "300"))
+    
+    # Imputation settings
+    ENABLE_IMPUTATION = os.getenv("ENABLE_IMPUTATION", "true").lower() == "true"
+    MAX_GAP_FACTOR = int(os.getenv("MAX_GAP_FACTOR", "6"))  # Gaps > 6x frequency get NULL marker
+

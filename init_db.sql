@@ -33,11 +33,13 @@ $$ LANGUAGE plpgsql;
 CREATE TABLE data_portal.domain_category (
   id SERIAL PRIMARY KEY,
   domain TEXT NOT NULL,
+  subdomain TEXT,
   category TEXT,
   subcategory TEXT,
+  aggregation_level TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE(domain, category, subcategory)
+  UNIQUE(domain, subdomain, category, subcategory, aggregation_level)
 );
 
 CREATE TRIGGER trg_domain_category_updated_at
@@ -54,6 +56,7 @@ CREATE TABLE data_portal.time_series (
   description TEXT,
   api_endpoint TEXT,
   frequency INTERVAL,
+  aggregation_level_name TEXT,
   unit TEXT,
   update_frequency TEXT,
   update_frequency_timepoint TEXT,
@@ -98,7 +101,8 @@ CREATE TABLE data_portal.time_series_data_scd2 (
   sk BIGSERIAL,
   series_id INTEGER NOT NULL REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
   ts TIMESTAMPTZ NOT NULL,
-  value DOUBLE PRECISION NOT NULL,
+  value DOUBLE PRECISION,  -- NULL allowed for gap markers
+  quality_code SMALLINT NOT NULL DEFAULT 0,  -- 0 = Original, 1 = Imputed
   valid_from TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   valid_to TIMESTAMPTZ,
   valid_during TSTZRANGE NOT NULL GENERATED ALWAYS AS (tstzrange(valid_from, valid_to, '[)')) STORED,
@@ -107,6 +111,9 @@ CREATE TABLE data_portal.time_series_data_scd2 (
   updated_at TIMESTAMPTZ,
   PRIMARY KEY (sk, valid_from)
 );
+
+COMMENT ON COLUMN data_portal.time_series_data_scd2.quality_code IS 
+'Data quality flag: 0 = Original (raw data), 1 = Imputed (interpolated/filled). NULL values with quality_code=1 indicate gaps too large for interpolation.';
 
 CREATE UNIQUE INDEX uq_tsd2_current ON data_portal.time_series_data_scd2(series_id, ts, valid_from) WHERE is_current = TRUE;
 
@@ -146,6 +153,7 @@ RETURNS TABLE(
   series_id INTEGER,
   ts TIMESTAMPTZ,
   value DOUBLE PRECISION,
+  quality_code SMALLINT,
   valid_from TIMESTAMPTZ,
   valid_to TIMESTAMPTZ
 ) AS $$
@@ -155,6 +163,7 @@ BEGIN
       scd.series_id,
       scd.ts,
       scd.value,
+      scd.quality_code,
       scd.valid_from,
       scd.valid_to
   FROM data_portal.time_series_data_scd2 scd

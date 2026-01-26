@@ -275,6 +275,59 @@ docker run -p 8000:8000 --env-file .env data-portal
 - **Data Versioning**: SCD Type 2 tracks all data changes with temporal validity
 - **Audit Trail**: Complete history of when and how data values changed
 
+## Data Preprocessing
+
+The Data Portal automatically handles missing values during data ingestion to ensure clean, gap-free time series for downstream analysis.
+
+### Missing Value Imputation
+
+When data is fetched from plugins, the system:
+
+1. **Detects Gaps**: Compares timestamps against the expected frequency
+2. **Fills Small Gaps** (≤ 10× frequency): Linear interpolation between known values
+3. **Marks Large Gaps** (> 10× frequency): Inserts NULL value with timestamp to indicate the gap
+
+### Quality Codes
+
+The SCD2 table (`time_series_data_scd2`) tracks data quality with a `quality_code` column:
+
+| Code | Meaning | Description |
+|------|---------|-------------|
+| 0 | Original | Raw data from source API |
+| 1 | Imputed | Interpolated value or NULL gap marker |
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ENABLE_IMPUTATION` | `true` | Enable/disable imputation workflow |
+| `MAX_GAP_FACTOR` | `6` | Maximum gap size (as multiple of frequency) for interpolation |
+
+Set `ENABLE_IMPUTATION=false` to ingest raw data without any preprocessing.
+
+### Example
+
+For a 15-minute frequency series with a 1-hour gap:
+- Gap = 4 intervals (less than 10×) → Linear interpolation applied
+- 3 imputed values inserted with `quality_code = 1`
+
+For a 15-minute series with a 4-hour gap:
+- Gap = 16 intervals (greater than 10×) → NULL markers inserted
+- 15 records with `value = NULL` and `quality_code = 1`
+
+### Grafana Visualization
+
+Use the `quality_code` to highlight imputed data in dashboards:
+```sql
+SELECT 
+  ts,
+  value,
+  CASE WHEN quality_code = 1 THEN 'Imputed' ELSE 'Original' END as data_source
+FROM data_portal.time_series_data_scd2
+WHERE series_id = :series_id AND is_current = TRUE;
+```
+
 ## Additional Documentation
 
 - [SCD2_INTEGRATION.md](SCD2_INTEGRATION.md) - Detailed documentation on SCD Type 2 history tracking
+
