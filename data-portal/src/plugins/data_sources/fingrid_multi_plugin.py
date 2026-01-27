@@ -147,7 +147,7 @@ class FingridMultiSeriesPlugin(MultiSeriesPlugin):
             end_date: Optional end date. If not provided, uses current time + 2 days.
             
         Returns:
-            Dict mapping endpoint_prefix to list of data points
+            Dict mapping unique_id to list of data points
         """
         import pandas as pd
         
@@ -172,12 +172,12 @@ class FingridMultiSeriesPlugin(MultiSeriesPlugin):
         result: Dict[str, List[Dict[str, Any]]] = {}
         
         for series_def in self._series_definitions:
-            endpoint_prefix = series_def.endpoint_prefix
+            unique_id = series_def.unique_id
             dataset_id = series_def.extract_filter.get("dataset_id")
             
             if not dataset_id:
-                logger.warning(f"No dataset_id in extract_filter for {endpoint_prefix}")
-                result[endpoint_prefix] = []
+                logger.warning(f"No dataset_id in extract_filter for {unique_id}")
+                result[unique_id] = []
                 continue
             
             try:
@@ -186,10 +186,10 @@ class FingridMultiSeriesPlugin(MultiSeriesPlugin):
                     start_time=start_date,
                     end_time=end_date_str
                 )
-                result[endpoint_prefix] = data
+                result[unique_id] = data
             except Exception as e:
-                logger.error(f"Failed to fetch dataset {dataset_id} for {endpoint_prefix}: {e}")
-                result[endpoint_prefix] = []
+                logger.error(f"Failed to fetch dataset {dataset_id} for {unique_id}: {e}")
+                result[unique_id] = []
         
         total_points = sum(len(v) for v in result.values())
         logger.info(

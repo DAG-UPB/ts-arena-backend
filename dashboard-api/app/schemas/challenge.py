@@ -66,7 +66,7 @@ class ChallengeSeriesSchema(BaseModel):
     description: Optional[str] = None
     frequency: Optional[timedelta] = None  # Changed from str to timedelta (INTERVAL from DB)
     horizon: Optional[Any] = None
-    endpoint_prefix: Optional[str] = None
+    unique_id: Optional[str] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     registration_start: Optional[datetime] = None

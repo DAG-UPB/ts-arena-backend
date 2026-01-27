@@ -82,11 +82,11 @@ class DataPortalScheduler:
         logger.info("Starting scheduler...")
         
         # Register single-series plugin jobs
-        for endpoint_prefix, plugin in self.plugins.items():
+        for unique_id, plugin in self.plugins.items():
             try:
-                await self._register_plugin_job(endpoint_prefix, plugin)
+                await self._register_plugin_job(unique_id, plugin)
             except Exception as e:
-                logger.error(f"Failed to register job for {endpoint_prefix}: {e}", exc_info=True)
+                logger.error(f"Failed to register job for {unique_id}: {e}", exc_info=True)
         
         # Register multi-series plugin jobs
         for group_id, plugin in self.multi_series_plugins.items():
@@ -120,10 +120,10 @@ class DataPortalScheduler:
             
             logger.info(f"Processing single-series batch {i//batch_size + 1}/{(len(single_items) + batch_size - 1)//batch_size}")
             
-            for endpoint_prefix, plugin in batch:
-                logger.info(f"Scheduling initial fetch for {endpoint_prefix}...")
+            for unique_id, plugin in batch:
+                logger.info(f"Scheduling initial fetch for {unique_id}...")
                 task = asyncio.create_task(
-                    self._fetch_and_store_data(endpoint_prefix, plugin)
+                    self._fetch_and_store_data(unique_id, plugin)
                 )
                 batch_tasks.append(task)
             
@@ -157,7 +157,7 @@ class DataPortalScheduler:
             f"Initial data fetch completed: {total_successful} successful, {total_failed} failed"
         )
     
-    async def _register_plugin_job(self, endpoint_prefix: str, plugin: BasePlugin):
+    async def _register_plugin_job(self, unique_id: str, plugin: BasePlugin):
         """Register a scheduled job for a plugin"""
         metadata = plugin.get_metadata()
         update_frequency = metadata.update_frequency
@@ -165,18 +165,18 @@ class DataPortalScheduler:
         try:
             interval_params = parse_frequency(update_frequency)
         except ValueError as e:
-            logger.error(f"Invalid frequency '{update_frequency}' for {endpoint_prefix}: {e}")
+            logger.error(f"Invalid frequency '{update_frequency}' for {unique_id}: {e}")
             return
         
         trigger = IntervalTrigger(**interval_params)
         
-        job_id = f"fetch_{endpoint_prefix}"
+        job_id = f"fetch_{unique_id}"
         self.scheduler.add_job(
             self._fetch_and_store_data,
             trigger=trigger,
             id=job_id,
             name=f"Fetch data: {metadata.name}",
-            args=[endpoint_prefix, plugin],
+            args=[unique_id, plugin],
             replace_existing=True
         )
         
@@ -214,7 +214,7 @@ class DataPortalScheduler:
             f"for group {group_id} ({series_count} time series)"
         )
     
-    async def _fetch_and_store_data(self, endpoint_prefix: str, plugin: BasePlugin):
+    async def _fetch_and_store_data(self, unique_id: str, plugin: BasePlugin):
         """
         Fetch data from plugin and store in database.
         This is the main job function that gets executed on schedule.
@@ -223,12 +223,12 @@ class DataPortalScheduler:
         metadata = plugin.get_metadata()
         job_start = datetime.now()
         
-        logger.info(f"[{endpoint_prefix}] Starting data fetch job...")
+        logger.info(f"[{unique_id}] Starting data fetch job...")
         
         # Use semaphore to limit concurrent jobs
         async with self.job_semaphore:
             active_jobs = self.max_concurrent_jobs - self.job_semaphore._value
-            logger.info(f"[{endpoint_prefix}] Acquired job semaphore (active jobs: {active_jobs}/{self.max_concurrent_jobs})")
+            logger.info(f"[{unique_id}] Acquired job semaphore (active jobs: {active_jobs}/{self.max_concurrent_jobs})")
             
             # Log pool status periodically (every 10th job)
             if active_jobs % 10 == 0:
@@ -243,7 +243,7 @@ class DataPortalScheduler:
                     # Get or create series_id
                     series_id = await repo.get_or_create_series_id(
                         name=metadata.name,
-                        endpoint_prefix=endpoint_prefix,
+                        unique_id=unique_id,
                         description=metadata.description,
                         frequency=metadata.frequency,
                         unit=getattr(metadata, 'unit', ''),
@@ -259,19 +259,19 @@ class DataPortalScheduler:
                     interval_seconds = get_interval_seconds(metadata.update_frequency)
                     start_date = (datetime.now() - timedelta(seconds=1000 * interval_seconds)).isoformat()
                     
-                    logger.info(f"[{endpoint_prefix}] Fetching data from {start_date} to latest available")
+                    logger.info(f"[{unique_id}] Fetching data from {start_date} to latest available")
                     
                     # Fetch data from plugin with retry logic (no end_date)
-                    data = await self._fetch_with_retry(plugin, start_date, endpoint_prefix)
+                    data = await self._fetch_with_retry(plugin, start_date, unique_id)
                     
                     if not data or 'data' not in data:
-                        logger.warning(f"[{endpoint_prefix}] No data returned from plugin")
+                        logger.warning(f"[{unique_id}] No data returned from plugin")
                         return
                     
                     data_points = data['data']
                     
                     if not data_points:
-                        logger.info(f"[{endpoint_prefix}] No new data points to store")
+                        logger.info(f"[{unique_id}] No new data points to store")
                         return
                     
                     # Apply imputation to fill gaps
@@ -283,7 +283,7 @@ class DataPortalScheduler:
                     
                     if n_interpolated > 0 or n_null > 0:
                         logger.info(
-                            f"[{endpoint_prefix}] Imputation: {n_interpolated} interpolated, "
+                            f"[{unique_id}] Imputation: {n_interpolated} interpolated, "
                             f"{n_null} NULL markers added"
                         )
                     
@@ -302,7 +302,7 @@ class DataPortalScheduler:
                     
                     duration = (datetime.now() - job_start).total_seconds()
                     logger.info(
-                        f"[{endpoint_prefix}] Job completed successfully in {duration:.2f}s. "
+                        f"[{unique_id}] Job completed successfully in {duration:.2f}s. "
                         f"Stored {rows_affected} data points. "
                         f"SCD2: {scd2_stats['inserted']} new, {scd2_stats['updated']} updated, "
                         f"{scd2_stats['unchanged']} unchanged."
@@ -311,7 +311,7 @@ class DataPortalScheduler:
             except Exception as e:
                 duration = (datetime.now() - job_start).total_seconds()
                 logger.error(
-                    f"[{endpoint_prefix}] Job failed after {duration:.2f}s: {e}",
+                    f"[{unique_id}] Job failed after {duration:.2f}s: {e}",
                     exc_info=True
                 )
     
@@ -358,17 +358,17 @@ class DataPortalScheduler:
                     total_null = 0
                     
                     for series_def in series_definitions:
-                        endpoint_prefix = series_def.endpoint_prefix
-                        series_data = data.get(endpoint_prefix, [])
+                        unique_id = series_def.unique_id
+                        series_data = data.get(unique_id, [])
                         
                         if not series_data:
-                            logger.debug(f"[{group_id}] No data for series {endpoint_prefix}")
+                            logger.debug(f"[{group_id}] No data for series {unique_id}")
                             continue
                         
                         # Get or create series_id
                         series_id = await repo.get_or_create_series_id(
                             name=series_def.name,
-                            endpoint_prefix=endpoint_prefix,
+                            unique_id=unique_id,
                             description=series_def.description,
                             frequency=series_def.frequency,
                             unit=series_def.unit,
@@ -399,7 +399,7 @@ class DataPortalScheduler:
                         scd2_repo = TimeSeriesDataSCD2Repository(session)
                         await scd2_repo.upsert_data_points(series_id, imputed_data)
                         
-                        logger.debug(f"[{group_id}] Stored {rows_affected} points for {endpoint_prefix}")
+                        logger.debug(f"[{group_id}] Stored {rows_affected} points for {unique_id}")
                     
                     duration = (datetime.now() - job_start).total_seconds()
                     imputation_msg = ""
@@ -451,7 +451,7 @@ class DataPortalScheduler:
         self, 
         plugin: BasePlugin, 
         start_date: str, 
-        endpoint_prefix: str
+        unique_id: str
     ) -> Optional[Dict[str, Any]]:
         """
         Fetch data from plugin with exponential backoff retry logic.
@@ -468,13 +468,13 @@ class DataPortalScheduler:
                 if attempt < max_retries - 1:
                     wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
                     logger.warning(
-                        f"[{endpoint_prefix}] Fetch attempt {attempt + 1} failed: {e}. "
+                        f"[{unique_id}] Fetch attempt {attempt + 1} failed: {e}. "
                         f"Retrying in {wait_time}s..."
                     )
                     await asyncio.sleep(wait_time)
                 else:
                     logger.error(
-                        f"[{endpoint_prefix}] All {max_retries} fetch attempts failed"
+                        f"[{unique_id}] All {max_retries} fetch attempts failed"
                     )
                     raise
     

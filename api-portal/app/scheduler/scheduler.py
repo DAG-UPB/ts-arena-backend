@@ -153,6 +153,7 @@ class ChallengeScheduler:
     async def load_recurring_schedules(self, config_path: str) -> None:
         """
         Loads recurring challenge creation schedules from a YAML file and registers cron jobs.
+        Also syncs definitions to the database for the challenge definitions table.
         """
         self._config_path = config_path  # Store for potential restart
         await self._ensure_started()
@@ -171,6 +172,10 @@ class ChallengeScheduler:
         schedules = data.get("schedules", [])
         self.logger.info(f"Found {len(schedules)} recurring schedules in {config_path}")
 
+        # Import here to avoid circular imports
+        from app.database.connection import SessionLocal
+        from app.services.challenge_service import ChallengeService
+
         for schedule_config in schedules:
             schedule_id = schedule_config.get("id")
             cron_expression = schedule_config.get("cron")
@@ -182,6 +187,11 @@ class ChallengeScheduler:
                 continue
 
             try:
+                # Sync definition to database
+                async with SessionLocal() as session:
+                    challenge_service = ChallengeService(session, scheduler=self)
+                    await challenge_service.sync_definition_from_yaml(schedule_id, schedule_config)
+                
                 # Create a deep copy of params to avoid shared references between jobs
                 import copy
                 params_copy = copy.deepcopy(params)

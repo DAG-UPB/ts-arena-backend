@@ -95,14 +95,14 @@ class PluginLoader:
             # Load legacy single-series plugins
             if 'timeseries' in config:
                 timeseries_config = config['timeseries']
-                for endpoint_prefix, plugin_config in timeseries_config.items():
+                for unique_id, plugin_config in timeseries_config.items():
                     try:
-                        plugin = self._load_single_plugin(endpoint_prefix, plugin_config)
+                        plugin = self._load_single_plugin(unique_id, plugin_config)
                         if plugin:
-                            self.plugins[endpoint_prefix] = plugin
-                            logger.info(f"Loaded plugin: {endpoint_prefix}")
+                            self.plugins[unique_id] = plugin
+                            logger.info(f"Loaded plugin: {unique_id}")
                     except Exception as e:
-                        logger.error(f"Failed to load plugin {endpoint_prefix}: {e}", exc_info=True)
+                        logger.error(f"Failed to load plugin {unique_id}: {e}", exc_info=True)
             
             logger.info(f"Successfully loaded {len(self.plugins)} single-series plugins")
             return self.plugins
@@ -159,9 +159,9 @@ class PluginLoader:
         # Build series definitions
         series_definitions: List[TimeSeriesDefinition] = []
         for ts_config in timeseries_list:
-            endpoint_prefix = ts_config.get('endpoint_prefix')
-            if not endpoint_prefix:
-                logger.warning(f"Skipping timeseries without endpoint_prefix in group {group_id}")
+            unique_id = ts_config.get('unique_id')
+            if not unique_id:
+                logger.warning(f"Skipping timeseries without unique_id in group {group_id}")
                 continue
             
             metadata = ts_config.get('metadata', {})
@@ -172,8 +172,8 @@ class PluginLoader:
             update_frequency = calculate_update_frequency(frequency)
             
             definition = TimeSeriesDefinition(
-                endpoint_prefix=endpoint_prefix,
-                name=metadata.get('name', endpoint_prefix),
+                unique_id=unique_id,
+                name=metadata.get('name', unique_id),
                 description=metadata.get('description', ''),
                 frequency=frequency,
                 unit=metadata.get('unit', ''),
@@ -214,7 +214,7 @@ class PluginLoader:
                 result[key] = value
         return result
     
-    def _load_single_plugin(self, endpoint_prefix: str, config: Dict[str, Any]) -> BasePlugin:
+    def _load_single_plugin(self, unique_id: str, config: Dict[str, Any]) -> BasePlugin:
         """Load a single plugin from configuration"""
         module_name = config.get('module')
         class_name = config.get('class')
@@ -222,14 +222,14 @@ class PluginLoader:
         default_params = config.get('default_params', {})
         
         if not module_name or not class_name:
-            raise ValueError(f"Missing module or class for plugin {endpoint_prefix}")
+            raise ValueError(f"Missing module or class for plugin {unique_id}")
         
         # Create metadata object
         # Note: frequency values from YAML are strings that will be automatically
         # converted to PostgreSQL INTERVAL type when inserted into the database
         metadata = TimeSeriesMetadata(
-            endpoint_prefix=endpoint_prefix,
-            name=metadata_dict.get('name', endpoint_prefix),
+            unique_id=unique_id,
+            name=metadata_dict.get('name', unique_id),
             description=metadata_dict.get('description', ''),
             frequency=metadata_dict.get('frequency', '1 hour'),
             unit=metadata_dict.get('unit', ''),
@@ -248,9 +248,9 @@ class PluginLoader:
         except Exception as e:
             raise ImportError(f"Failed to import {class_name} from {module_name}: {e}")
     
-    def get_plugin(self, endpoint_prefix: str) -> BasePlugin | None:
-        """Get a loaded plugin by endpoint prefix"""
-        return self.plugins.get(endpoint_prefix)
+    def get_plugin(self, unique_id: str) -> BasePlugin | None:
+        """Get a loaded plugin by unique id"""
+        return self.plugins.get(unique_id)
     
     def get_multi_series_plugin(self, group_id: str) -> MultiSeriesPlugin | None:
         """Get a loaded multi-series plugin by group ID"""

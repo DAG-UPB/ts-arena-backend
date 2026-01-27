@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 @dataclass
 class TimeSeriesDefinition:
     """Definition of a single time series within a request group"""
-    endpoint_prefix: str
+    unique_id: str
     name: str
     description: str
     frequency: str
@@ -26,7 +26,7 @@ class TimeSeriesMetadata:
     
     def __init__(
         self,
-        endpoint_prefix: str,
+        unique_id: str,
         name: str,
         description: str,
         frequency: str,
@@ -40,7 +40,7 @@ class TimeSeriesMetadata:
         Initialize time series metadata.
         
         Args:
-            endpoint_prefix: Unique prefix for API endpoint
+            unique_id: Unique prefix for API endpoint
             name: Display name of the time series
             description: Description of the data source
             frequency: Data frequency as PostgreSQL INTERVAL string (e.g., '1 hour', '15 minutes', '1 day')
@@ -51,7 +51,7 @@ class TimeSeriesMetadata:
             subcategory: Subcategory (e.g., 'nuclear', 'wind')
             update_frequency: How often the data source is updated (PostgreSQL INTERVAL string)
         """
-        self.endpoint_prefix = endpoint_prefix
+        self.unique_id = unique_id
         self.name = name
         self.description = description
         self.frequency = frequency
@@ -73,9 +73,9 @@ class BasePlugin(ABC):
         """Returns metadata for this data source"""
         return self._meta
     
-    def get_endpoint_prefix(self) -> str:
-        """Returns the endpoint prefix for this data source"""
-        return self._meta.endpoint_prefix
+    def get_unique_id(self) -> str:
+        """Returns the unique id for this data source"""
+        return self._meta.unique_id
     
     def get_update_frequency(self) -> str:
         """Returns the update frequency for this data source"""
@@ -159,9 +159,9 @@ class MultiSeriesPlugin(ABC):
         """Returns all time series definitions for this group"""
         return self._series_definitions
     
-    def get_endpoint_prefixes(self) -> List[str]:
-        """Returns list of all endpoint prefixes in this group"""
-        return [s.endpoint_prefix for s in self._series_definitions]
+    def get_unique_ides(self) -> List[str]:
+        """Returns list of all unique ides in this group"""
+        return [s.unique_id for s in self._series_definitions]
     
     @abstractmethod
     async def get_historical_data_multi(
@@ -178,7 +178,7 @@ class MultiSeriesPlugin(ABC):
                       the API should return data up to the latest available.
             
         Returns:
-            Dict mapping endpoint_prefix to list of data points:
+            Dict mapping unique_id to list of data points:
             {
                 "series-1": [
                     {"ts": "2025-08-05T14:00:00Z", "value": 22.5},

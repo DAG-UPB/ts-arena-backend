@@ -1,1426 +1,2842 @@
-##############################################################################
-# REQUEST GROUPS - Multiple time series from a single API call
-# Use this when an API returns multiple series or when you want to batch
-# requests to the same API endpoint for efficiency.
-##############################################################################
-
-request_groups:
-  # Example: Fingrid generation data - fetches multiple generation types with fewer API calls
-  fingrid-generation-3min:
-    module: src.plugins.data_sources.fingrid_multi_plugin
-    class: FingridMultiSeriesPlugin
-    schedule: 180 seconds  # 3 minutes
-    request_params:
-      # Common parameters for all series in this group
-      page_size: 20000
-    timeseries:
-      - endpoint_prefix: fingrid-multi-192
-        extract_filter:
-          dataset_id: 192
-        metadata:
-          name: FINGRID-MULTI-192-FI-3min
-          description: 'Electricity production in Finland based on the real-time measurements in Fingrid''s operation control system. The data is updated every 3 minutes.'
-          frequency: 3 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: fingrid-multi-191
-        extract_filter:
-          dataset_id: 191
-        metadata:
-          name: FINGRID-MULTI-191-FI-3min
-          description: 'Hydro power production in Finland based on the real-time measurements in Fingrid''s operation control system. The data is updated every 3 minutes.'
-          frequency: 3 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: fingrid-multi-181
-        extract_filter:
-          dataset_id: 181
-        metadata:
-          name: FINGRID-MULTI-181-FI-3min
-          description: 'Wind power production based on the real-time measurements in Fingrid''s operation control system. About two percent of the production capacity is estimated as measurements aren''t available. The data is updated every 3 minutes.'
-          frequency: 3 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: fingrid-multi-188
-        extract_filter:
-          dataset_id: 188
-        metadata:
-          name: FINGRID-MULTI-188-FI-3min
-          description: 'Nuclear power production in Finland based on the real-time measurements in Fingrid''s operation control system. The data is updated every 3 minutes.'
-          frequency: 3 minutes
-          unit: MW
-          domain: energy
-          category: generation
-
-  gridstatus-caiso-fuel-mix:
-    module: src.plugins.data_sources.gridstatus_plugin
-    class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
-    request_params:
-      iso: CAISO
-      dataset: fuel_mix
-    timeseries:
-      - endpoint_prefix: gridstatus-caiso-solar
-        extract_filter:
-          value_column: Solar
-        metadata:
-          name: GRIDSTATUS-CAISO-Solar-5min
-          description: 'California ISO solar generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-caiso-wind
-        extract_filter:
-          value_column: Wind
-        metadata:
-          name: GRIDSTATUS-CAISO-Wind-5min
-          description: 'California ISO wind generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-caiso-nuclear
-        extract_filter:
-          value_column: Nuclear
-        metadata:
-          name: GRIDSTATUS-CAISO-Nuclear-5min
-          description: 'California ISO nuclear generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-caiso-natural-gas
-        extract_filter:
-          value_column: Natural Gas
-        metadata:
-          name: GRIDSTATUS-CAISO-NaturalGas-5min
-          description: 'California ISO natural gas generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-caiso-hydro
-        extract_filter:
-          value_column: Large Hydro
-        metadata:
-          name: GRIDSTATUS-CAISO-Hydro-5min
-          description: 'California ISO large hydro generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-
-  # =====================
-  # CAISO - Load (single series, but using multi for consistency)
-  # =====================
-  gridstatus-caiso-load:
-    module: src.plugins.data_sources.gridstatus_plugin
-    class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
-    request_params:
-      iso: CAISO
-      dataset: load
-    timeseries:
-      - endpoint_prefix: gridstatus-caiso-load
-        extract_filter:
-          value_column: Load
-        metadata:
-          name: GRIDSTATUS-CAISO-Load-5min
-          description: 'California ISO total electricity load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-
-  # =====================
-  # CAISO - LMP (Prices)
-  # =====================
-  gridstatus-caiso-lmp:
-    module: src.plugins.data_sources.gridstatus_plugin
-    class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
-    request_params:
-      iso: CAISO
-      dataset: lmp
-      market: REAL_TIME_5_MIN
-    timeseries:
-      - endpoint_prefix: gridstatus-caiso-lmp
-        extract_filter:
-          value_column: LMP
-        metadata:
-          name: GRIDSTATUS-CAISO-LMP-5min
-          description: 'California ISO real-time locational marginal price'
-          frequency: 5 minutes
-          unit: $/MWh
-          domain: energy
-          category: price
-
-  # =====================
-  # NYISO (New York) - Fuel Mix
-  # =====================
-  gridstatus-nyiso-fuel-mix:
-    module: src.plugins.data_sources.gridstatus_plugin
-    class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
-    request_params:
-      iso: NYISO
-      dataset: fuel_mix
-    timeseries:
-      - endpoint_prefix: gridstatus-nyiso-wind
-        extract_filter:
-          value_column: Wind
-        metadata:
-          name: GRIDSTATUS-NYISO-Wind-5min
-          description: 'New York ISO wind generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-nyiso-hydro
-        extract_filter:
-          value_column: Hydro
-        metadata:
-          name: GRIDSTATUS-NYISO-Hydro-5min
-          description: 'New York ISO hydro generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-nyiso-nuclear
-        extract_filter:
-          value_column: Nuclear
-        metadata:
-          name: GRIDSTATUS-NYISO-Nuclear-5min
-          description: 'New York ISO nuclear generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-nyiso-natural-gas
-        extract_filter:
-          value_column: Natural Gas
-        metadata:
-          name: GRIDSTATUS-NYISO-NaturalGas-5min
-          description: 'New York ISO natural gas generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-
-  # =====================
-  # NYISO - Load (multiple zones available)
-  # =====================
-  gridstatus-nyiso-load:
-    module: src.plugins.data_sources.gridstatus_plugin
-    class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
-    request_params:
-      iso: NYISO
-      dataset: load
-    timeseries:
-      - endpoint_prefix: gridstatus-nyiso-load-total
-        extract_filter:
-          value_column: Load
-        metadata:
-          name: GRIDSTATUS-NYISO-Load-5min
-          description: 'New York ISO total electricity load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-nyiso-load-nyc
-        extract_filter:
-          value_column: N.Y.C.
-        metadata:
-          name: GRIDSTATUS-NYISO-NYC-Load-5min
-          description: 'New York City zone load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-nyiso-load-capitl
-        extract_filter:
-          value_column: CAPITL
-        metadata:
-          name: GRIDSTATUS-NYISO-CAPITL-Load-5min
-          description: 'New York ISO Capital zone load (Albany area)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-nyiso-load-centrl
-        extract_filter:
-          value_column: CENTRL
-        metadata:
-          name: GRIDSTATUS-NYISO-CENTRL-Load-5min
-          description: 'New York ISO Central zone load (Syracuse area)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-nyiso-load-dunwod
-        extract_filter:
-          value_column: DUNWOD
-        metadata:
-          name: GRIDSTATUS-NYISO-DUNWOD-Load-5min
-          description: 'New York ISO Dunwoodie zone load (Westchester)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-nyiso-load-genese
-        extract_filter:
-          value_column: GENESE
-        metadata:
-          name: GRIDSTATUS-NYISO-GENESE-Load-5min
-          description: 'New York ISO Genesee zone load (Rochester area)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-nyiso-load-hudvl
-        extract_filter:
-          value_column: HUD VL
-        metadata:
-          name: GRIDSTATUS-NYISO-HUDVL-Load-5min
-          description: 'New York ISO Hudson Valley zone load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-nyiso-load-longil
-        extract_filter:
-          value_column: LONGIL
-        metadata:
-          name: GRIDSTATUS-NYISO-LONGIL-Load-5min
-          description: 'New York ISO Long Island zone load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-nyiso-load-mhkvl
-        extract_filter:
-          value_column: MHK VL
-        metadata:
-          name: GRIDSTATUS-NYISO-MHKVL-Load-5min
-          description: 'New York ISO Mohawk Valley zone load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-nyiso-load-millwd
-        extract_filter:
-          value_column: MILLWD
-        metadata:
-          name: GRIDSTATUS-NYISO-MILLWD-Load-5min
-          description: 'New York ISO Millwood zone load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-nyiso-load-north
-        extract_filter:
-          value_column: NORTH
-        metadata:
-          name: GRIDSTATUS-NYISO-NORTH-Load-5min
-          description: 'New York ISO North zone load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-nyiso-load-west
-        extract_filter:
-          value_column: WEST
-        metadata:
-          name: GRIDSTATUS-NYISO-WEST-Load-5min
-          description: 'New York ISO West zone load (Buffalo area)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-
-  # =====================
-  # MISO (Midwest) - Fuel Mix
-  # =====================
-  gridstatus-miso-fuel-mix:
-    module: src.plugins.data_sources.gridstatus_plugin
-    class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
-    request_params:
-      iso: MISO
-      dataset: fuel_mix
-    timeseries:
-      - endpoint_prefix: gridstatus-miso-wind
-        extract_filter:
-          value_column: Wind
-        metadata:
-          name: GRIDSTATUS-MISO-Wind-5min
-          description: 'Midwest ISO wind generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-miso-solar
-        extract_filter:
-          value_column: Solar
-        metadata:
-          name: GRIDSTATUS-MISO-Solar-5min
-          description: 'Midwest ISO solar generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-miso-coal
-        extract_filter:
-          value_column: Coal
-        metadata:
-          name: GRIDSTATUS-MISO-Coal-5min
-          description: 'Midwest ISO coal generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-miso-natural-gas
-        extract_filter:
-          value_column: Natural Gas
-        metadata:
-          name: GRIDSTATUS-MISO-NaturalGas-5min
-          description: 'Midwest ISO natural gas generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-
-  # =====================
-  # MISO - Load
-  # =====================
-  gridstatus-miso-load:
-    module: src.plugins.data_sources.gridstatus_plugin
-    class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
-    request_params:
-      iso: MISO
-      dataset: load
-    timeseries:
-      - endpoint_prefix: gridstatus-miso-load
-        extract_filter:
-          value_column: Load
-        metadata:
-          name: GRIDSTATUS-MISO-Load-5min
-          description: 'Midwest ISO total electricity load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-
-  # =====================
-  # PJM (Mid-Atlantic/Midwest) - Fuel Mix
-  # =====================
-  gridstatus-pjm-fuel-mix:
-    module: src.plugins.data_sources.gridstatus_plugin
-    class: GridStatusMultiSeriesPlugin
-    schedule: 1 hour
-    request_params:
-      iso: PJM
-      dataset: fuel_mix
-    timeseries:
-      - endpoint_prefix: gridstatus-pjm-gas
-        extract_filter:
-          value_column: Gas
-        metadata:
-          name: GRIDSTATUS-PJM-Gas-1hour
-          description: 'PJM Interconnection gas generation'
-          frequency: 1 hour
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-pjm-coal
-        extract_filter:
-          value_column: Coal
-        metadata:
-          name: GRIDSTATUS-PJM-Coal-1hour
-          description: 'PJM Interconnection coal generation'
-          frequency: 1 hour
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-pjm-nuclear
-        extract_filter:
-          value_column: Nuclear
-        metadata:
-          name: GRIDSTATUS-PJM-Nuclear-1hour
-          description: 'PJM Interconnection nuclear generation'
-          frequency: 1 hour
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-pjm-hydro
-        extract_filter:
-          value_column: Hydro
-        metadata:
-          name: GRIDSTATUS-PJM-Hydro-1hour
-          description: 'PJM Interconnection hydro generation'
-          frequency: 1 hour
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-pjm-wind
-        extract_filter:
-          value_column: Wind
-        metadata:
-          name: GRIDSTATUS-PJM-Wind-1hour
-          description: 'PJM Interconnection wind generation'
-          frequency: 1 hour
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-pjm-solar
-        extract_filter:
-          value_column: Solar
-        metadata:
-          name: GRIDSTATUS-PJM-Solar-1hour
-          description: 'PJM Interconnection solar generation'
-          frequency: 1 hour
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-pjm-oil
-        extract_filter:
-          value_column: Oil
-        metadata:
-          name: GRIDSTATUS-PJM-Oil-1hour
-          description: 'PJM Interconnection oil generation'
-          frequency: 1 hour
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-pjm-other-renewables
-        extract_filter:
-          value_column: Other Renewables
-        metadata:
-          name: GRIDSTATUS-PJM-OtherRenewables-1hour
-          description: 'PJM Interconnection other renewables generation'
-          frequency: 1 hour
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-pjm-storage
-        extract_filter:
-          value_column: Storage
-        metadata:
-          name: GRIDSTATUS-PJM-Storage-1hour
-          description: 'PJM Interconnection battery storage'
-          frequency: 1 hour
-          unit: MW
-          domain: energy
-          category: generation
-
-  # =====================
-  # PJM - Load
-  # =====================
-  gridstatus-pjm-load:
-    module: src.plugins.data_sources.gridstatus_plugin
-    class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
-    request_params:
-      iso: PJM
-      dataset: load
-    timeseries:
-      - endpoint_prefix: gridstatus-pjm-load
-        extract_filter:
-          value_column: Load
-        metadata:
-          name: GRIDSTATUS-PJM-Load-5min
-          description: 'PJM Interconnection total electricity load (PJM RTO)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-aep
-        extract_filter:
-          value_column: AEP
-        metadata:
-          name: GRIDSTATUS-PJM-AEP-Load-5min
-          description: 'PJM American Electric Power zone load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-aps
-        extract_filter:
-          value_column: APS
-        metadata:
-          name: GRIDSTATUS-PJM-APS-Load-5min
-          description: 'PJM Allegheny Power zone load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-atsi
-        extract_filter:
-          value_column: ATSI
-        metadata:
-          name: GRIDSTATUS-PJM-ATSI-Load-5min
-          description: 'PJM American Transmission Systems zone load (Ohio)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-comed
-        extract_filter:
-          value_column: COMED
-        metadata:
-          name: GRIDSTATUS-PJM-COMED-Load-5min
-          description: 'PJM Commonwealth Edison zone load (Chicago area)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-dayton
-        extract_filter:
-          value_column: DAYTON
-        metadata:
-          name: GRIDSTATUS-PJM-DAYTON-Load-5min
-          description: 'PJM Dayton Power zone load (Ohio)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-deok
-        extract_filter:
-          value_column: DEOK
-        metadata:
-          name: GRIDSTATUS-PJM-DEOK-Load-5min
-          description: 'PJM Duke Energy Ohio/Kentucky zone load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-dom
-        extract_filter:
-          value_column: DOM
-        metadata:
-          name: GRIDSTATUS-PJM-DOM-Load-5min
-          description: 'PJM Dominion Virginia Power zone load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-dpl
-        extract_filter:
-          value_column: DPL
-        metadata:
-          name: GRIDSTATUS-PJM-DPL-Load-5min
-          description: 'PJM Delmarva Power zone load (Delaware/Maryland)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-duq
-        extract_filter:
-          value_column: DUQ
-        metadata:
-          name: GRIDSTATUS-PJM-DUQ-Load-5min
-          description: 'PJM Duquesne Light zone load (Pittsburgh area)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-ekpc
-        extract_filter:
-          value_column: EKPC
-        metadata:
-          name: GRIDSTATUS-PJM-EKPC-Load-5min
-          description: 'PJM East Kentucky Power Cooperative zone load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-jc
-        extract_filter:
-          value_column: JC
-        metadata:
-          name: GRIDSTATUS-PJM-JC-Load-5min
-          description: 'PJM Jersey Central zone load (New Jersey)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-me
-        extract_filter:
-          value_column: ME
-        metadata:
-          name: GRIDSTATUS-PJM-ME-Load-5min
-          description: 'PJM Metropolitan Edison zone load (Pennsylvania)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-pe
-        extract_filter:
-          value_column: PE
-        metadata:
-          name: GRIDSTATUS-PJM-PE-Load-5min
-          description: 'PJM PECO Energy zone load (Philadelphia area)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-pep
-        extract_filter:
-          value_column: PEP
-        metadata:
-          name: GRIDSTATUS-PJM-PEP-Load-5min
-          description: 'PJM Pepco Holdings zone load (DC/Maryland)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-pl
-        extract_filter:
-          value_column: PL
-        metadata:
-          name: GRIDSTATUS-PJM-PL-Load-5min
-          description: 'PJM PPL Electric zone load (Pennsylvania)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-pn
-        extract_filter:
-          value_column: PN
-        metadata:
-          name: GRIDSTATUS-PJM-PN-Load-5min
-          description: 'PJM Penelec zone load (Pennsylvania)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-ps
-        extract_filter:
-          value_column: PS
-        metadata:
-          name: GRIDSTATUS-PJM-PS-Load-5min
-          description: 'PJM Public Service Electric & Gas zone load (New Jersey)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-reco
-        extract_filter:
-          value_column: RECO
-        metadata:
-          name: GRIDSTATUS-PJM-RECO-Load-5min
-          description: 'PJM Rockland Electric zone load (New Jersey/New York)'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-mid-atlantic
-        extract_filter:
-          value_column: PJM MID ATLANTIC REGION
-        metadata:
-          name: GRIDSTATUS-PJM-MidAtlantic-Load-5min
-          description: 'PJM Mid-Atlantic region total load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-southern
-        extract_filter:
-          value_column: PJM SOUTHERN REGION
-        metadata:
-          name: GRIDSTATUS-PJM-Southern-Load-5min
-          description: 'PJM Southern region total load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-      - endpoint_prefix: gridstatus-pjm-load-western
-        extract_filter:
-          value_column: PJM WESTERN REGION
-        metadata:
-          name: GRIDSTATUS-PJM-Western-Load-5min
-          description: 'PJM Western region total load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-
-  # =====================
-  # ISONE (New England) - Fuel Mix
-  # =====================
-  gridstatus-isone-fuel-mix:
-    module: src.plugins.data_sources.gridstatus_plugin
-    class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
-    request_params:
-      iso: ISONE
-      dataset: fuel_mix
-    timeseries:
-      - endpoint_prefix: gridstatus-isone-natural-gas
-        extract_filter:
-          value_column: Natural Gas
-        metadata:
-          name: GRIDSTATUS-ISONE-NaturalGas-5min
-          description: 'ISO New England natural gas generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-isone-nuclear
-        extract_filter:
-          value_column: Nuclear
-        metadata:
-          name: GRIDSTATUS-ISONE-Nuclear-5min
-          description: 'ISO New England nuclear generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-isone-hydro
-        extract_filter:
-          value_column: Hydro
-        metadata:
-          name: GRIDSTATUS-ISONE-Hydro-5min
-          description: 'ISO New England hydro generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-isone-wind
-        extract_filter:
-          value_column: Wind
-        metadata:
-          name: GRIDSTATUS-ISONE-Wind-5min
-          description: 'ISO New England wind generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-isone-solar
-        extract_filter:
-          value_column: Solar
-        metadata:
-          name: GRIDSTATUS-ISONE-Solar-5min
-          description: 'ISO New England solar generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-isone-oil
-        extract_filter:
-          value_column: Oil
-        metadata:
-          name: GRIDSTATUS-ISONE-Oil-5min
-          description: 'ISO New England oil generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-isone-coal
-        extract_filter:
-          value_column: Coal
-        metadata:
-          name: GRIDSTATUS-ISONE-Coal-5min
-          description: 'ISO New England coal generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-isone-wood
-        extract_filter:
-          value_column: Wood
-        metadata:
-          name: GRIDSTATUS-ISONE-Wood-5min
-          description: 'ISO New England wood/biomass generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-isone-refuse
-        extract_filter:
-          value_column: Refuse
-        metadata:
-          name: GRIDSTATUS-ISONE-Refuse-5min
-          description: 'ISO New England refuse/waste generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-isone-landfill-gas
-        extract_filter:
-          value_column: Landfill Gas
-        metadata:
-          name: GRIDSTATUS-ISONE-LandfillGas-5min
-          description: 'ISO New England landfill gas generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-
-  # =====================
-  # ISONE - Load
-  # =====================
-  gridstatus-isone-load:
-    module: src.plugins.data_sources.gridstatus_plugin
-    class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
-    request_params:
-      iso: ISONE
-      dataset: load
-    timeseries:
-      - endpoint_prefix: gridstatus-isone-load
-        extract_filter:
-          value_column: Load
-        metadata:
-          name: GRIDSTATUS-ISONE-Load-5min
-          description: 'ISO New England total electricity load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-
-  # =====================
-  # SPP (Southwest Power Pool) - Fuel Mix
-  # =====================
-  gridstatus-spp-fuel-mix:
-    module: src.plugins.data_sources.gridstatus_plugin
-    class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
-    request_params:
-      iso: SPP
-      dataset: fuel_mix
-    timeseries:
-      - endpoint_prefix: gridstatus-spp-wind
-        extract_filter:
-          value_column: Wind
-        metadata:
-          name: GRIDSTATUS-SPP-Wind-5min
-          description: 'Southwest Power Pool wind generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-spp-solar
-        extract_filter:
-          value_column: Solar
-        metadata:
-          name: GRIDSTATUS-SPP-Solar-5min
-          description: 'Southwest Power Pool solar generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-spp-coal
-        extract_filter:
-          value_column: Coal
-        metadata:
-          name: GRIDSTATUS-SPP-Coal-5min
-          description: 'Southwest Power Pool coal generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-spp-gas
-        extract_filter:
-          value_column: Gas
-        metadata:
-          name: GRIDSTATUS-SPP-Gas-5min
-          description: 'Southwest Power Pool gas generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-spp-hydro
-        extract_filter:
-          value_column: Hydro
-        metadata:
-          name: GRIDSTATUS-SPP-Hydro-5min
-          description: 'Southwest Power Pool hydro generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-spp-nuclear
-        extract_filter:
-          value_column: Nuclear
-        metadata:
-          name: GRIDSTATUS-SPP-Nuclear-5min
-          description: 'Southwest Power Pool nuclear generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-spp-diesel
-        extract_filter:
-          value_column: Diesel Fuel Oil
-        metadata:
-          name: GRIDSTATUS-SPP-Diesel-5min
-          description: 'Southwest Power Pool diesel fuel oil generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-spp-other
-        extract_filter:
-          value_column: Other
-        metadata:
-          name: GRIDSTATUS-SPP-Other-5min
-          description: 'Southwest Power Pool other generation'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: generation
-
-  # =====================
-  # SPP - Load
-  # =====================
-  gridstatus-spp-load:
-    module: src.plugins.data_sources.gridstatus_plugin
-    class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
-    request_params:
-      iso: SPP
-      dataset: load
-    timeseries:
-      - endpoint_prefix: gridstatus-spp-load
-        extract_filter:
-          value_column: Load
-        metadata:
-          name: GRIDSTATUS-SPP-Load-5min
-          description: 'Southwest Power Pool total electricity load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-
-  # =====================
-  # IESO (Ontario, Canada) - Fuel Mix
-  # =====================
-  gridstatus-ieso-fuel-mix:
-    module: src.plugins.data_sources.gridstatus_plugin
-    class: GridStatusMultiSeriesPlugin
-    schedule: 1 hour
-    request_params:
-      iso: IESO
-      dataset: fuel_mix
-    timeseries:
-      - endpoint_prefix: gridstatus-ieso-nuclear
-        extract_filter:
-          value_column: Nuclear
-        metadata:
-          name: GRIDSTATUS-IESO-Nuclear-1hour
-          description: 'Ontario IESO nuclear generation'
-          frequency: 1 hour
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-ieso-gas
-        extract_filter:
-          value_column: Gas
-        metadata:
-          name: GRIDSTATUS-IESO-Gas-1hour
-          description: 'Ontario IESO gas generation'
-          frequency: 1 hour
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-ieso-hydro
-        extract_filter:
-          value_column: Hydro
-        metadata:
-          name: GRIDSTATUS-IESO-Hydro-1hour
-          description: 'Ontario IESO hydro generation'
-          frequency: 1 hour
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-ieso-wind
-        extract_filter:
-          value_column: Wind
-        metadata:
-          name: GRIDSTATUS-IESO-Wind-1hour
-          description: 'Ontario IESO wind generation'
-          frequency: 1 hour
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-ieso-solar
-        extract_filter:
-          value_column: Solar
-        metadata:
-          name: GRIDSTATUS-IESO-Solar-1hour
-          description: 'Ontario IESO solar generation'
-          frequency: 1 hour
-          unit: MW
-          domain: energy
-          category: generation
-      - endpoint_prefix: gridstatus-ieso-biofuel
-        extract_filter:
-          value_column: Biofuel
-        metadata:
-          name: GRIDSTATUS-IESO-Biofuel-1hour
-          description: 'Ontario IESO biofuel generation'
-          frequency: 1 hour
-          unit: MW
-          domain: energy
-          category: generation
-
-  # =====================
-  # IESO - Load
-  # =====================
-  gridstatus-ieso-load:
-    module: src.plugins.data_sources.gridstatus_plugin
-    class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
-    request_params:
-      iso: IESO
-      dataset: load
-    timeseries:
-      - endpoint_prefix: gridstatus-ieso-load
-        extract_filter:
-          value_column: Load
-        metadata:
-          name: GRIDSTATUS-IESO-Load-5min
-          description: 'Ontario IESO total electricity load'
-          frequency: 5 minutes
-          unit: MW
-          domain: energy
-          category: load
-
-# =====================
-# Available value_column options by ISO/dataset:
-# =====================
-# 
-# CAISO fuel_mix: Solar, Wind, Geothermal, Biomass, Biogas, Small Hydro, 
-#                 Coal, Nuclear, Natural Gas, Large Hydro, Batteries, Imports, Other
-# CAISO load: Load
-# CAISO lmp: LMP, Energy, Congestion, Loss, GHG
-#
-# MISO fuel_mix: Coal, Imports, Natural Gas, Nuclear, Other, Solar, Wind
-# MISO load: Load
-# MISO lmp: LMP, Energy, Congestion, Loss
-#
-# NYISO load (zones): Load, CAPITL, CENTRL, DUNWOD, GENESE, HUD VL, LONGIL, 
-#                     MHK VL, MILLWD, N.Y.C., NORTH, WEST
-# NYISO fuel_mix: Dual Fuel, Hydro, Natural Gas, Nuclear, Other Fossil Fuels, 
-#                 Other Renewables, Wind
-# NYISO lmp: LMP, Energy, Congestion, Loss
-#
-# PJM fuel_mix: Gas, Coal, Nuclear, Hydro, Oil, Solar, Wind, Multiple Fuels, 
-#               Other, Other Renewables, Storage
-# PJM load (zones): Load, AE, AEP, APS, ATSI, BC, COMED, DAYTON, DEOK, DOM, 
-#                   DPL, DUQ, EKPC, JC, ME, PE, PEP, PL, PN, PS, RECO,
-#                   PJM MID ATLANTIC REGION, PJM RTO, PJM SOUTHERN REGION, 
-#                   PJM WESTERN REGION
-# PJM lmp: LMP, Energy, Congestion, Loss
-#
-# ISONE fuel_mix: Coal, Hydro, Natural Gas, Nuclear, Oil, Solar, Wind, 
-#                 Refuse, Wood, Landfill Gas, Other
-# ISONE load: Load
-# ISONE lmp: LMP, Energy, Congestion, Loss
-#
-# SPP fuel_mix: Coal, Gas, Hydro, Nuclear, Solar, Wind, Diesel Fuel Oil, Other
-# SPP load: Load
-# SPP lmp: LMP, Energy, Congestion, Loss
-#
-# IESO fuel_mix: Nuclear, Gas, Hydro, Wind, Solar, Biofuel
-# IESO load: Load
-
-
-
-##############################################################################
-# TIMESERIES - Single time series per plugin (legacy/simple cases)
-# Use this when each API call returns exactly one time series.
-##############################################################################
-
 timeseries:
-  smard-410-de-quarterhour:
+  electricity_biomass_power_plant_generation_BZ_AT_quarterhour_4066:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: SMARD-410-DE-quarterhour
-      description: 'Electricity consumption: Total (grid load)'
+      name: 'SMARD Generation: Biomass AT quarterhour'
+      description: 'SMARD - Generation: Biomass at aggregation level BZ:AT (quarterhour)'
       frequency: 15 minutes
       unit: MWh
       domain: energy
-      category: load
+      category: generation
+      subdomain: electricity
+      subcategory: biomass
+      aggregation_level: BZ
+      aggregation_level_name: AT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
     default_params:
-      filter: 410
-      region: DE
+      filter: 4066
+      region: AT
       resolution: quarterhour
-  smard-4359-de-hour:
+  electricity_biomass_power_plant_generation_BZ_DE-LU_quarterhour_4066:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: SMARD-4359-DE-hour
-      description: 'Electricity consumption: Residual load'
-      frequency: 1 hour
+      name: 'SMARD Generation: Biomass DE-LU quarterhour'
+      description: 'SMARD - Generation: Biomass at aggregation level BZ:DE-LU (quarterhour)'
+      frequency: 15 minutes
       unit: MWh
       domain: energy
-      category: load
+      category: generation
+      subdomain: electricity
+      subcategory: biomass
+      aggregation_level: BZ
+      aggregation_level_name: DE-LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
     default_params:
-      filter: 4359
-      region: DE
-      resolution: hour
-
-  smard-4169-de-quarterhour:
+      filter: 4066
+      region: DE-LU
+      resolution: quarterhour
+  electricity_biomass_power_plant_generation_Country_DE_quarterhour_4066:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: SMARD-4169-DE-quarterhour
-      description: 'Market price: Germany/Luxembourg'
+      name: 'SMARD Generation: Biomass DE quarterhour'
+      description: 'SMARD - Generation: Biomass at aggregation level Country:DE (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: biomass
+      aggregation_level: Country
+      aggregation_level_name: DE
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4066
+      region: DE
+      resolution: quarterhour
+  electricity_biomass_power_plant_generation_Country_LU_quarterhour_4066:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Biomass LU quarterhour'
+      description: 'SMARD - Generation: Biomass at aggregation level Country:LU (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: biomass
+      aggregation_level: Country
+      aggregation_level_name: LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4066
+      region: LU
+      resolution: quarterhour
+  electricity_biomass_power_plant_generation_TSO_50Hertz_quarterhour_4066:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Biomass 50Hertz quarterhour'
+      description: 'SMARD - Generation: Biomass at aggregation level TSO:50Hertz (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: biomass
+      aggregation_level: TSO
+      aggregation_level_name: 50Hertz
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4066
+      region: 50Hertz
+      resolution: quarterhour
+  electricity_biomass_power_plant_generation_TSO_APG_quarterhour_4066:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Biomass APG quarterhour'
+      description: 'SMARD - Generation: Biomass at aggregation level TSO:APG (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: biomass
+      aggregation_level: TSO
+      aggregation_level_name: APG
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4066
+      region: APG
+      resolution: quarterhour
+  electricity_biomass_power_plant_generation_TSO_Amprion_quarterhour_4066:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Biomass Amprion quarterhour'
+      description: 'SMARD - Generation: Biomass at aggregation level TSO:Amprion (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: biomass
+      aggregation_level: TSO
+      aggregation_level_name: Amprion
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4066
+      region: Amprion
+      resolution: quarterhour
+  electricity_biomass_power_plant_generation_TSO_Creos_quarterhour_4066:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Biomass Creos quarterhour'
+      description: 'SMARD - Generation: Biomass at aggregation level TSO:Creos (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: biomass
+      aggregation_level: TSO
+      aggregation_level_name: Creos
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4066
+      region: Creos
+      resolution: quarterhour
+  electricity_biomass_power_plant_generation_TSO_TenneT_quarterhour_4066:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Biomass TenneT quarterhour'
+      description: 'SMARD - Generation: Biomass at aggregation level TSO:TenneT (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: biomass
+      aggregation_level: TSO
+      aggregation_level_name: TenneT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4066
+      region: TenneT
+      resolution: quarterhour
+  electricity_biomass_power_plant_generation_TSO_TransnetBW_quarterhour_4066:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Biomass TransnetBW quarterhour'
+      description: 'SMARD - Generation: Biomass at aggregation level TSO:TransnetBW
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: biomass
+      aggregation_level: TSO
+      aggregation_level_name: TransnetBW
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4066
+      region: TransnetBW
+      resolution: quarterhour
+  electricity_coal_power_plant_generation_BZ_DE-LU_quarterhour_1223:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Lignite DE-LU quarterhour'
+      description: 'SMARD - Generation: Lignite at aggregation level BZ:DE-LU (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: coal
+      aggregation_level: BZ
+      aggregation_level_name: DE-LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1223
+      region: DE-LU
+      resolution: quarterhour
+  electricity_coal_power_plant_generation_Country_DE_quarterhour_1223:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Lignite DE quarterhour'
+      description: 'SMARD - Generation: Lignite at aggregation level Country:DE (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: coal
+      aggregation_level: Country
+      aggregation_level_name: DE
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1223
+      region: DE
+      resolution: quarterhour
+  electricity_coal_power_plant_generation_TSO_50Hertz_quarterhour_1223:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Lignite 50Hertz quarterhour'
+      description: 'SMARD - Generation: Lignite at aggregation level TSO:50Hertz (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: coal
+      aggregation_level: TSO
+      aggregation_level_name: 50Hertz
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1223
+      region: 50Hertz
+      resolution: quarterhour
+  electricity_coal_power_plant_generation_TSO_Amprion_quarterhour_1223:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Lignite Amprion quarterhour'
+      description: 'SMARD - Generation: Lignite at aggregation level TSO:Amprion (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: coal
+      aggregation_level: TSO
+      aggregation_level_name: Amprion
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1223
+      region: Amprion
+      resolution: quarterhour
+  electricity_coal_power_plant_generation_TSO_TenneT_quarterhour_1223:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Lignite TenneT quarterhour'
+      description: 'SMARD - Generation: Lignite at aggregation level TSO:TenneT (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: coal
+      aggregation_level: TSO
+      aggregation_level_name: TenneT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1223
+      region: TenneT
+      resolution: quarterhour
+  electricity_hard_coal_power_plant_generation_BZ_AT_quarterhour_4069:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Hard Coal AT quarterhour'
+      description: 'SMARD - Generation: Hard Coal at aggregation level BZ:AT (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: hard
+      aggregation_level: BZ
+      aggregation_level_name: AT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4069
+      region: AT
+      resolution: quarterhour
+  electricity_hard_coal_power_plant_generation_BZ_DE-LU_quarterhour_4069:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Hard Coal DE-LU quarterhour'
+      description: 'SMARD - Generation: Hard Coal at aggregation level BZ:DE-LU (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: hard
+      aggregation_level: BZ
+      aggregation_level_name: DE-LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4069
+      region: DE-LU
+      resolution: quarterhour
+  electricity_hard_coal_power_plant_generation_Country_DE_quarterhour_4069:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Hard Coal DE quarterhour'
+      description: 'SMARD - Generation: Hard Coal at aggregation level Country:DE
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: hard
+      aggregation_level: Country
+      aggregation_level_name: DE
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4069
+      region: DE
+      resolution: quarterhour
+  electricity_hard_coal_power_plant_generation_TSO_50Hertz_quarterhour_4069:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Hard Coal 50Hertz quarterhour'
+      description: 'SMARD - Generation: Hard Coal at aggregation level TSO:50Hertz
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: hard
+      aggregation_level: TSO
+      aggregation_level_name: 50Hertz
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4069
+      region: 50Hertz
+      resolution: quarterhour
+  electricity_hard_coal_power_plant_generation_TSO_APG_quarterhour_4069:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Hard Coal APG quarterhour'
+      description: 'SMARD - Generation: Hard Coal at aggregation level TSO:APG (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: hard
+      aggregation_level: TSO
+      aggregation_level_name: APG
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4069
+      region: APG
+      resolution: quarterhour
+  electricity_hard_coal_power_plant_generation_TSO_Amprion_quarterhour_4069:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Hard Coal Amprion quarterhour'
+      description: 'SMARD - Generation: Hard Coal at aggregation level TSO:Amprion
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: hard
+      aggregation_level: TSO
+      aggregation_level_name: Amprion
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4069
+      region: Amprion
+      resolution: quarterhour
+  electricity_hard_coal_power_plant_generation_TSO_TenneT_quarterhour_4069:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Hard Coal TenneT quarterhour'
+      description: 'SMARD - Generation: Hard Coal at aggregation level TSO:TenneT
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: hard
+      aggregation_level: TSO
+      aggregation_level_name: TenneT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4069
+      region: TenneT
+      resolution: quarterhour
+  electricity_hard_coal_power_plant_generation_TSO_TransnetBW_quarterhour_4069:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Hard Coal TransnetBW quarterhour'
+      description: 'SMARD - Generation: Hard Coal at aggregation level TSO:TransnetBW
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: hard
+      aggregation_level: TSO
+      aggregation_level_name: TransnetBW
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4069
+      region: TransnetBW
+      resolution: quarterhour
+  electricity_hydropower_power_plant_generation_BZ_AT_quarterhour_1226:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Hydropower AT quarterhour'
+      description: 'SMARD - Generation: Hydropower at aggregation level BZ:AT (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: hydropower
+      aggregation_level: BZ
+      aggregation_level_name: AT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1226
+      region: AT
+      resolution: quarterhour
+  electricity_hydropower_power_plant_generation_BZ_DE-LU_quarterhour_1226:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Hydropower DE-LU quarterhour'
+      description: 'SMARD - Generation: Hydropower at aggregation level BZ:DE-LU (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: hydropower
+      aggregation_level: BZ
+      aggregation_level_name: DE-LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1226
+      region: DE-LU
+      resolution: quarterhour
+  electricity_hydropower_power_plant_generation_Country_DE_quarterhour_1226:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Hydropower DE quarterhour'
+      description: 'SMARD - Generation: Hydropower at aggregation level Country:DE
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: hydropower
+      aggregation_level: Country
+      aggregation_level_name: DE
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1226
+      region: DE
+      resolution: quarterhour
+  electricity_hydropower_power_plant_generation_Country_LU_quarterhour_1226:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Hydropower LU quarterhour'
+      description: 'SMARD - Generation: Hydropower at aggregation level Country:LU
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: hydropower
+      aggregation_level: Country
+      aggregation_level_name: LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1226
+      region: LU
+      resolution: quarterhour
+  electricity_hydropower_power_plant_generation_TSO_50Hertz_quarterhour_1226:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Hydropower 50Hertz quarterhour'
+      description: 'SMARD - Generation: Hydropower at aggregation level TSO:50Hertz
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: hydropower
+      aggregation_level: TSO
+      aggregation_level_name: 50Hertz
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1226
+      region: 50Hertz
+      resolution: quarterhour
+  electricity_hydropower_power_plant_generation_TSO_APG_quarterhour_1226:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Hydropower APG quarterhour'
+      description: 'SMARD - Generation: Hydropower at aggregation level TSO:APG (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: hydropower
+      aggregation_level: TSO
+      aggregation_level_name: APG
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1226
+      region: APG
+      resolution: quarterhour
+  electricity_hydropower_power_plant_generation_TSO_Amprion_quarterhour_1226:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Hydropower Amprion quarterhour'
+      description: 'SMARD - Generation: Hydropower at aggregation level TSO:Amprion
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: hydropower
+      aggregation_level: TSO
+      aggregation_level_name: Amprion
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1226
+      region: Amprion
+      resolution: quarterhour
+  electricity_hydropower_power_plant_generation_TSO_Creos_quarterhour_1226:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Hydropower Creos quarterhour'
+      description: 'SMARD - Generation: Hydropower at aggregation level TSO:Creos
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: hydropower
+      aggregation_level: TSO
+      aggregation_level_name: Creos
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1226
+      region: Creos
+      resolution: quarterhour
+  electricity_hydropower_power_plant_generation_TSO_TenneT_quarterhour_1226:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Hydropower TenneT quarterhour'
+      description: 'SMARD - Generation: Hydropower at aggregation level TSO:TenneT
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: hydropower
+      aggregation_level: TSO
+      aggregation_level_name: TenneT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1226
+      region: TenneT
+      resolution: quarterhour
+  electricity_hydropower_power_plant_generation_TSO_TransnetBW_quarterhour_1226:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Hydropower TransnetBW quarterhour'
+      description: 'SMARD - Generation: Hydropower at aggregation level TSO:TransnetBW
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: hydropower
+      aggregation_level: TSO
+      aggregation_level_name: TransnetBW
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1226
+      region: TransnetBW
+      resolution: quarterhour
+  electricity_market_price_BZ_AT_quarterhour_4170:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Market Price: Austria AT quarterhour'
+      description: 'SMARD - Market Price: Austria at aggregation level BZ:AT (quarterhour)'
       frequency: 15 minutes
       unit: Euro
       domain: energy
       category: price
+      subdomain: electricity
+      subcategory: market
+      aggregation_level: BZ
+      aggregation_level_name: AT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
     default_params:
-      filter: 4169
-      region: DE
+      filter: 4170
+      region: AT
       resolution: quarterhour
-  fingrid-399:
-    module: src.plugins.data_sources.fingrid_plugin
-    class: FingridDataSourcePlugin
+  electricity_market_price_BZ_BE_quarterhour_4996:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
     metadata:
-      name: FINGRID-399-FI-3min
-      description: 'Battery energy storage system charging power based on the real-time measurements in Fingrid''s operation control system. The calculation adds up the measurements when the value shows power going towards the battery. The value is always positive. The data can contain errors due to, for example, measurements freezing.'
-      frequency: 3 minutes
-      unit: MW
-      domain: energy
-      category: load
-    default_params:
-      dataset_id: 399
-#   fingrid-245:
-#     module: src.plugins.data_sources.fingrid_plugin
-#     class: FingridDataSourcePlugin
-#     metadata:
-#       name: Wind power generation forecast - updated every 15 minutes
-#       description: 'Finnish wind power generation forecast for the next 72 hours. The forecast is updated every 15 minutes. The forecast is based on production measurements from individual wind parks, weather forecasts from multiple providers, and data about the location, size and capacity of wind turbines. The forecast takes into account the effect of Day Ahead electricity price on wind power production. The electricity price is included at 15:30 on the previous day. The data before 31.05.2023 is in hourly resolution.'
-#       frequency: 15 minutes
-#       unit: MWh/h
-#       domain: energy
-#       category: price
-#     default_params:
-#       dataset_id: 245
-  # fingrid-251:
-  #   module: src.plugins.data_sources.fingrid_plugin
-  #   class: FingridDataSourcePlugin
-  #   metadata:
-  #     name: Price of the last activated down-regulation bid - real-time data
-  #     description: 'The dataset will no longer be updated after the mFRR EAM went live on 4 March 2025. The price of the last activated down-regulation bid. The price is published real-time when Finland is a separate regulation area. Finland is its own separate regulation area in a situation where the border transmission connections between Finland and the Nordic countries are fully operational, which means that no more balancing energy can be exported to the other Nordic countries. In this case, only Finnish offers can be used. The balancing energy market is used to balance electricity production and consumption in real time. Fingrid orders up- or down-regulation, i.e. balancing energy, from the balancing energy market as needed. Down-regulation can be a reduction in production or an increase in consumption and the price for down-regulation is determined by the cheapest down-regulation offer used. In situations where Fingrid has activated balancing energy for purposes other than balancing, the published price may differ from the final price for balancing energy. The published price is indicative.'
-  #     frequency: 1 hour
-  #     unit: EUR/MWh
-  #     domain: energy
-  #     category: price
-  #   default_params:
-  #     dataset_id: 251
-  fingrid-371:
-    module: src.plugins.data_sources.fingrid_plugin
-    class: FingridDataSourcePlugin
-    metadata:
-      name: FINGRID-371-FI-1minute
-      description: The sum of measured consumption of electric boilers is based on real-time time measurement in Fingrids operational control system. The data is updated every minute.
-      frequency: 1 minute
-      unit: MW
-      domain: energy
-      category: load
-    default_params:
-      dataset_id: 371
-  fingrid-205:
-    module: src.plugins.data_sources.fingrid_plugin
-    class: FingridDataSourcePlugin
-    metadata:
-      name: FINGRID-205-FI-3min
-      description: 'Reserve power plants electrical production is based on the real-time measurements in Fingrid''s operation control system. Estimated small-scale production is added, of which there are no measurements available. The data is updated every 3 minutes.'
-      frequency: 3 minutes
-      unit: MW
-      domain: energy
-      category: generation
-    default_params:
-      dataset_id: 205
-
-  fingrid-260:
-    module: src.plugins.data_sources.fingrid_plugin
-    class: FingridDataSourcePlugin
-    metadata:
-      name: FINGRID-260-FI-quarterhour
-      description: Real-time estimate of the kinetic energy of the Nordic power system calculated by the Nordic transmission system operators. The data is updated every 15 minute. Historical data as of 27.3.2015 available.
+      name: 'SMARD Market Price: Belgium BE quarterhour'
+      description: 'SMARD - Market Price: Belgium at aggregation level BZ:BE (quarterhour)'
       frequency: 15 minutes
-      unit: 1 GWs
-      domain: energy
-      category: transmission
-    default_params:
-      dataset_id: 260
-  fingrid-87:
-    module: src.plugins.data_sources.fingrid_plugin
-    class: FingridDataSourcePlugin
-    metadata:
-      name: FINGRID-87-FI-3min
-      description: 'Power transmission between Northern Sweden (SE1) and Finland (FI) 400kV AC tie line. Data is based on the real-time measurements in Fingrid''s operation control system. Positive sign means transmission from Finland to Northern Sweden (SE1). Negative sign means transmission from Northern Sweden (SE1) to Finland. The data is updated every 3 minutes.'
-      frequency: 3 minutes
-      unit: MW
-      domain: energy
-      category: transmission
-    default_params:
-      dataset_id: 87
-  fingrid-201:
-    module: src.plugins.data_sources.fingrid_plugin
-    class: FingridDataSourcePlugin
-    metadata:
-      name: FINGRID-201-FI-3min
-      description: 'Cogeneration of district heating based on the real-time measurements in Fingrid''s operation control system. The data is updated every 3 minutes. Cogeneration means power plants that produce both electricity and district heating or process steam (combined heat and power, CHP).'
-      frequency: 3 minutes
-      unit: MW
-      domain: energy
-      category: generation
-    default_params:
-      dataset_id: 201
-  fingrid-192:
-    module: src.plugins.data_sources.fingrid_plugin
-    class: FingridDataSourcePlugin
-    metadata:
-      name: FINGRID-192-FI-3min
-      description: 'Electricity production in Finland based on the real-time measurements in Fingrid''s operation control system. The data is updated every 3 minutes.'
-      frequency: 3 minutes
-      unit: MW
-      domain: energy
-      category: generation
-    default_params:
-      dataset_id: 192
-  fingrid-193:
-    module: src.plugins.data_sources.fingrid_plugin
-    class: FingridDataSourcePlugin
-    metadata:
-      name: FINGRID-193-FI-3min
-      description: 'Electricity consumption in Finland is calculated based on production and import/export. The data is updated every 3 minutes. Production information and import/export are based on the real-time measurements in Fingrid''s operation control system.'
-      frequency: 3 minutes
-      unit: MW
-      domain: energy
-      category: load
-    default_params:
-      dataset_id: 193
-  fingrid-402:
-    module: src.plugins.data_sources.fingrid_plugin
-    class: FingridDataSourcePlugin
-    metadata:
-      name: FINGRID-402-FI-quarterhour
-      description: 'Price of direct activation formed in mFRR energy market. The price is published at the time of direct activation, which is between the scheduled activations. The price of direct activation is used for the market time unit following the direct activation and is replaced by the price of the scheduled activation if it is lower. The price published in real-time is not necessarily the final price, as the final price for each market time unit is published 15 minutes after the end of the market time unit. Real-time price publication may be suspended if it compromises the operational security of the power system or the predictability of the power balance.'
-      frequency: 15 minutes
-      unit: €/MWh
+      unit: Euro
       domain: energy
       category: price
+      subdomain: electricity
+      subcategory: market
+      aggregation_level: BZ
+      aggregation_level_name: BE
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
     default_params:
-      dataset_id: 402
-  fingrid-191:
-    module: src.plugins.data_sources.fingrid_plugin
-    class: FingridDataSourcePlugin
+      filter: 4996
+      region: BE
+      resolution: quarterhour
+  electricity_market_price_BZ_CH_quarterhour_259:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
     metadata:
-      name: FINGRID-191-FI-3min
-      description: 'Hydro power production in Finland based on the real-time measurements in Fingrid''s operation control system. The data is updated every 3 minutes.'
-      frequency: 3 minutes
-      unit: MW
-      domain: energy
-      category: generation
-    default_params:
-      dataset_id: 191
-  fingrid-181:
-    module: src.plugins.data_sources.fingrid_plugin
-    class: FingridDataSourcePlugin
-    metadata:
-      name: FINGRID-181-FI-3min
-      description: 'Wind power production based on the real-time measurements in Fingrid''s operation control system. About two percent of the production capacity is estimated as measurements aren''t available. The data is updated every 3 minutes.'
-      frequency: 3 minutes
-      unit: MW
-      domain: energy
-      category: generation
-    default_params:
-      dataset_id: 181
-  fingrid-396:
-    module: src.plugins.data_sources.fingrid_plugin
-    class: FingridDataSourcePlugin
-    metadata:
-      name: FINGRID-396-FI-quarterhour
-      description: 'Estimate of carbon dioxide of produced electricity, which is consumed in Finland. The same data can be found in 3-minute resolution in dataset called “Emission factor for electricity consumed in Finland - real-time data”. The emissions are estimated by taking Finland''s electricity production, electricity import as well as electricity export into account. Emissions from electricity consumed in Finland = (Emissions from electricity production in Finland + Emissions from electricity imported into Finland - Emissions from electricity exported from Finland) / (Electricity output in Finland + Electricity imported into Finland - Electricity exported from Finland). The data is updated every 15 minutes'
+      name: 'SMARD Market Price: Switzerland CH quarterhour'
+      description: 'SMARD - Market Price: Switzerland at aggregation level BZ:CH (quarterhour)'
       frequency: 15 minutes
-      unit: gCO2/kWh
+      unit: Euro
+      domain: energy
+      category: price
+      subdomain: electricity
+      subcategory: market
+      aggregation_level: BZ
+      aggregation_level_name: CH
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 259
+      region: CH
+      resolution: quarterhour
+  electricity_market_price_BZ_CZ_quarterhour_261:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Market Price: Czech Republic CZ quarterhour'
+      description: 'SMARD - Market Price: Czech Republic at aggregation level BZ:CZ
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      category: price
+      subdomain: electricity
+      subcategory: market
+      aggregation_level: BZ
+      aggregation_level_name: CZ
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 261
+      region: CZ
+      resolution: quarterhour
+  electricity_market_price_BZ_DE-LU_neighbors_quarterhour_5078:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Market Price: Neighbors DE/LU DE-LU_neighbors quarterhour'
+      description: 'SMARD - Market Price: Neighbors DE/LU at aggregation level BZ:DE-LU_neighbors
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      category: price
+      subdomain: electricity
+      subcategory: market
+      aggregation_level: BZ
+      aggregation_level_name: DE-LU_neighbors
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 5078
+      region: DE-LU_neighbors
+      resolution: quarterhour
+  electricity_market_price_BZ_DE-LU_quarterhour_4169:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Market Price: Germany/Luxembourg DE-LU quarterhour'
+      description: 'SMARD - Market Price: Germany/Luxembourg at aggregation level
+        BZ:DE-LU (quarterhour)'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      category: price
+      subdomain: electricity
+      subcategory: market
+      aggregation_level: BZ
+      aggregation_level_name: DE-LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4169
+      region: DE-LU
+      resolution: quarterhour
+  electricity_market_price_BZ_DK1_quarterhour_252:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Market Price: Denmark 1 DK1 quarterhour'
+      description: 'SMARD - Market Price: Denmark 1 at aggregation level BZ:DK1 (quarterhour)'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      category: price
+      subdomain: electricity
+      subcategory: market
+      aggregation_level: BZ
+      aggregation_level_name: DK1
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 252
+      region: DK1
+      resolution: quarterhour
+  electricity_market_price_BZ_DK2_quarterhour_253:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Market Price: Denmark 2 DK2 quarterhour'
+      description: 'SMARD - Market Price: Denmark 2 at aggregation level BZ:DK2 (quarterhour)'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      category: price
+      subdomain: electricity
+      subcategory: market
+      aggregation_level: BZ
+      aggregation_level_name: DK2
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 253
+      region: DK2
+      resolution: quarterhour
+  electricity_market_price_BZ_FR_quarterhour_254:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Market Price: France FR quarterhour'
+      description: 'SMARD - Market Price: France at aggregation level BZ:FR (quarterhour)'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      category: price
+      subdomain: electricity
+      subcategory: market
+      aggregation_level: BZ
+      aggregation_level_name: FR
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 254
+      region: FR
+      resolution: quarterhour
+  electricity_market_price_BZ_HU_quarterhour_262:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Market Price: Hungary HU quarterhour'
+      description: 'SMARD - Market Price: Hungary at aggregation level BZ:HU (quarterhour)'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      category: price
+      subdomain: electricity
+      subcategory: market
+      aggregation_level: BZ
+      aggregation_level_name: HU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 262
+      region: HU
+      resolution: quarterhour
+  electricity_market_price_BZ_IT-NORTH_quarterhour_255:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Market Price: Italy (North) IT-NORTH quarterhour'
+      description: 'SMARD - Market Price: Italy (North) at aggregation level BZ:IT-NORTH
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      category: price
+      subdomain: electricity
+      subcategory: market
+      aggregation_level: BZ
+      aggregation_level_name: IT-NORTH
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 255
+      region: IT-NORTH
+      resolution: quarterhour
+  electricity_market_price_BZ_NL_quarterhour_256:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Market Price: Netherlands NL quarterhour'
+      description: 'SMARD - Market Price: Netherlands at aggregation level BZ:NL (quarterhour)'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      category: price
+      subdomain: electricity
+      subcategory: market
+      aggregation_level: BZ
+      aggregation_level_name: NL
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 256
+      region: NL
+      resolution: quarterhour
+  electricity_market_price_BZ_NO2_quarterhour_4997:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Market Price: Norway 2 NO2 quarterhour'
+      description: 'SMARD - Market Price: Norway 2 at aggregation level BZ:NO2 (quarterhour)'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      category: price
+      subdomain: electricity
+      subcategory: market
+      aggregation_level: BZ
+      aggregation_level_name: NO2
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4997
+      region: NO2
+      resolution: quarterhour
+  electricity_market_price_BZ_PL_quarterhour_257:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Market Price: Poland PL quarterhour'
+      description: 'SMARD - Market Price: Poland at aggregation level BZ:PL (quarterhour)'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      category: price
+      subdomain: electricity
+      subcategory: market
+      aggregation_level: BZ
+      aggregation_level_name: PL
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 257
+      region: PL
+      resolution: quarterhour
+  electricity_market_price_BZ_PL_quarterhour_258:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Market Price: Poland PL quarterhour'
+      description: 'SMARD - Market Price: Poland at aggregation level BZ:PL (quarterhour)'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      category: price
+      subdomain: electricity
+      subcategory: market
+      aggregation_level: BZ
+      aggregation_level_name: PL
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 258
+      region: PL
+      resolution: quarterhour
+  electricity_market_price_BZ_SI_quarterhour_260:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Market Price: Slovenia SI quarterhour'
+      description: 'SMARD - Market Price: Slovenia at aggregation level BZ:SI (quarterhour)'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      category: price
+      subdomain: electricity
+      subcategory: market
+      aggregation_level: BZ
+      aggregation_level_name: SI
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 260
+      region: SI
+      resolution: quarterhour
+  electricity_natural_gas_power_plant_generation_BZ_AT_quarterhour_4071:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Natural Gas AT quarterhour'
+      description: 'SMARD - Generation: Natural Gas at aggregation level BZ:AT (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
       domain: energy
       category: generation
+      subdomain: electricity
+      subcategory: natural
+      aggregation_level: BZ
+      aggregation_level_name: AT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
     default_params:
-      dataset_id: 396
-  fingrid-188:
-    module: src.plugins.data_sources.fingrid_plugin
-    class: FingridDataSourcePlugin
+      filter: 4071
+      region: AT
+      resolution: quarterhour
+  electricity_natural_gas_power_plant_generation_BZ_DE-LU_quarterhour_4071:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
     metadata:
-      name: FINGRID-188-FI-3min
-      description: 'Nuclear power production in Finland based on the real-time measurements in Fingrid''s operation control system. The data is updated every 3 minutes.'
-      frequency: 3 minutes
-      unit: MW
+      name: 'SMARD Generation: Natural Gas DE-LU quarterhour'
+      description: 'SMARD - Generation: Natural Gas at aggregation level BZ:DE-LU
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
       domain: energy
       category: generation
+      subdomain: electricity
+      subcategory: natural
+      aggregation_level: BZ
+      aggregation_level_name: DE-LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
     default_params:
-      dataset_id: 188
-  fingrid-202:
-    module: src.plugins.data_sources.fingrid_plugin
-    class: FingridDataSourcePlugin
+      filter: 4071
+      region: DE-LU
+      resolution: quarterhour
+  electricity_natural_gas_power_plant_generation_Country_DE_quarterhour_4071:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
     metadata:
-      name: FINGRID-202-FI-3min
-      description: 'Industrial cogeneration based on the real-time measurements in Fingrid''s operation control system. The data is updated every 3 minutes. Cogeneration means power plants that produce both electricity and district heating or process steam (combined heat and power, CHP).'
-      frequency: 3 minutes
-      unit: MW
+      name: 'SMARD Generation: Natural Gas DE quarterhour'
+      description: 'SMARD - Generation: Natural Gas at aggregation level Country:DE
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
       domain: energy
       category: generation
+      subdomain: electricity
+      subcategory: natural
+      aggregation_level: Country
+      aggregation_level_name: DE
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
     default_params:
-      dataset_id: 202
-  fingrid-398:
-    module: src.plugins.data_sources.fingrid_plugin
-    class: FingridDataSourcePlugin
+      filter: 4071
+      region: DE
+      resolution: quarterhour
+  electricity_natural_gas_power_plant_generation_Country_LU_quarterhour_4071:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
     metadata:
-      name: FINGRID-398-FI-3min
-      description: 'Battery energy storage system discharge power based on the real-time measurements in Fingrid''s operation control system. The calculation adds up the measurements when the value shows power going towards the grid. The value is always positive. The data can contain errors due to, for example, measurements freezing.'
-      frequency: 3 minutes
-      unit: MW
+      name: 'SMARD Generation: Natural Gas LU quarterhour'
+      description: 'SMARD - Generation: Natural Gas at aggregation level Country:LU
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: natural
+      aggregation_level: Country
+      aggregation_level_name: LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4071
+      region: LU
+      resolution: quarterhour
+  electricity_natural_gas_power_plant_generation_TSO_50Hertz_quarterhour_4071:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Natural Gas 50Hertz quarterhour'
+      description: 'SMARD - Generation: Natural Gas at aggregation level TSO:50Hertz
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: natural
+      aggregation_level: TSO
+      aggregation_level_name: 50Hertz
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4071
+      region: 50Hertz
+      resolution: quarterhour
+  electricity_natural_gas_power_plant_generation_TSO_APG_quarterhour_4071:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Natural Gas APG quarterhour'
+      description: 'SMARD - Generation: Natural Gas at aggregation level TSO:APG (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: natural
+      aggregation_level: TSO
+      aggregation_level_name: APG
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4071
+      region: APG
+      resolution: quarterhour
+  electricity_natural_gas_power_plant_generation_TSO_Amprion_quarterhour_4071:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Natural Gas Amprion quarterhour'
+      description: 'SMARD - Generation: Natural Gas at aggregation level TSO:Amprion
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: natural
+      aggregation_level: TSO
+      aggregation_level_name: Amprion
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4071
+      region: Amprion
+      resolution: quarterhour
+  electricity_natural_gas_power_plant_generation_TSO_Creos_quarterhour_4071:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Natural Gas Creos quarterhour'
+      description: 'SMARD - Generation: Natural Gas at aggregation level TSO:Creos
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: natural
+      aggregation_level: TSO
+      aggregation_level_name: Creos
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4071
+      region: Creos
+      resolution: quarterhour
+  electricity_natural_gas_power_plant_generation_TSO_TenneT_quarterhour_4071:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Natural Gas TenneT quarterhour'
+      description: 'SMARD - Generation: Natural Gas at aggregation level TSO:TenneT
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: natural
+      aggregation_level: TSO
+      aggregation_level_name: TenneT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4071
+      region: TenneT
+      resolution: quarterhour
+  electricity_natural_gas_power_plant_generation_TSO_TransnetBW_quarterhour_4071:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Natural Gas TransnetBW quarterhour'
+      description: 'SMARD - Generation: Natural Gas at aggregation level TSO:TransnetBW
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: natural
+      aggregation_level: TSO
+      aggregation_level_name: TransnetBW
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4071
+      region: TransnetBW
+      resolution: quarterhour
+  electricity_net_consumption_BZ_AT_quarterhour_410:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Total (Grid Load) AT quarterhour'
+      description: 'SMARD - Consumption: Total (Grid Load) at aggregation level BZ:AT
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: consumption
+      subdomain: electricity
+      subcategory: net
+      aggregation_level: BZ
+      aggregation_level_name: AT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 410
+      region: AT
+      resolution: quarterhour
+  electricity_net_consumption_BZ_DE-LU_quarterhour_410:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Total (Grid Load) DE-LU quarterhour'
+      description: 'SMARD - Consumption: Total (Grid Load) at aggregation level BZ:DE-LU
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: consumption
+      subdomain: electricity
+      subcategory: net
+      aggregation_level: BZ
+      aggregation_level_name: DE-LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 410
+      region: DE-LU
+      resolution: quarterhour
+  electricity_net_consumption_Country_DE_quarterhour_410:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Total (Grid Load) DE quarterhour'
+      description: 'SMARD - Consumption: Total (Grid Load) at aggregation level Country:DE
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: consumption
+      subdomain: electricity
+      subcategory: net
+      aggregation_level: Country
+      aggregation_level_name: DE
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 410
+      region: DE
+      resolution: quarterhour
+  electricity_net_consumption_Country_LU_quarterhour_410:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Total (Grid Load) LU quarterhour'
+      description: 'SMARD - Consumption: Total (Grid Load) at aggregation level Country:LU
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: consumption
+      subdomain: electricity
+      subcategory: net
+      aggregation_level: Country
+      aggregation_level_name: LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 410
+      region: LU
+      resolution: quarterhour
+  electricity_net_consumption_TSO_50Hertz_quarterhour_410:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Total (Grid Load) 50Hertz quarterhour'
+      description: 'SMARD - Consumption: Total (Grid Load) at aggregation level TSO:50Hertz
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: consumption
+      subdomain: electricity
+      subcategory: net
+      aggregation_level: TSO
+      aggregation_level_name: 50Hertz
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 410
+      region: 50Hertz
+      resolution: quarterhour
+  electricity_net_consumption_TSO_APG_quarterhour_410:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Total (Grid Load) APG quarterhour'
+      description: 'SMARD - Consumption: Total (Grid Load) at aggregation level TSO:APG
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: consumption
+      subdomain: electricity
+      subcategory: net
+      aggregation_level: TSO
+      aggregation_level_name: APG
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 410
+      region: APG
+      resolution: quarterhour
+  electricity_net_consumption_TSO_Amprion_quarterhour_410:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Total (Grid Load) Amprion quarterhour'
+      description: 'SMARD - Consumption: Total (Grid Load) at aggregation level TSO:Amprion
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: consumption
+      subdomain: electricity
+      subcategory: net
+      aggregation_level: TSO
+      aggregation_level_name: Amprion
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 410
+      region: Amprion
+      resolution: quarterhour
+  electricity_net_consumption_TSO_Creos_quarterhour_410:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Total (Grid Load) Creos quarterhour'
+      description: 'SMARD - Consumption: Total (Grid Load) at aggregation level TSO:Creos
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: consumption
+      subdomain: electricity
+      subcategory: net
+      aggregation_level: TSO
+      aggregation_level_name: Creos
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 410
+      region: Creos
+      resolution: quarterhour
+  electricity_net_consumption_TSO_TenneT_quarterhour_410:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Total (Grid Load) TenneT quarterhour'
+      description: 'SMARD - Consumption: Total (Grid Load) at aggregation level TSO:TenneT
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: consumption
+      subdomain: electricity
+      subcategory: net
+      aggregation_level: TSO
+      aggregation_level_name: TenneT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 410
+      region: TenneT
+      resolution: quarterhour
+  electricity_net_consumption_TSO_TransnetBW_quarterhour_410:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Total (Grid Load) TransnetBW quarterhour'
+      description: 'SMARD - Consumption: Total (Grid Load) at aggregation level TSO:TransnetBW
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: consumption
+      subdomain: electricity
+      subcategory: net
+      aggregation_level: TSO
+      aggregation_level_name: TransnetBW
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 410
+      region: TransnetBW
+      resolution: quarterhour
+  electricity_other_conventional_power_plant_generation_BZ_AT_quarterhour_1227:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Other Conventional AT quarterhour'
+      description: 'SMARD - Generation: Other Conventional at aggregation level BZ:AT
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: other
+      aggregation_level: BZ
+      aggregation_level_name: AT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1227
+      region: AT
+      resolution: quarterhour
+  electricity_other_conventional_power_plant_generation_BZ_DE-LU_quarterhour_1227:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Other Conventional DE-LU quarterhour'
+      description: 'SMARD - Generation: Other Conventional at aggregation level BZ:DE-LU
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: other
+      aggregation_level: BZ
+      aggregation_level_name: DE-LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1227
+      region: DE-LU
+      resolution: quarterhour
+  electricity_other_conventional_power_plant_generation_Country_DE_quarterhour_1227:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Other Conventional DE quarterhour'
+      description: 'SMARD - Generation: Other Conventional at aggregation level Country:DE
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: other
+      aggregation_level: Country
+      aggregation_level_name: DE
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1227
+      region: DE
+      resolution: quarterhour
+  electricity_other_conventional_power_plant_generation_Country_LU_quarterhour_1227:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Other Conventional LU quarterhour'
+      description: 'SMARD - Generation: Other Conventional at aggregation level Country:LU
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: other
+      aggregation_level: Country
+      aggregation_level_name: LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1227
+      region: LU
+      resolution: quarterhour
+  electricity_other_conventional_power_plant_generation_TSO_50Hertz_quarterhour_1227:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Other Conventional 50Hertz quarterhour'
+      description: 'SMARD - Generation: Other Conventional at aggregation level TSO:50Hertz
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: other
+      aggregation_level: TSO
+      aggregation_level_name: 50Hertz
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1227
+      region: 50Hertz
+      resolution: quarterhour
+  electricity_other_conventional_power_plant_generation_TSO_APG_quarterhour_1227:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Other Conventional APG quarterhour'
+      description: 'SMARD - Generation: Other Conventional at aggregation level TSO:APG
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: other
+      aggregation_level: TSO
+      aggregation_level_name: APG
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1227
+      region: APG
+      resolution: quarterhour
+  electricity_other_conventional_power_plant_generation_TSO_Amprion_quarterhour_1227:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Other Conventional Amprion quarterhour'
+      description: 'SMARD - Generation: Other Conventional at aggregation level TSO:Amprion
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: other
+      aggregation_level: TSO
+      aggregation_level_name: Amprion
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1227
+      region: Amprion
+      resolution: quarterhour
+  electricity_other_conventional_power_plant_generation_TSO_Creos_quarterhour_1227:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Other Conventional Creos quarterhour'
+      description: 'SMARD - Generation: Other Conventional at aggregation level TSO:Creos
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: other
+      aggregation_level: TSO
+      aggregation_level_name: Creos
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1227
+      region: Creos
+      resolution: quarterhour
+  electricity_other_conventional_power_plant_generation_TSO_TenneT_quarterhour_1227:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Other Conventional TenneT quarterhour'
+      description: 'SMARD - Generation: Other Conventional at aggregation level TSO:TenneT
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: other
+      aggregation_level: TSO
+      aggregation_level_name: TenneT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1227
+      region: TenneT
+      resolution: quarterhour
+  electricity_other_conventional_power_plant_generation_TSO_TransnetBW_quarterhour_1227:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Other Conventional TransnetBW quarterhour'
+      description: 'SMARD - Generation: Other Conventional at aggregation level TSO:TransnetBW
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: other
+      aggregation_level: TSO
+      aggregation_level_name: TransnetBW
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1227
+      region: TransnetBW
+      resolution: quarterhour
+  electricity_other_renewable_power_plant_generation_BZ_AT_quarterhour_1228:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Other Renewables AT quarterhour'
+      description: 'SMARD - Generation: Other Renewables at aggregation level BZ:AT
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: other
+      aggregation_level: BZ
+      aggregation_level_name: AT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1228
+      region: AT
+      resolution: quarterhour
+  electricity_other_renewable_power_plant_generation_BZ_DE-LU_quarterhour_1228:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Other Renewables DE-LU quarterhour'
+      description: 'SMARD - Generation: Other Renewables at aggregation level BZ:DE-LU
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: other
+      aggregation_level: BZ
+      aggregation_level_name: DE-LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1228
+      region: DE-LU
+      resolution: quarterhour
+  electricity_other_renewable_power_plant_generation_Country_DE_quarterhour_1228:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Other Renewables DE quarterhour'
+      description: 'SMARD - Generation: Other Renewables at aggregation level Country:DE
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: other
+      aggregation_level: Country
+      aggregation_level_name: DE
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1228
+      region: DE
+      resolution: quarterhour
+  electricity_other_renewable_power_plant_generation_TSO_50Hertz_quarterhour_1228:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Other Renewables 50Hertz quarterhour'
+      description: 'SMARD - Generation: Other Renewables at aggregation level TSO:50Hertz
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: other
+      aggregation_level: TSO
+      aggregation_level_name: 50Hertz
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1228
+      region: 50Hertz
+      resolution: quarterhour
+  electricity_other_renewable_power_plant_generation_TSO_APG_quarterhour_1228:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Other Renewables APG quarterhour'
+      description: 'SMARD - Generation: Other Renewables at aggregation level TSO:APG
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: other
+      aggregation_level: TSO
+      aggregation_level_name: APG
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1228
+      region: APG
+      resolution: quarterhour
+  electricity_other_renewable_power_plant_generation_TSO_Amprion_quarterhour_1228:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Other Renewables Amprion quarterhour'
+      description: 'SMARD - Generation: Other Renewables at aggregation level TSO:Amprion
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: other
+      aggregation_level: TSO
+      aggregation_level_name: Amprion
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1228
+      region: Amprion
+      resolution: quarterhour
+  electricity_other_renewable_power_plant_generation_TSO_TenneT_quarterhour_1228:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Other Renewables TenneT quarterhour'
+      description: 'SMARD - Generation: Other Renewables at aggregation level TSO:TenneT
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: other
+      aggregation_level: TSO
+      aggregation_level_name: TenneT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1228
+      region: TenneT
+      resolution: quarterhour
+  electricity_other_renewable_power_plant_generation_TSO_TransnetBW_quarterhour_1228:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Other Renewables TransnetBW quarterhour'
+      description: 'SMARD - Generation: Other Renewables at aggregation level TSO:TransnetBW
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: other
+      aggregation_level: TSO
+      aggregation_level_name: TransnetBW
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1228
+      region: TransnetBW
+      resolution: quarterhour
+  electricity_photovoltaic_power_plant_generation_BZ_AT_quarterhour_4068:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Photovoltaic AT quarterhour'
+      description: 'SMARD - Generation: Photovoltaic at aggregation level BZ:AT (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: photovoltaic
+      aggregation_level: BZ
+      aggregation_level_name: AT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4068
+      region: AT
+      resolution: quarterhour
+  electricity_photovoltaic_power_plant_generation_BZ_DE-LU_quarterhour_4068:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Photovoltaic DE-LU quarterhour'
+      description: 'SMARD - Generation: Photovoltaic at aggregation level BZ:DE-LU
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: photovoltaic
+      aggregation_level: BZ
+      aggregation_level_name: DE-LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4068
+      region: DE-LU
+      resolution: quarterhour
+  electricity_photovoltaic_power_plant_generation_Country_DE_quarterhour_4068:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Photovoltaic DE quarterhour'
+      description: 'SMARD - Generation: Photovoltaic at aggregation level Country:DE
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: photovoltaic
+      aggregation_level: Country
+      aggregation_level_name: DE
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4068
+      region: DE
+      resolution: quarterhour
+  electricity_photovoltaic_power_plant_generation_Country_LU_quarterhour_4068:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Photovoltaic LU quarterhour'
+      description: 'SMARD - Generation: Photovoltaic at aggregation level Country:LU
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: photovoltaic
+      aggregation_level: Country
+      aggregation_level_name: LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4068
+      region: LU
+      resolution: quarterhour
+  electricity_photovoltaic_power_plant_generation_TSO_50Hertz_quarterhour_4068:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Photovoltaic 50Hertz quarterhour'
+      description: 'SMARD - Generation: Photovoltaic at aggregation level TSO:50Hertz
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: photovoltaic
+      aggregation_level: TSO
+      aggregation_level_name: 50Hertz
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4068
+      region: 50Hertz
+      resolution: quarterhour
+  electricity_photovoltaic_power_plant_generation_TSO_APG_quarterhour_4068:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Photovoltaic APG quarterhour'
+      description: 'SMARD - Generation: Photovoltaic at aggregation level TSO:APG
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: photovoltaic
+      aggregation_level: TSO
+      aggregation_level_name: APG
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4068
+      region: APG
+      resolution: quarterhour
+  electricity_photovoltaic_power_plant_generation_TSO_Amprion_quarterhour_4068:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Photovoltaic Amprion quarterhour'
+      description: 'SMARD - Generation: Photovoltaic at aggregation level TSO:Amprion
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: photovoltaic
+      aggregation_level: TSO
+      aggregation_level_name: Amprion
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4068
+      region: Amprion
+      resolution: quarterhour
+  electricity_photovoltaic_power_plant_generation_TSO_Creos_quarterhour_4068:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Photovoltaic Creos quarterhour'
+      description: 'SMARD - Generation: Photovoltaic at aggregation level TSO:Creos
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: photovoltaic
+      aggregation_level: TSO
+      aggregation_level_name: Creos
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4068
+      region: Creos
+      resolution: quarterhour
+  electricity_photovoltaic_power_plant_generation_TSO_TenneT_quarterhour_4068:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Photovoltaic TenneT quarterhour'
+      description: 'SMARD - Generation: Photovoltaic at aggregation level TSO:TenneT
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: photovoltaic
+      aggregation_level: TSO
+      aggregation_level_name: TenneT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4068
+      region: TenneT
+      resolution: quarterhour
+  electricity_photovoltaic_power_plant_generation_TSO_TransnetBW_quarterhour_4068:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Photovoltaic TransnetBW quarterhour'
+      description: 'SMARD - Generation: Photovoltaic at aggregation level TSO:TransnetBW
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: photovoltaic
+      aggregation_level: TSO
+      aggregation_level_name: TransnetBW
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4068
+      region: TransnetBW
+      resolution: quarterhour
+  electricity_pumped_storage_consumption_BZ_AT_quarterhour_4387:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Pumped Storage AT quarterhour'
+      description: 'SMARD - Consumption: Pumped Storage at aggregation level BZ:AT
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: consumption
+      subdomain: electricity
+      subcategory: pumped
+      aggregation_level: BZ
+      aggregation_level_name: AT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4387
+      region: AT
+      resolution: quarterhour
+  electricity_pumped_storage_consumption_BZ_DE-LU_quarterhour_4387:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Pumped Storage DE-LU quarterhour'
+      description: 'SMARD - Consumption: Pumped Storage at aggregation level BZ:DE-LU
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: consumption
+      subdomain: electricity
+      subcategory: pumped
+      aggregation_level: BZ
+      aggregation_level_name: DE-LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4387
+      region: DE-LU
+      resolution: quarterhour
+  electricity_pumped_storage_consumption_Country_DE_quarterhour_4387:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Pumped Storage DE quarterhour'
+      description: 'SMARD - Consumption: Pumped Storage at aggregation level Country:DE
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: consumption
+      subdomain: electricity
+      subcategory: pumped
+      aggregation_level: Country
+      aggregation_level_name: DE
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4387
+      region: DE
+      resolution: quarterhour
+  electricity_pumped_storage_consumption_TSO_50Hertz_quarterhour_4387:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Pumped Storage 50Hertz quarterhour'
+      description: 'SMARD - Consumption: Pumped Storage at aggregation level TSO:50Hertz
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: consumption
+      subdomain: electricity
+      subcategory: pumped
+      aggregation_level: TSO
+      aggregation_level_name: 50Hertz
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4387
+      region: 50Hertz
+      resolution: quarterhour
+  electricity_pumped_storage_consumption_TSO_APG_quarterhour_4387:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Pumped Storage APG quarterhour'
+      description: 'SMARD - Consumption: Pumped Storage at aggregation level TSO:APG
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: consumption
+      subdomain: electricity
+      subcategory: pumped
+      aggregation_level: TSO
+      aggregation_level_name: APG
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4387
+      region: APG
+      resolution: quarterhour
+  electricity_pumped_storage_consumption_TSO_Amprion_quarterhour_4387:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Pumped Storage Amprion quarterhour'
+      description: 'SMARD - Consumption: Pumped Storage at aggregation level TSO:Amprion
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: consumption
+      subdomain: electricity
+      subcategory: pumped
+      aggregation_level: TSO
+      aggregation_level_name: Amprion
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4387
+      region: Amprion
+      resolution: quarterhour
+  electricity_pumped_storage_consumption_TSO_TenneT_quarterhour_4387:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Pumped Storage TenneT quarterhour'
+      description: 'SMARD - Consumption: Pumped Storage at aggregation level TSO:TenneT
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: consumption
+      subdomain: electricity
+      subcategory: pumped
+      aggregation_level: TSO
+      aggregation_level_name: TenneT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4387
+      region: TenneT
+      resolution: quarterhour
+  electricity_pumped_storage_consumption_TSO_TransnetBW_quarterhour_4387:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Pumped Storage TransnetBW quarterhour'
+      description: 'SMARD - Consumption: Pumped Storage at aggregation level TSO:TransnetBW
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: consumption
+      subdomain: electricity
+      subcategory: pumped
+      aggregation_level: TSO
+      aggregation_level_name: TransnetBW
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4387
+      region: TransnetBW
+      resolution: quarterhour
+  electricity_pumped_storage_power_plant_generation_BZ_AT_quarterhour_4070:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Pumped Storage AT quarterhour'
+      description: 'SMARD - Generation: Pumped Storage at aggregation level BZ:AT
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: pumped
+      aggregation_level: BZ
+      aggregation_level_name: AT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4070
+      region: AT
+      resolution: quarterhour
+  electricity_pumped_storage_power_plant_generation_BZ_DE-LU_quarterhour_4070:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Pumped Storage DE-LU quarterhour'
+      description: 'SMARD - Generation: Pumped Storage at aggregation level BZ:DE-LU
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: pumped
+      aggregation_level: BZ
+      aggregation_level_name: DE-LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4070
+      region: DE-LU
+      resolution: quarterhour
+  electricity_pumped_storage_power_plant_generation_Country_DE_quarterhour_4070:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Pumped Storage DE quarterhour'
+      description: 'SMARD - Generation: Pumped Storage at aggregation level Country:DE
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: pumped
+      aggregation_level: Country
+      aggregation_level_name: DE
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4070
+      region: DE
+      resolution: quarterhour
+  electricity_pumped_storage_power_plant_generation_TSO_50Hertz_quarterhour_4070:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Pumped Storage 50Hertz quarterhour'
+      description: 'SMARD - Generation: Pumped Storage at aggregation level TSO:50Hertz
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: pumped
+      aggregation_level: TSO
+      aggregation_level_name: 50Hertz
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4070
+      region: 50Hertz
+      resolution: quarterhour
+  electricity_pumped_storage_power_plant_generation_TSO_APG_quarterhour_4070:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Pumped Storage APG quarterhour'
+      description: 'SMARD - Generation: Pumped Storage at aggregation level TSO:APG
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: pumped
+      aggregation_level: TSO
+      aggregation_level_name: APG
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4070
+      region: APG
+      resolution: quarterhour
+  electricity_pumped_storage_power_plant_generation_TSO_Amprion_quarterhour_4070:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Pumped Storage Amprion quarterhour'
+      description: 'SMARD - Generation: Pumped Storage at aggregation level TSO:Amprion
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: pumped
+      aggregation_level: TSO
+      aggregation_level_name: Amprion
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4070
+      region: Amprion
+      resolution: quarterhour
+  electricity_pumped_storage_power_plant_generation_TSO_TenneT_quarterhour_4070:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Pumped Storage TenneT quarterhour'
+      description: 'SMARD - Generation: Pumped Storage at aggregation level TSO:TenneT
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: pumped
+      aggregation_level: TSO
+      aggregation_level_name: TenneT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4070
+      region: TenneT
+      resolution: quarterhour
+  electricity_pumped_storage_power_plant_generation_TSO_TransnetBW_quarterhour_4070:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Pumped Storage TransnetBW quarterhour'
+      description: 'SMARD - Generation: Pumped Storage at aggregation level TSO:TransnetBW
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: pumped
+      aggregation_level: TSO
+      aggregation_level_name: TransnetBW
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4070
+      region: TransnetBW
+      resolution: quarterhour
+  electricity_residual_load_BZ_AT_quarterhour_4359:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Residual Load AT quarterhour'
+      description: 'SMARD - Consumption: Residual Load at aggregation level BZ:AT
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
       domain: energy
       category: load
+      subdomain: electricity
+      subcategory: residual
+      aggregation_level: BZ
+      aggregation_level_name: AT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
     default_params:
-      dataset_id: 398
-  fingrid-395:
-    module: src.plugins.data_sources.fingrid_plugin
-    class: FingridDataSourcePlugin
+      filter: 4359
+      region: AT
+      resolution: quarterhour
+  electricity_residual_load_BZ_DE-LU_quarterhour_4359:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
     metadata:
-      name: FINGRID-395-FI-quarterhour
-      description: 'The data is a 15 minute average that is calculated every 15 minutes. The estimate is based on electricity generation measurements and the used fuel types published by the generators. The electricity generators have been categorised into fuel type groups. Some of the fuel type groups are assumed to generate electricity without burning fossil fuels. The fuel type groups for electricity generation are corresponding with the electricity generation categorisations of the ENTSO-E transparency platform.  Fuel type groups ‘Biomass’, ‘Solar’, ‘Wind Onshore’, ‘Hydro run-off river and poundage’, ‘Other renewable’ and ‘Nuclear’ are considered non-fossil electricity generation.   Power plants categorised as ‘Biomass’ or ‘Other renewable’ may burn some fossil fuels in their electricity generation. Thereby, this dataset is not an official statistic of the non-fossil electricity generation in Finland. Rather it is a near real-time estimation.  The dataset was first published in June 2025. The data is provided retroactively from the beginning of the year 2025.'
+      name: 'SMARD Consumption: Residual Load DE-LU quarterhour'
+      description: 'SMARD - Consumption: Residual Load at aggregation level BZ:DE-LU
+        (quarterhour)'
       frequency: 15 minutes
-      unit: '%'
+      unit: MWh
       domain: energy
       category: load
+      subdomain: electricity
+      subcategory: residual
+      aggregation_level: BZ
+      aggregation_level_name: DE-LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
     default_params:
-      dataset_id: 395
-#   fingrid-32:
-#     module: src.plugins.data_sources.fingrid_plugin
-#     class: FingridDataSourcePlugin
-#     metadata:
-#       name: Commercial transmission of electricity between FI-SE3
-#       description: 'Commercial flow on border FI-SE3. Commercial flow includes sum flow from Day-ahead and Intraday markets. Positive value is (+) export and negative value is (-) import.Data is updated as follows: Previous day once per hour h + 2 min. Current and following day once per hour h + 45 min.'
-#       frequency: 15 minutes
-#       unit: MW
-#       domain: energy
-#       category: transmission
-#     default_params:
-#       dataset_id: 32
-#   fingrid-74:
-#     module: src.plugins.data_sources.fingrid_plugin
-#     class: FingridDataSourcePlugin
-#     metadata:
-#       name: Electricity production in Finland
-#       description: 'Electricity production in Finland are based on Fingrid''s measurements. Minor part of production which is not measured is estimated. The data before 13.06.2023 is in hourly resolution.'
-#       frequency: 15 minutes
-#       unit: MWh/h
-#       domain: energy
-#       category: load
-#     default_params:
-#       dataset_id: 74
+      filter: 4359
+      region: DE-LU
+      resolution: quarterhour
+  electricity_residual_load_Country_DE_quarterhour_4359:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Residual Load DE quarterhour'
+      description: 'SMARD - Consumption: Residual Load at aggregation level Country:DE
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: load
+      subdomain: electricity
+      subcategory: residual
+      aggregation_level: Country
+      aggregation_level_name: DE
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4359
+      region: DE
+      resolution: quarterhour
+  electricity_residual_load_Country_LU_quarterhour_4359:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Residual Load LU quarterhour'
+      description: 'SMARD - Consumption: Residual Load at aggregation level Country:LU
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: load
+      subdomain: electricity
+      subcategory: residual
+      aggregation_level: Country
+      aggregation_level_name: LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4359
+      region: LU
+      resolution: quarterhour
+  electricity_residual_load_TSO_50Hertz_quarterhour_4359:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Residual Load 50Hertz quarterhour'
+      description: 'SMARD - Consumption: Residual Load at aggregation level TSO:50Hertz
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: load
+      subdomain: electricity
+      subcategory: residual
+      aggregation_level: TSO
+      aggregation_level_name: 50Hertz
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4359
+      region: 50Hertz
+      resolution: quarterhour
+  electricity_residual_load_TSO_APG_quarterhour_4359:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Residual Load APG quarterhour'
+      description: 'SMARD - Consumption: Residual Load at aggregation level TSO:APG
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: load
+      subdomain: electricity
+      subcategory: residual
+      aggregation_level: TSO
+      aggregation_level_name: APG
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4359
+      region: APG
+      resolution: quarterhour
+  electricity_residual_load_TSO_Amprion_quarterhour_4359:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Residual Load Amprion quarterhour'
+      description: 'SMARD - Consumption: Residual Load at aggregation level TSO:Amprion
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: load
+      subdomain: electricity
+      subcategory: residual
+      aggregation_level: TSO
+      aggregation_level_name: Amprion
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4359
+      region: Amprion
+      resolution: quarterhour
+  electricity_residual_load_TSO_Creos_quarterhour_4359:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Residual Load Creos quarterhour'
+      description: 'SMARD - Consumption: Residual Load at aggregation level TSO:Creos
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: load
+      subdomain: electricity
+      subcategory: residual
+      aggregation_level: TSO
+      aggregation_level_name: Creos
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4359
+      region: Creos
+      resolution: quarterhour
+  electricity_residual_load_TSO_TenneT_quarterhour_4359:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Residual Load TenneT quarterhour'
+      description: 'SMARD - Consumption: Residual Load at aggregation level TSO:TenneT
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: load
+      subdomain: electricity
+      subcategory: residual
+      aggregation_level: TSO
+      aggregation_level_name: TenneT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4359
+      region: TenneT
+      resolution: quarterhour
+  electricity_residual_load_TSO_TransnetBW_quarterhour_4359:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Consumption: Residual Load TransnetBW quarterhour'
+      description: 'SMARD - Consumption: Residual Load at aggregation level TSO:TransnetBW
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: load
+      subdomain: electricity
+      subcategory: residual
+      aggregation_level: TSO
+      aggregation_level_name: TransnetBW
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4359
+      region: TransnetBW
+      resolution: quarterhour
+  electricity_wind_offshore_power_plant_generation_BZ_DE-LU_quarterhour_1225:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Wind Offshore DE-LU quarterhour'
+      description: 'SMARD - Generation: Wind Offshore at aggregation level BZ:DE-LU
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: wind
+      aggregation_level: BZ
+      aggregation_level_name: DE-LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1225
+      region: DE-LU
+      resolution: quarterhour
+  electricity_wind_offshore_power_plant_generation_Country_DE_quarterhour_1225:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Wind Offshore DE quarterhour'
+      description: 'SMARD - Generation: Wind Offshore at aggregation level Country:DE
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: wind
+      aggregation_level: Country
+      aggregation_level_name: DE
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1225
+      region: DE
+      resolution: quarterhour
+  electricity_wind_offshore_power_plant_generation_TSO_50Hertz_quarterhour_1225:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Wind Offshore 50Hertz quarterhour'
+      description: 'SMARD - Generation: Wind Offshore at aggregation level TSO:50Hertz
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: wind
+      aggregation_level: TSO
+      aggregation_level_name: 50Hertz
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1225
+      region: 50Hertz
+      resolution: quarterhour
+  electricity_wind_offshore_power_plant_generation_TSO_TenneT_quarterhour_1225:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Wind Offshore TenneT quarterhour'
+      description: 'SMARD - Generation: Wind Offshore at aggregation level TSO:TenneT
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: wind
+      aggregation_level: TSO
+      aggregation_level_name: TenneT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 1225
+      region: TenneT
+      resolution: quarterhour
+  electricity_wind_onshore_power_plant_generation_BZ_AT_quarterhour_4067:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Wind Onshore AT quarterhour'
+      description: 'SMARD - Generation: Wind Onshore at aggregation level BZ:AT (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: wind
+      aggregation_level: BZ
+      aggregation_level_name: AT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4067
+      region: AT
+      resolution: quarterhour
+  electricity_wind_onshore_power_plant_generation_BZ_DE-LU_quarterhour_4067:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Wind Onshore DE-LU quarterhour'
+      description: 'SMARD - Generation: Wind Onshore at aggregation level BZ:DE-LU
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: wind
+      aggregation_level: BZ
+      aggregation_level_name: DE-LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4067
+      region: DE-LU
+      resolution: quarterhour
+  electricity_wind_onshore_power_plant_generation_Country_DE_quarterhour_4067:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Wind Onshore DE quarterhour'
+      description: 'SMARD - Generation: Wind Onshore at aggregation level Country:DE
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: wind
+      aggregation_level: Country
+      aggregation_level_name: DE
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4067
+      region: DE
+      resolution: quarterhour
+  electricity_wind_onshore_power_plant_generation_Country_LU_quarterhour_4067:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Wind Onshore LU quarterhour'
+      description: 'SMARD - Generation: Wind Onshore at aggregation level Country:LU
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: wind
+      aggregation_level: Country
+      aggregation_level_name: LU
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4067
+      region: LU
+      resolution: quarterhour
+  electricity_wind_onshore_power_plant_generation_TSO_50Hertz_quarterhour_4067:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Wind Onshore 50Hertz quarterhour'
+      description: 'SMARD - Generation: Wind Onshore at aggregation level TSO:50Hertz
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: wind
+      aggregation_level: TSO
+      aggregation_level_name: 50Hertz
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4067
+      region: 50Hertz
+      resolution: quarterhour
+  electricity_wind_onshore_power_plant_generation_TSO_APG_quarterhour_4067:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Wind Onshore APG quarterhour'
+      description: 'SMARD - Generation: Wind Onshore at aggregation level TSO:APG
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: wind
+      aggregation_level: TSO
+      aggregation_level_name: APG
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4067
+      region: APG
+      resolution: quarterhour
+  electricity_wind_onshore_power_plant_generation_TSO_Amprion_quarterhour_4067:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Wind Onshore Amprion quarterhour'
+      description: 'SMARD - Generation: Wind Onshore at aggregation level TSO:Amprion
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: wind
+      aggregation_level: TSO
+      aggregation_level_name: Amprion
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4067
+      region: Amprion
+      resolution: quarterhour
+  electricity_wind_onshore_power_plant_generation_TSO_Creos_quarterhour_4067:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Wind Onshore Creos quarterhour'
+      description: 'SMARD - Generation: Wind Onshore at aggregation level TSO:Creos
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: wind
+      aggregation_level: TSO
+      aggregation_level_name: Creos
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4067
+      region: Creos
+      resolution: quarterhour
+  electricity_wind_onshore_power_plant_generation_TSO_TenneT_quarterhour_4067:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Wind Onshore TenneT quarterhour'
+      description: 'SMARD - Generation: Wind Onshore at aggregation level TSO:TenneT
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: wind
+      aggregation_level: TSO
+      aggregation_level_name: TenneT
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4067
+      region: TenneT
+      resolution: quarterhour
+  electricity_wind_onshore_power_plant_generation_TSO_TransnetBW_quarterhour_4067:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: 'SMARD Generation: Wind Onshore TransnetBW quarterhour'
+      description: 'SMARD - Generation: Wind Onshore at aggregation level TSO:TransnetBW
+        (quarterhour)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: generation
+      subdomain: electricity
+      subcategory: wind
+      aggregation_level: TSO
+      aggregation_level_name: TransnetBW
+      ts_timezone: Europe/Berlin
+      update_frequency: 3 minutes
+    default_params:
+      filter: 4067
+      region: TransnetBW
+      resolution: quarterhour

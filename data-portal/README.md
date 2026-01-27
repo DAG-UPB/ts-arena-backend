@@ -81,7 +81,7 @@ timeseries:
 
 ```sql
 -- Metadata
-INSERT INTO time_series (name, endpoint_prefix, granularity, ...)
+INSERT INTO time_series (name, unique_id, granularity, ...)
 VALUES ('SMARD-1223-DE-hour', 'smard-1223-de-hour', '1 hour', ...);
 
 -- Data points (upsert)
@@ -159,7 +159,7 @@ class MyMultiSeriesPlugin(MultiSeriesPlugin):
         Fetch data for ALL time series in this group.
         
         Returns:
-            Dict mapping endpoint_prefix -> list of data points
+            Dict mapping unique_id -> list of data points
             {
                 "series-1": [{"ts": "2025-01-01T00:00:00Z", "value": 123.4}, ...],
                 "series-2": [{"ts": "2025-01-01T00:00:00Z", "value": 567.8}, ...],
@@ -173,10 +173,10 @@ class MyMultiSeriesPlugin(MultiSeriesPlugin):
             
             try:
                 data = await self._fetch_dataset(dataset_id, start_date, end_date)
-                result[series_def.endpoint_prefix] = data
+                result[series_def.unique_id] = data
             except Exception as e:
-                logger.error(f"Failed to fetch {series_def.endpoint_prefix}: {e}")
-                result[series_def.endpoint_prefix] = []
+                logger.error(f"Failed to fetch {series_def.unique_id}: {e}")
+                result[series_def.unique_id] = []
         
         return result
 ```
@@ -196,7 +196,7 @@ request_groups:
       page_size: 10000
     
     timeseries:
-      - endpoint_prefix: my-series-electricity
+      - unique_id: my-series-electricity
         extract_filter:
           dataset_id: "elec-001"
         metadata:
@@ -207,7 +207,7 @@ request_groups:
           domain: energy
           category: load
       
-      - endpoint_prefix: my-series-gas
+      - unique_id: my-series-gas
         extract_filter:
           dataset_id: "gas-002"
         metadata:
@@ -237,7 +237,7 @@ self._series_definitions # List[TimeSeriesDefinition]
 self._schedule           # "15 minutes"
 
 # Per TimeSeriesDefinition:
-series_def.endpoint_prefix   # "my-series-electricity"
+series_def.unique_id   # "my-series-electricity"
 series_def.name              # "Electricity Consumption"
 series_def.frequency         # "1 hour"
 series_def.extract_filter    # {"dataset_id": "elec-001"}

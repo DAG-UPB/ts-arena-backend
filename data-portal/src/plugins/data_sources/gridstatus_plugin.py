@@ -20,7 +20,7 @@ request_groups:
       iso: CAISO
       dataset: fuel_mix
     timeseries:
-      - endpoint_prefix: gridstatus-caiso-solar
+      - unique_id: gridstatus-caiso-solar
         extract_filter:
           value_column: Solar
         metadata:
@@ -30,7 +30,7 @@ request_groups:
           unit: MW
           domain: energy
           category: generation
-      - endpoint_prefix: gridstatus-caiso-wind
+      - unique_id: gridstatus-caiso-wind
         extract_filter:
           value_column: Wind
         metadata:
@@ -182,13 +182,13 @@ class GridStatusMultiSeriesPlugin(MultiSeriesPlugin):
         Fetch data for ALL time series in this group with a single API call.
         
         Returns:
-            Dict mapping endpoint_prefix -> list of data points
+            Dict mapping unique_id -> list of data points
         """
         result: Dict[str, List[Dict[str, Any]]] = {}
         
         # Initialize empty results for all series
         for series_def in self._series_definitions:
-            result[series_def.endpoint_prefix] = []
+            result[series_def.unique_id] = []
         
         if not self.client:
             logger.error("GridStatus client not initialized")
@@ -228,13 +228,13 @@ class GridStatusMultiSeriesPlugin(MultiSeriesPlugin):
                 
                 if not value_column:
                     logger.error(
-                        f"No value_column specified in extract_filter for {series_def.endpoint_prefix}"
+                        f"No value_column specified in extract_filter for {series_def.unique_id}"
                     )
                     continue
                 
                 if value_column not in df.columns:
                     logger.error(
-                        f"Column '{value_column}' not found for {series_def.endpoint_prefix}. "
+                        f"Column '{value_column}' not found for {series_def.unique_id}. "
                         f"Available: {list(df.columns)}"
                     )
                     continue
@@ -250,9 +250,9 @@ class GridStatusMultiSeriesPlugin(MultiSeriesPlugin):
                             "value": float(val) if pd.notna(val) else None
                         })
                 
-                result[series_def.endpoint_prefix] = data_points
+                result[series_def.unique_id] = data_points
                 logger.info(
-                    f"Extracted {len(data_points)} points for {series_def.endpoint_prefix}"
+                    f"Extracted {len(data_points)} points for {series_def.unique_id}"
                 )
             
             return result

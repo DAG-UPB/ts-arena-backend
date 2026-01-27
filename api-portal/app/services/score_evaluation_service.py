@@ -1,7 +1,7 @@
 """
 Service for periodic evaluation of challenge scores.
 This service runs independently every 10 minutes to calculate and update scores
-for active and completed challenges.
+for active and completed challenge rounds.
 """
 import logging
 from typing import List, Dict, Any, Optional
@@ -10,7 +10,7 @@ import numpy as np
 from sklearn.metrics import mean_squared_error
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database.challenges.challenge_repository import ChallengeRepository
+from app.database.challenges.challenge_repository import ChallengeRoundRepository
 from app.database.data_portal.time_series_repository import TimeSeriesRepository
 from app.database.forecasts.repository import ForecastRepository
 
@@ -52,93 +52,91 @@ class ScoreEvaluationService:
     Service to periodically evaluate challenge scores.
     
     This service:
-    1. Finds all challenges with status 'active' or 'completed' that have scores with final_evaluation=False
-    2. For each challenge, calculates MASE and RMSE for all model/series combinations
+    1. Finds all challenge rounds with status 'active' or 'completed' that have scores with final_evaluation=False
+    2. For each round, calculates MASE and RMSE for all model/series combinations
     3. Updates the scores in the database
     4. When all data is complete and all forecasts are evaluated, sets final_evaluation=True
     """
 
     def __init__(self, db_session: AsyncSession):
-        self.challenge_repo = ChallengeRepository(db_session)
+        self.round_repo = ChallengeRoundRepository(db_session)
         self.time_series_repo = TimeSeriesRepository(db_session)
         self.forecast_repo = ForecastRepository(db_session)
         self.db_session = db_session
 
     async def get_ids_needing_evaluation(self) -> List[int]:
         """
-        Retrieves the IDs of all challenges that currently require evaluation.
+        Retrieves the IDs of all rounds that currently require evaluation.
         Useful for batch processing where each evaluation runs in its own transaction.
         """
-        challenges_to_evaluate = await self.forecast_repo.get_challenges_needing_evaluation()
-        return [c["challenge_id"] for c in challenges_to_evaluate]
+        return await self.forecast_repo.get_ids_needing_evaluation()
 
     async def evaluate_pending_challenges(self) -> Dict[str, Any]:
         """
         Main entry point for periodic evaluation.
-        Finds and evaluates all challenges that need score updates.
+        Finds and evaluates all rounds that need score updates.
         
         Returns:
             Summary dict with evaluation results
         """
-        challenges_to_evaluate = await self.forecast_repo.get_challenges_needing_evaluation()
+        round_ids = await self.forecast_repo.get_ids_needing_evaluation()
         
-        if not challenges_to_evaluate:
-            logger.info("No challenges need evaluation at this time.")
+        if not round_ids:
+            logger.info("No rounds need evaluation at this time.")
             return {"evaluated": 0, "finalized": 0}
         
-        logger.info(f"Found {len(challenges_to_evaluate)} challenge(s) needing evaluation")
+        logger.info(f"Found {len(round_ids)} round(s) needing evaluation")
         
         evaluated_count = 0
         finalized_count = 0
         
-        for challenge_info in challenges_to_evaluate:
-            challenge_id = challenge_info["challenge_id"]
+        for round_id in round_ids:
             try:
-                finalized = await self.evaluate_challenge_scores(challenge_id)
+                finalized = await self.evaluate_challenge_scores(round_id)
                 evaluated_count += 1
                 if finalized:
                     finalized_count += 1
             except Exception as e:
-                logger.exception(f"Failed to evaluate challenge {challenge_id}: {e}")
+                logger.exception(f"Failed to evaluate round {round_id}: {e}")
         
         logger.info(f"Evaluation complete: {evaluated_count} evaluated, {finalized_count} finalized")
         return {"evaluated": evaluated_count, "finalized": finalized_count}
 
-    async def evaluate_challenge_scores(self, challenge_id: int) -> bool:
+    async def evaluate_challenge_scores(self, round_id: int) -> bool:
         """
-        Evaluate scores for a single challenge.
+        Evaluate scores for a single round.
         
         Args:
-            challenge_id: ID of the challenge to evaluate
+            round_id: ID of the round to evaluate
             
         Returns:
-            True if challenge was finalized (final_evaluation=True), False otherwise
+            True if round was finalized (final_evaluation=True), False otherwise
         """
-        logger.info(f"Evaluating scores for challenge {challenge_id}")
+        logger.info(f"Evaluating scores for round {round_id}")
         
-        # Get challenge details
-        challenge = await self.challenge_repo.get_challenge_by_id(challenge_id)
-        if not challenge:
-            logger.warning(f"Challenge {challenge_id} not found")
+        # Get round details
+        round_info = await self.round_repo.get_by_id(round_id)
+        if not round_info:
+            logger.warning(f"Round {round_id} not found")
             return False
         
         # Get all participants (models that submitted forecasts)
-        participant_model_ids = await self.forecast_repo.get_challenge_participants(challenge_id)
+        participant_model_ids = await self.forecast_repo.get_round_participants(round_id)
         if not participant_model_ids:
-            logger.info(f"No participants found for challenge {challenge_id}")
+            logger.info(f"No participants found for round {round_id}")
             return False
         
-        # Get all series for this challenge
-        series_ids = await self.forecast_repo.get_challenge_series_ids(challenge_id)
+        # Get all series for this round
+        series_ids = await self.forecast_repo.get_round_series_ids(round_id)
         if not series_ids:
-            logger.info(f"No series found for challenge {challenge_id}")
+            logger.info(f"No series found for round {round_id}")
             return False
         
-        logger.info(f"Challenge {challenge_id}: {len(participant_model_ids)} participants, {len(series_ids)} series")
+        logger.info(f"Round {round_id}: {len(participant_model_ids)} participants, {len(series_ids)} series")
         
-        # Determine resolution from challenge frequency
-        resolution = timedelta_to_resolution(challenge.frequency)
-        logger.info(f"Challenge {challenge_id}: using resolution '{resolution}' (frequency: {challenge.frequency})")
+        # Determine resolution from frequency
+        resolution = timedelta_to_resolution(round_info.frequency)
+        logger.info(f"Round {round_id}: using resolution '{resolution}' (frequency: {round_info.frequency})")
         
         # Calculate scores for each model/series combination
         all_scores = []
@@ -147,7 +145,7 @@ class ScoreEvaluationService:
             for series_id in series_ids:
                 try:
                     score_data = await self._calculate_score_for_model_series(
-                        challenge_id=challenge_id,
+                        round_id=round_id,
                         model_id=model_id,
                         series_id=series_id,
                         resolution=resolution
@@ -161,12 +159,12 @@ class ScoreEvaluationService:
                         
                 except Exception as e:
                     logger.exception(
-                        f"Error calculating score for challenge {challenge_id}, "
+                        f"Error calculating score for round {round_id}, "
                         f"model {model_id}, series {series_id}: {e}"
                     )
                     # Add an error entry
                     all_scores.append({
-                        "challenge_id": challenge_id,
+                        "round_id": round_id,
                         "model_id": model_id,
                         "series_id": series_id,
                         "mase": None,
@@ -183,21 +181,21 @@ class ScoreEvaluationService:
         # Bulk insert/update scores
         if all_scores:
             rows_affected = await self.forecast_repo.bulk_insert_scores(all_scores)
-            logger.info(f"Updated {rows_affected} scores for challenge {challenge_id}")
+            logger.info(f"Updated {rows_affected} scores for round {round_id}")
         
-        # Check if we should finalize this challenge
-        should_finalize = await self._should_finalize_challenge(challenge)
+        # Check if we should finalize this round
+        should_finalize = await self._should_finalize_round(round_info)
         
         if should_finalize:
-            await self.forecast_repo.mark_challenge_scores_final(challenge_id)
-            logger.info(f"Challenge {challenge_id} scores marked as final")
+            await self.forecast_repo.mark_scores_final(round_id)
+            logger.info(f"Round {round_id} scores marked as final")
             return True
         
         return False
 
     async def _calculate_score_for_model_series(
         self,
-        challenge_id: int,
+        round_id: int,
         model_id: int,
         series_id: int,
         resolution: str = "1h"
@@ -207,7 +205,7 @@ class ScoreEvaluationService:
         """
         # Get forecast stats (min_ts, max_ts, count)
         forecast_stats = await self.forecast_repo.get_forecast_stats(
-            challenge_id=challenge_id,
+            round_id=round_id,
             model_id=model_id,
             series_id=series_id
         )
@@ -215,7 +213,7 @@ class ScoreEvaluationService:
         if not forecast_stats or forecast_stats['count'] == 0:
             logger.debug(f"No forecasts for model {model_id}, series {series_id}")
             return {
-                "challenge_id": challenge_id,
+                "round_id": round_id,
                 "model_id": model_id,
                 "series_id": series_id,
                 "mase": None,
@@ -233,7 +231,7 @@ class ScoreEvaluationService:
         
         # Get last context point for naive forecast baseline
         # Try to use ChallengeSeriesPseudo first (most accurate definition of context end)
-        pseudo_info = await self.challenge_repo.get_challenge_series_pseudo(challenge_id, series_id)
+        pseudo_info = await self.round_repo.get_series_pseudo(round_id, series_id)
         naive_forecast_value = None
         
         if pseudo_info and pseudo_info.max_ts:
@@ -249,7 +247,7 @@ class ScoreEvaluationService:
         if naive_forecast_value is None:
             logger.warning(f"No context point for series {series_id}")
             return {
-                "challenge_id": challenge_id,
+                "round_id": round_id,
                 "model_id": model_id,
                 "series_id": series_id,
                 "mase": None,
@@ -266,7 +264,7 @@ class ScoreEvaluationService:
         # Get aligned evaluation data directly from DB (INNER JOIN)
         # Uses the appropriate continuous aggregate view based on resolution
         evaluation_data = await self.forecast_repo.get_evaluation_data_by_resolution(
-            challenge_id=challenge_id,
+            round_id=round_id,
             model_id=model_id,
             series_id=series_id,
             resolution=resolution
@@ -278,7 +276,7 @@ class ScoreEvaluationService:
         if evaluated_count == 0:
             logger.debug(f"No overlapping timestamps for model {model_id}, series {series_id}")
             return {
-                "challenge_id": challenge_id,
+                "round_id": round_id,
                 "model_id": model_id,
                 "series_id": series_id,
                 "mase": None,
@@ -323,7 +321,7 @@ class ScoreEvaluationService:
             mase = float('inf')
         
         return {
-            "challenge_id": challenge_id,
+            "round_id": round_id,
             "model_id": model_id,
             "series_id": series_id,
             "mase": mase,
@@ -337,13 +335,13 @@ class ScoreEvaluationService:
             "error_message": None,
         }
 
-    async def _should_finalize_challenge(self, challenge: Any) -> bool:
+    async def _should_finalize_round(self, round_info: Any) -> bool:
         """
-        Determine if a challenge should be marked as final.
+        Determine if a round should be marked as final.
         """
         now = datetime.now(timezone.utc)
         
-        end_time = challenge.end_time
+        end_time = round_info.end_time
         if end_time.tzinfo is None:
             end_time = end_time.replace(tzinfo=timezone.utc)
         else:
@@ -356,6 +354,6 @@ class ScoreEvaluationService:
             return False
         
         # Check if all scores are complete
-        all_complete = await self.forecast_repo.check_all_scores_complete(challenge.id)
+        all_complete = await self.forecast_repo.check_all_scores_complete(round_info.id)
         
         return all_complete

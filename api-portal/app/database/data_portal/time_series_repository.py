@@ -136,14 +136,14 @@ class TimeSeriesRepository:
             logger.error(f"Error retrieving time series with name '{name}': {e}")
             raise
         
-    async def get_time_series_by_endpoint_prefix(self, endpoint_prefix: str) -> Optional[TimeSeriesModel]:
-        """Retrieves a time series by its endpoint prefix."""
+    async def get_time_series_by_unique_id(self, unique_id: str) -> Optional[TimeSeriesModel]:
+        """Retrieves a time series by its unique id."""
         try:
-            query = select(TimeSeriesModel).where(TimeSeriesModel.endpoint_prefix == endpoint_prefix)
+            query = select(TimeSeriesModel).where(TimeSeriesModel.unique_id == unique_id)
             result = await self.session.execute(query)
             return result.scalar_one_or_none()
         except Exception as e:
-            logger.error(f"Error retrieving time series with endpoint prefix '{endpoint_prefix}': {e}")
+            logger.error(f"Error retrieving time series with unique id '{unique_id}': {e}")
             raise
 
     async def get_all_time_series(self, skip: int = 0, limit: int = 100) -> List[TimeSeriesModel]:
@@ -158,9 +158,9 @@ class TimeSeriesRepository:
 
     async def filter_time_series_by_metadata(
         self,
-        domain: Optional[str] = None,
-        category: Optional[str] = None,
-        subcategory: Optional[str] = None,
+        domains: Optional[List[str]] = None,
+        categories: Optional[List[str]] = None,
+        subcategories: Optional[List[str]] = None,
         frequency: Optional[str] = None,
         unit: Optional[str] = None
     ) -> List[int]:
@@ -168,9 +168,9 @@ class TimeSeriesRepository:
         Filters time series by metadata and returns only their series_id.
         
         Args:
-            domain: Filter by domain (from domain_category table)
-            category: Filter by category (from domain_category table)
-            subcategory: Filter by subcategory (from domain_category table)
+            domains: Filter by list of domains (from domain_category table)
+            categories: Filter by list of categories (from domain_category table)
+            subcategories: Filter by list of subcategories (from domain_category table)
             frequency: Filter by frequency
             unit: Filter by unit
             
@@ -185,19 +185,19 @@ class TimeSeriesRepository:
             conditions = []
             
             # If any domain_category filter is specified, we need to join
-            if domain or category or subcategory:
+            if domains or categories or subcategories:
                 # Join with domain_category table using ORM relationship
                 query = query.join(
                     DomainCategoryModel,
                     TimeSeriesModel.domain_category_id == DomainCategoryModel.id
                 )
                 
-                if domain:
-                    conditions.append(DomainCategoryModel.domain == domain)
-                if category:
-                    conditions.append(DomainCategoryModel.category == category)
-                if subcategory:
-                    conditions.append(DomainCategoryModel.subcategory == subcategory)
+                if domains:
+                    conditions.append(DomainCategoryModel.domain.in_(domains))
+                if categories:
+                    conditions.append(DomainCategoryModel.category.in_(categories))
+                if subcategories:
+                    conditions.append(DomainCategoryModel.subcategory.in_(subcategories))
             
             # Add time series specific filters
             if frequency:
@@ -439,7 +439,7 @@ class TimeSeriesRepository:
             # Prepare bulk insert
             values = [
                 {
-                    "challenge_id": challenge_id,
+                    "round_id": challenge_id,
                     "series_id": series_id,
                     "ts": point["ts"],
                     "value": point["value"],
@@ -451,9 +451,9 @@ class TimeSeriesRepository:
             # Use raw SQL for better performance with TimescaleDB
             stmt = text("""
                 INSERT INTO challenges.challenge_context_data 
-                (challenge_id, series_id, ts, value, metadata)
-                VALUES (:challenge_id, :series_id, :ts, :value, :metadata)
-                ON CONFLICT (challenge_id, series_id, ts) DO NOTHING
+                (round_id, series_id, ts, value, metadata)
+                VALUES (:round_id, :series_id, :ts, :value, :metadata)
+                ON CONFLICT (round_id, series_id, ts) DO NOTHING
             """)
             
             for value in values:
@@ -507,9 +507,10 @@ class TimeSeriesRepository:
 
     async def filter_time_series_with_recent_data(
         self,
-        domain: Optional[str] = None,
-        category: Optional[str] = None,
-        subcategory: Optional[str] = None,
+        domains: Optional[List[str]] = None,
+        subdomains: Optional[List[str]] = None,
+        categories: Optional[List[str]] = None,
+        subcategories: Optional[List[str]] = None,
         frequency: Optional[str] = None,
         only_with_recent_data: bool = True
     ) -> List[int]:
@@ -517,9 +518,10 @@ class TimeSeriesRepository:
         Filters time series by metadata and data availability using v_data_availability view.
         
         Args:
-            domain: Filter by domain (None or "mixed" = no filter)
-            category: Filter by category
-            subcategory: Filter by subcategory (None or "mixed" = no filter)
+            domains: Filter by domains (None or empty = no filter)
+            subdomains: Filter by subdomains (None or empty = no filter)
+            categories: Filter by categories
+            subcategories: Filter by subcategories
             frequency: Filter by frequency
             only_with_recent_data: If True, only return series with recent data based on their frequency
             
@@ -533,17 +535,22 @@ class TimeSeriesRepository:
             params = {}
             
             # Add filters only if values are provided (not None or "mixed")
-            if domain and domain != "mixed":
-                query_parts.append("AND domain = :domain")
-                params["domain"] = domain
+            # Add filters only if values are provided
+            if domains and "mixed" not in domains:
+                query_parts.append("AND domain = ANY(:domains)")
+                params["domains"] = domains
             
-            if category and category != "mixed":
-                query_parts.append("AND category = :category")
-                params["category"] = category
+            if subdomains and "mixed" not in subdomains:
+                query_parts.append("AND subdomain = ANY(:subdomains)")
+                params["subdomains"] = subdomains
             
-            if subcategory and subcategory != "mixed":
-                query_parts.append("AND subcategory = :subcategory")
-                params["subcategory"] = subcategory
+            if categories and "mixed" not in categories:
+                query_parts.append("AND category = ANY(:categories)")
+                params["categories"] = categories
+            
+            if subcategories and "mixed" not in subcategories:
+                query_parts.append("AND subcategory = ANY(:subcategories)")
+                params["subcategories"] = subcategories
             
             if frequency:
                 # Convert string to timedelta for asyncpg compatibility
@@ -564,7 +571,8 @@ class TimeSeriesRepository:
             
             logger.info(
                 f"Filtered time series with recent data: "
-                f"domain={domain}, category={category}, subcategory={subcategory}, "
+                f"Filtered time series with recent data: "
+                f"domains={domains}, subdomains={subdomains}, categories={categories}, subcategories={subcategories}, "
                 f"frequency={frequency}, only_recent={only_with_recent_data} -> "
                 f"found {len(series_ids)} series"
             )
@@ -711,13 +719,13 @@ class TimeSeriesRepository:
                     AVG(value) as value_avg,
                     STDDEV(value) as value_std
                 FROM challenges.challenge_context_data
-                WHERE challenge_id = :challenge_id
+                WHERE round_id = :round_id
                   AND series_id = :series_id
             """)
             
             result = await self.session.execute(
                 query, 
-                {"challenge_id": challenge_id, "series_id": series_id}
+                {"round_id": challenge_id, "series_id": series_id}
             )
             row = result.fetchone()
             
@@ -923,7 +931,7 @@ class TimeSeriesRepository:
             # Prepare bulk insert
             values = [
                 {
-                    "challenge_id": challenge_id,
+                    "round_id": challenge_id,
                     "series_id": series_id,
                     "ts": point["ts"],
                     "value": point["value"],
@@ -935,9 +943,9 @@ class TimeSeriesRepository:
             # Use raw SQL for better performance with TimescaleDB
             stmt = text("""
                 INSERT INTO challenges.challenge_context_data 
-                (challenge_id, series_id, ts, value, metadata)
-                VALUES (:challenge_id, :series_id, :ts, :value, :metadata)
-                ON CONFLICT (challenge_id, series_id, ts) DO NOTHING
+                (round_id, series_id, ts, value, metadata)
+                VALUES (:round_id, :series_id, :ts, :value, :metadata)
+                ON CONFLICT (round_id, series_id, ts) DO NOTHING
             """)
             
             for value in values:

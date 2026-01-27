@@ -70,7 +70,7 @@ class TimeSeriesDataRepository:
     async def get_or_create_series_id(
         self, 
         name: str, 
-        endpoint_prefix: str,
+        unique_id: str,
         description: str = "",
         frequency: str = "1 hour",
         unit: str = "",
@@ -84,7 +84,7 @@ class TimeSeriesDataRepository:
         
         Args:
             name: Name of the time series
-            endpoint_prefix: Unique endpoint prefix
+            unique_id: Unique unique id
             description: Description
             frequency: Data frequency as ISO 8601 (e.g., 'PT1H', 'PT15M') or PostgreSQL format (e.g., '1 hour', '15 minutes')
             unit: Unit of measurement
@@ -99,9 +99,9 @@ class TimeSeriesDataRepository:
         domain_category_id = await self._get_or_create_domain_category_id(domain, category, subcategory)
         
         query = text("""
-            SELECT series_id FROM data_portal.time_series WHERE endpoint_prefix = :endpoint_prefix
+            SELECT series_id FROM data_portal.time_series WHERE unique_id = :unique_id
         """)
-        result = await self.session.execute(query, {"endpoint_prefix": endpoint_prefix})
+        result = await self.session.execute(query, {"unique_id": unique_id})
         row = result.fetchone()
         
         if row:
@@ -124,11 +124,11 @@ class TimeSeriesDataRepository:
         insert_query = text("""
             INSERT INTO data_portal.time_series (
                 name, description, frequency, unit, update_frequency, 
-                domain_category_id, endpoint_prefix
+                domain_category_id, unique_id
             )
             VALUES (
                 :name, :description, :frequency, :unit, :update_frequency,
-                :domain_category_id, :endpoint_prefix
+                :domain_category_id, :unique_id
             )
             RETURNING series_id
         """)
@@ -137,7 +137,7 @@ class TimeSeriesDataRepository:
             insert_query,
             {
                 "name": name,
-                "endpoint_prefix": endpoint_prefix,
+                "unique_id": unique_id,
                 "description": description,
                 "frequency": frequency_dt,  # Use timedelta directly
                 "unit": unit,
