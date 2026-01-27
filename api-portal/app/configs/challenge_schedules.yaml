@@ -4,8 +4,10 @@ schedules:
   run_on_startup: false
   params:
     description: 'Day-Ahead Market Price Challenge: 24h horizon, 15-min frequency'
-    domain: energy
-    subdomain: price
+    domains:
+    - energy
+    subdomains:
+    - price
     required_time_series:
     - series_unique_id1
     - series_unique_id2
@@ -23,8 +25,10 @@ schedules:
   run_on_startup: false
   params:
     description: 'Net Load Challenge: 24h horizon, 15-min frequency'
-    domain: energy
-    subdomain: consumption
+    domains:
+    - energy
+    subdomains:
+    - consumption
     required_time_series:
     - series_unique_id1
     - series_unique_id2
@@ -43,8 +47,10 @@ schedules:
   params:
     description: 'Generation Challenge: All generation types, 24h horizon, 15-min
       frequency'
-    domain: energy
-    subdomain: generation
+    domains:
+    - energy
+    subdomains:
+    - generation
     required_time_series:
     - series_unique_id1
     - series_unique_id2
@@ -62,8 +68,10 @@ schedules:
   run_on_startup: false
   params:
     description: 'Day-Ahead Market Price Challenge: 72h horizon, 1h frequency'
-    domain: energy
-    subdomain: price
+    domains:
+    - energy
+    subdomains:
+    - price
     required_time_series:
     - series_unique_id1
     - series_unique_id2
@@ -81,8 +89,10 @@ schedules:
   run_on_startup: false
   params:
     description: 'Net Load Challenge: 72h horizon, 1h frequency'
-    domain: energy
-    subdomain: consumption
+    domains:
+    - energy
+    subdomains:
+    - consumption
     required_time_series:
     - series_unique_id1
     - series_unique_id2
@@ -100,8 +110,10 @@ schedules:
   run_on_startup: false
   params:
     description: 'Generation Challenge: All generation types, 72h horizon, 1h frequency'
-    domain: energy
-    subdomain: generation
+    domains:
+    - energy
+    subdomains:
+    - generation
     required_time_series:
     - series_unique_id1
     - series_unique_id2

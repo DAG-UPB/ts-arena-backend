@@ -10,7 +10,7 @@ from app.api.v1 import users
 from app.api.v1 import organizations
 from app.api.v1 import forecasts
 from app.database.forecasts.models import Forecast, ChallengeScore
-from app.database.challenges.challenge import Challenge, ChallengeParticipant, ChallengeContextData
+from app.database.challenges.challenge import ChallengeRound, ChallengeDefinition, ChallengeParticipant, ChallengeContextData
 from app.database.models.model_info import ModelInfo
 from app.database.auth.user import User
 from app.database.data_portal.time_series import TimeSeriesModel, TimeSeriesDataModel
