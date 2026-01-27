@@ -34,8 +34,8 @@ class ChallengeSchema(BaseModel):
     status: str
     n_time_series: int
     context_length: Optional[Any] = None  # interval type from postgres
-    horizon: Optional[str] = None  # ISO 8601 duration string
-    frequency: Optional[str] = None  # Challenge frequency as ISO 8601 duration
+    horizon: Optional[timedelta] = None  # ISO 8601 duration string
+    frequency: Optional[timedelta] = None  # Challenge frequency as ISO 8601 duration
     created_at: Optional[datetime] = None
     model_count: Optional[int] = 0
     forecast_count: Optional[int] = 0
@@ -43,6 +43,11 @@ class ChallengeSchema(BaseModel):
     domains: Optional[List[str]] = []
     categories: Optional[List[str]] = []
     subcategories: Optional[List[str]] = []
+
+    @field_serializer('frequency', 'horizon')
+    def serialize_durations(self, value: Optional[timedelta], info) -> Optional[str]:
+        """Convert timedelta to ISO 8601 duration format for API responses."""
+        return serialize_timedelta_to_iso8601(value)
 
 
 class ChallengeMetaSchema(BaseModel):
@@ -52,11 +57,16 @@ class ChallengeMetaSchema(BaseModel):
     description: Optional[str] = None
     status: str
     context_length: Optional[Any] = None
-    horizon: Optional[Any] = None
+    horizon: Optional[timedelta] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     registration_start: Optional[datetime] = None
     registration_end: Optional[datetime] = None
+
+    @field_serializer('horizon')
+    def serialize_durations(self, value: Optional[timedelta], info) -> Optional[str]:
+        """Convert timedelta to ISO 8601 duration format for API responses."""
+        return serialize_timedelta_to_iso8601(value)
 
 
 class ChallengeSeriesSchema(BaseModel):

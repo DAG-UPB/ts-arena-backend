@@ -8,11 +8,24 @@ schedules:
     - energy
     subdomains:
     - price
+    categories: []
+    subcategories: []
     required_time_series:
-    - series_unique_id1
-    - series_unique_id2
-    - series_unique_id3
-    # ...
+    - electricity_market_price_BZ_AT_quarterhour_4170
+    - electricity_market_price_BZ_BE_quarterhour_4996
+    - electricity_market_price_BZ_CH_quarterhour_259
+    - electricity_market_price_BZ_CZ_quarterhour_261
+    - electricity_market_price_BZ_DE-LU_neighbors_quarterhour_5078
+    - electricity_market_price_BZ_DE-LU_quarterhour_4169
+    - electricity_market_price_BZ_DK1_quarterhour_252
+    - electricity_market_price_BZ_DK2_quarterhour_253
+    - electricity_market_price_BZ_FR_quarterhour_254
+    - electricity_market_price_BZ_HU_quarterhour_262
+    - electricity_market_price_BZ_IT-NORTH_quarterhour_255
+    - electricity_market_price_BZ_NL_quarterhour_256
+    - electricity_market_price_BZ_NO2_quarterhour_4997
+    - electricity_market_price_BZ_PL_quarterhour_257
+    - electricity_market_price_BZ_SI_quarterhour_260
     n_time_series: 15
     frequency: 15 minutes
     context_length: 1000
@@ -21,7 +34,7 @@ schedules:
     registration_duration: 1 hour
     evaluation_delay: 0 hours
 - id: smard_load_challenge_24h_15min
-  cron: 0 7 * * *
+  cron: 45 7 * * *
   run_on_startup: false
   params:
     description: 'Net Load Challenge: 24h horizon, 15-min frequency'
@@ -29,11 +42,20 @@ schedules:
     - energy
     subdomains:
     - consumption
+    categories:
+    - net
+    subcategories: []
     required_time_series:
-    - series_unique_id1
-    - series_unique_id2
-    - series_unique_id3
-    # ...
+    - electricity_net_consumption_BZ_AT_quarterhour_410
+    - electricity_net_consumption_BZ_DE-LU_quarterhour_410
+    - electricity_net_consumption_Country_DE_quarterhour_410
+    - electricity_net_consumption_Country_LU_quarterhour_410
+    - electricity_net_consumption_TSO_50Hertz_quarterhour_410
+    - electricity_net_consumption_TSO_APG_quarterhour_410
+    - electricity_net_consumption_TSO_Amprion_quarterhour_410
+    - electricity_net_consumption_TSO_Creos_quarterhour_410
+    - electricity_net_consumption_TSO_TenneT_quarterhour_410
+    - electricity_net_consumption_TSO_TransnetBW_quarterhour_410
     n_time_series: 10
     frequency: 15 minutes
     context_length: 1000
@@ -42,7 +64,7 @@ schedules:
     registration_duration: 15 minutes
     evaluation_delay: 0 hours
 - id: smard_generation_challenge_24h_15min
-  cron: 0 19 * * *
+  cron: 45 19 * * *
   run_on_startup: false
   params:
     description: 'Generation Challenge: All generation types, 24h horizon, 15-min
@@ -51,11 +73,37 @@ schedules:
     - energy
     subdomains:
     - generation
+    categories: []
+    subcategories: []
     required_time_series:
-    - series_unique_id1
-    - series_unique_id2
-    - series_unique_id3
-    # ...
+    - electricity_coal_power_plant_generation_TSO_50Hertz_quarterhour_1223
+    - electricity_coal_power_plant_generation_TSO_Amprion_quarterhour_1223
+    - electricity_coal_power_plant_generation_TSO_TenneT_quarterhour_1223
+    - electricity_hard_coal_power_plant_generation_TSO_50Hertz_quarterhour_4069
+    - electricity_hard_coal_power_plant_generation_TSO_APG_quarterhour_4069
+    - electricity_hard_coal_power_plant_generation_TSO_Amprion_quarterhour_4069
+    - electricity_hard_coal_power_plant_generation_TSO_TenneT_quarterhour_4069
+    - electricity_hard_coal_power_plant_generation_TSO_TransnetBW_quarterhour_4069
+    - electricity_natural_gas_power_plant_generation_TSO_50Hertz_quarterhour_4071
+    - electricity_natural_gas_power_plant_generation_TSO_APG_quarterhour_4071
+    - electricity_natural_gas_power_plant_generation_TSO_Amprion_quarterhour_4071
+    - electricity_natural_gas_power_plant_generation_TSO_Creos_quarterhour_4071
+    - electricity_natural_gas_power_plant_generation_TSO_TenneT_quarterhour_4071
+    - electricity_natural_gas_power_plant_generation_TSO_TransnetBW_quarterhour_4071
+    - electricity_photovoltaic_power_plant_generation_TSO_50Hertz_quarterhour_4068
+    - electricity_photovoltaic_power_plant_generation_TSO_APG_quarterhour_4068
+    - electricity_photovoltaic_power_plant_generation_TSO_Amprion_quarterhour_4068
+    - electricity_photovoltaic_power_plant_generation_TSO_Creos_quarterhour_4068
+    - electricity_photovoltaic_power_plant_generation_TSO_TenneT_quarterhour_4068
+    - electricity_photovoltaic_power_plant_generation_TSO_TransnetBW_quarterhour_4068
+    - electricity_wind_offshore_power_plant_generation_TSO_50Hertz_quarterhour_1225
+    - electricity_wind_offshore_power_plant_generation_TSO_TenneT_quarterhour_1225
+    - electricity_wind_onshore_power_plant_generation_TSO_50Hertz_quarterhour_4067
+    - electricity_wind_onshore_power_plant_generation_TSO_APG_quarterhour_4067
+    - electricity_wind_onshore_power_plant_generation_TSO_Amprion_quarterhour_4067
+    - electricity_wind_onshore_power_plant_generation_TSO_Creos_quarterhour_4067
+    - electricity_wind_onshore_power_plant_generation_TSO_TenneT_quarterhour_4067
+    - electricity_wind_onshore_power_plant_generation_TSO_TransnetBW_quarterhour_4067
     n_time_series: 28
     frequency: 15 minutes
     context_length: 1000
@@ -72,11 +120,24 @@ schedules:
     - energy
     subdomains:
     - price
+    categories: []
+    subcategories: []
     required_time_series:
-    - series_unique_id1
-    - series_unique_id2
-    - series_unique_id3
-    # ...
+    - electricity_market_price_BZ_AT_quarterhour_4170
+    - electricity_market_price_BZ_BE_quarterhour_4996
+    - electricity_market_price_BZ_CH_quarterhour_259
+    - electricity_market_price_BZ_CZ_quarterhour_261
+    - electricity_market_price_BZ_DE-LU_neighbors_quarterhour_5078
+    - electricity_market_price_BZ_DE-LU_quarterhour_4169
+    - electricity_market_price_BZ_DK1_quarterhour_252
+    - electricity_market_price_BZ_DK2_quarterhour_253
+    - electricity_market_price_BZ_FR_quarterhour_254
+    - electricity_market_price_BZ_HU_quarterhour_262
+    - electricity_market_price_BZ_IT-NORTH_quarterhour_255
+    - electricity_market_price_BZ_NL_quarterhour_256
+    - electricity_market_price_BZ_NO2_quarterhour_4997
+    - electricity_market_price_BZ_PL_quarterhour_257
+    - electricity_market_price_BZ_SI_quarterhour_260
     n_time_series: 15
     frequency: 1 hour
     context_length: 1000
@@ -93,11 +154,20 @@ schedules:
     - energy
     subdomains:
     - consumption
+    categories:
+    - net
+    subcategories: []
     required_time_series:
-    - series_unique_id1
-    - series_unique_id2
-    - series_unique_id3
-    # ...
+    - electricity_net_consumption_BZ_AT_quarterhour_410
+    - electricity_net_consumption_BZ_DE-LU_quarterhour_410
+    - electricity_net_consumption_Country_DE_quarterhour_410
+    - electricity_net_consumption_Country_LU_quarterhour_410
+    - electricity_net_consumption_TSO_50Hertz_quarterhour_410
+    - electricity_net_consumption_TSO_APG_quarterhour_410
+    - electricity_net_consumption_TSO_Amprion_quarterhour_410
+    - electricity_net_consumption_TSO_Creos_quarterhour_410
+    - electricity_net_consumption_TSO_TenneT_quarterhour_410
+    - electricity_net_consumption_TSO_TransnetBW_quarterhour_410
     n_time_series: 10
     frequency: 1 hour
     context_length: 1000
@@ -114,12 +184,38 @@ schedules:
     - energy
     subdomains:
     - generation
+    categories: []
+    subcategories: []
     required_time_series:
-    - series_unique_id1
-    - series_unique_id2
-    - series_unique_id3
-    # ...
-    n_time_series: 56
+    - electricity_coal_power_plant_generation_TSO_50Hertz_quarterhour_1223
+    - electricity_coal_power_plant_generation_TSO_Amprion_quarterhour_1223
+    - electricity_coal_power_plant_generation_TSO_TenneT_quarterhour_1223
+    - electricity_hard_coal_power_plant_generation_TSO_50Hertz_quarterhour_4069
+    - electricity_hard_coal_power_plant_generation_TSO_APG_quarterhour_4069
+    - electricity_hard_coal_power_plant_generation_TSO_Amprion_quarterhour_4069
+    - electricity_hard_coal_power_plant_generation_TSO_TenneT_quarterhour_4069
+    - electricity_hard_coal_power_plant_generation_TSO_TransnetBW_quarterhour_4069
+    - electricity_natural_gas_power_plant_generation_TSO_50Hertz_quarterhour_4071
+    - electricity_natural_gas_power_plant_generation_TSO_APG_quarterhour_4071
+    - electricity_natural_gas_power_plant_generation_TSO_Amprion_quarterhour_4071
+    - electricity_natural_gas_power_plant_generation_TSO_Creos_quarterhour_4071
+    - electricity_natural_gas_power_plant_generation_TSO_TenneT_quarterhour_4071
+    - electricity_natural_gas_power_plant_generation_TSO_TransnetBW_quarterhour_4071
+    - electricity_photovoltaic_power_plant_generation_TSO_50Hertz_quarterhour_4068
+    - electricity_photovoltaic_power_plant_generation_TSO_APG_quarterhour_4068
+    - electricity_photovoltaic_power_plant_generation_TSO_Amprion_quarterhour_4068
+    - electricity_photovoltaic_power_plant_generation_TSO_Creos_quarterhour_4068
+    - electricity_photovoltaic_power_plant_generation_TSO_TenneT_quarterhour_4068
+    - electricity_photovoltaic_power_plant_generation_TSO_TransnetBW_quarterhour_4068
+    - electricity_wind_offshore_power_plant_generation_TSO_50Hertz_quarterhour_1225
+    - electricity_wind_offshore_power_plant_generation_TSO_TenneT_quarterhour_1225
+    - electricity_wind_onshore_power_plant_generation_TSO_50Hertz_quarterhour_4067
+    - electricity_wind_onshore_power_plant_generation_TSO_APG_quarterhour_4067
+    - electricity_wind_onshore_power_plant_generation_TSO_Amprion_quarterhour_4067
+    - electricity_wind_onshore_power_plant_generation_TSO_Creos_quarterhour_4067
+    - electricity_wind_onshore_power_plant_generation_TSO_TenneT_quarterhour_4067
+    - electricity_wind_onshore_power_plant_generation_TSO_TransnetBW_quarterhour_4067
+    n_time_series: 28
     frequency: 1 hour
     context_length: 1000
     forecast_horizon: 3 days

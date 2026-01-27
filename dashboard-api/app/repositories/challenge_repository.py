@@ -41,7 +41,7 @@ class ChallengeRepository:
         # Use new view with challenge frequency
         query = """
             SELECT 
-                challenge_id,
+                round_id as challenge_id,
                 name,
                 description,
                 registration_start,
@@ -52,7 +52,7 @@ class ChallengeRepository:
                 n_time_series,
                 context_length,
                 horizon,
-                frequency,  -- Challenge frequency
+                frequency,
                 created_at,
                 model_count,
                 forecast_count,
@@ -60,7 +60,7 @@ class ChallengeRepository:
                 domains,
                 categories,
                 subcategories
-            FROM challenges.v_challenges_with_metadata
+            FROM challenges.v_challenge_rounds_with_metadata
             WHERE 1=1
         """
         
@@ -134,15 +134,6 @@ class ChallengeRepository:
             for row in cur.fetchall():
                 row_dict = dict(row)
                 # Convert timedelta to ISO 8601 strings
-                from app.schemas.challenge import serialize_timedelta_to_iso8601
-                
-                # Convert challenge frequency timedelta to ISO 8601
-                if row_dict.get('frequency'):
-                    row_dict['frequency'] = serialize_timedelta_to_iso8601(row_dict['frequency'])
-                
-                # Convert horizon timedelta to ISO 8601
-                if row_dict.get('horizon'):
-                    row_dict['horizon'] = serialize_timedelta_to_iso8601(row_dict['horizon'])
                 
                 results.append(row_dict)
             return results
@@ -163,7 +154,7 @@ class ChallengeRepository:
                     c.end_time,
                     c.registration_start,
                     c.registration_end
-                FROM challenges.v_challenges_with_status c 
+                FROM challenges.v_challenge_rounds_with_status c 
                 WHERE c.id = %s
                 """,
                 (challenge_id,),
@@ -194,12 +185,12 @@ class ChallengeRepository:
                     dc.subcategory
                 FROM challenges.challenge_series_pseudo csp
                 JOIN data_portal.time_series ts ON ts.series_id = csp.series_id
-                JOIN challenges.v_challenges_with_status c ON c.id = csp.challenge_id
+                JOIN challenges.v_challenge_rounds_with_status c ON c.id = csp.round_id
                 JOIN challenges.v_challenge_context_data_range cdr 
-                    ON cdr.challenge_id = csp.challenge_id 
+                    ON cdr.round_id = csp.round_id 
                     AND cdr.series_id = csp.series_id
                 LEFT JOIN data_portal.domain_category dc ON ts.domain_category_id = dc.id
-                WHERE csp.challenge_id = %s
+                WHERE csp.round_id = %s
                 ORDER BY ts.name ASC;
                 """,
                 (challenge_id,),
@@ -223,7 +214,7 @@ class ChallengeRepository:
                     frequency,  -- Challenge frequency (direct, not unnested)
                     horizon,
                     status
-                FROM challenges.v_challenges_with_metadata
+                FROM challenges.v_challenge_rounds_with_metadata
             )
             SELECT
                 -- Aggregate unique values
@@ -290,7 +281,7 @@ class ChallengeRepository:
             cur.execute(
                 """
                 SELECT frequency
-                FROM challenges.challenges
+                FROM challenges.challenge_rounds
                 WHERE id = %s
                 """,
                 (challenge_id,),
