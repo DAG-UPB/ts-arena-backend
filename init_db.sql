@@ -248,7 +248,6 @@ CREATE TABLE challenges.definitions (
     frequency INTERVAL NOT NULL,
     cron_schedule TEXT,                    -- Cron expression: "0 14 * * *"
     n_time_series INTEGER NOT NULL,        -- Target number of time series to include
-    announce_lead INTERVAL,                -- How early to announce before registration
     registration_duration INTERVAL,        -- Duration of registration window
     evaluation_delay INTERVAL DEFAULT '0 hours',
     is_active BOOLEAN NOT NULL DEFAULT TRUE,

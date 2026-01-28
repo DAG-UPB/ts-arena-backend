@@ -30,7 +30,6 @@ schedules:
     frequency: 15 minutes
     context_length: 1000
     forecast_horizon: 1 day
-    announce_lead: 1 day 10 hours
     registration_duration: 1 hour
     evaluation_delay: 0 hours
 - id: smard_load_challenge_24h_15min
@@ -60,7 +59,6 @@ schedules:
     frequency: 15 minutes
     context_length: 1000
     forecast_horizon: 1 day
-    announce_lead: 15 minutes
     registration_duration: 15 minutes
     evaluation_delay: 0 hours
 - id: smard_generation_challenge_24h_15min
@@ -108,7 +106,6 @@ schedules:
     frequency: 15 minutes
     context_length: 1000
     forecast_horizon: 1 day
-    announce_lead: 15 minutes
     registration_duration: 15 minutes
     evaluation_delay: 0 hours
 - id: smard_dam_challenge_72h_1h
@@ -142,7 +139,6 @@ schedules:
     frequency: 1 hour
     context_length: 1000
     forecast_horizon: 3 days
-    announce_lead: 1 day 10 hours
     registration_duration: 1 hour
     evaluation_delay: 0 hours
 - id: smard_load_challenge_72h_1h
@@ -172,7 +168,6 @@ schedules:
     frequency: 1 hour
     context_length: 1000
     forecast_horizon: 3 days
-    announce_lead: 1 hour
     registration_duration: 1 hour
     evaluation_delay: 0 hours
 - id: smard_generation_challenge_72h_1h
@@ -219,6 +214,5 @@ schedules:
     frequency: 1 hour
     context_length: 1000
     forecast_horizon: 3 days
-    announce_lead: 1 hour
     registration_duration: 1 hour
     evaluation_delay: 0 hours

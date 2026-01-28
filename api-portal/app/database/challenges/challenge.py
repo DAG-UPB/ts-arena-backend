@@ -29,7 +29,6 @@ class ChallengeDefinition(Base):
     frequency = Column(Interval, nullable=False)
     cron_schedule = Column(Text)
     n_time_series = Column(Integer, nullable=False)
-    announce_lead = Column(Interval)
     registration_duration = Column(Interval)
     evaluation_delay = Column(Interval)
     is_active = Column(Boolean, default=True, nullable=False)

@@ -50,7 +50,6 @@ class ChallengeDefinitionFull(ChallengeDefinitionBase):
     id: int
     n_time_series: int
     cron_schedule: Optional[str] = None
-    announce_lead: Optional[timedelta] = None
     registration_duration: Optional[timedelta] = None
     evaluation_delay: Optional[timedelta] = None
     is_active: bool
@@ -58,7 +57,7 @@ class ChallengeDefinitionFull(ChallengeDefinitionBase):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    @field_serializer('announce_lead', 'registration_duration', 'evaluation_delay')
+    @field_serializer('registration_duration', 'evaluation_delay')
     def serialize_optional_timedelta(self, td: Optional[timedelta], _info):
         """Serialize optional timedelta as ISO 8601 duration string."""
         if td is None:

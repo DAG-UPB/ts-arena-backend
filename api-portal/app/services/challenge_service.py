@@ -77,7 +77,7 @@ class ChallengeService:
         # Parse all duration fields
         frequency = parse_duration(params["frequency"])
         horizon = parse_duration(params["forecast_horizon"])
-        announce_lead = parse_duration(params.get("announce_lead", "1 hour"))
+        # announce_lead removed
         registration_duration = parse_duration(params.get("registration_duration", "1 hour"))
         evaluation_delay = parse_duration(params.get("evaluation_delay", "0 hours")) if params.get("evaluation_delay") else None
         
@@ -94,7 +94,7 @@ class ChallengeService:
             frequency=frequency,
             cron_schedule=schedule_config.get("cron"),
             n_time_series=params["n_time_series"],
-            announce_lead=announce_lead,
+            # announce_lead is removed
             registration_duration=registration_duration,
             evaluation_delay=evaluation_delay,
             is_active=True,
@@ -156,7 +156,8 @@ class ChallengeService:
         name = f"{definition.name} - {now.strftime('%Y-%m-%d %H:%M:%S UTC')}"
         
         # Calculate timing windows
-        registration_start = now + (definition.announce_lead or timedelta(hours=1))
+        # registration_start is now (immediate registration after creation)
+        registration_start = now
         registration_end = registration_start + (definition.registration_duration or timedelta(hours=1))
         start_time = registration_end
         end_time = start_time + definition.horizon
@@ -228,13 +229,14 @@ class ChallengeService:
                 return timedelta(days=value)
             raise ValueError(f"Unsupported duration unit: {unit}")
 
-        announce_lead = parse_duration(schedule_params.get("announce_lead", "1 minute"))
+        # announce_lead is removed, registration starts effectively immediately or with minimal buffer
+        # announce_lead is removed
         registration_duration = parse_duration(schedule_params.get("registration_duration", "1 hour"))
         horizon_delta = parse_duration(schedule_params["forecast_horizon"])
         frequency_delta = parse_duration(schedule_params["frequency"])
         context_length = schedule_params["context_length"]
 
-        registration_start = now + announce_lead
+        registration_start = now
         registration_end = registration_start + registration_duration
         start_time = registration_end
         end_time = start_time + horizon_delta
