@@ -198,6 +198,16 @@ class GridStatusMultiSeriesPlugin(MultiSeriesPlugin):
           - value_column: Column name to extract (e.g., 'Solar', 'Wind', 'Load')
     """
     
+    ISO_TIMEZONES = {
+        "CAISO": "America/Los_Angeles",
+        "MISO": "America/Chicago",
+        "NYISO": "America/New_York",
+        "PJM": "America/New_York",
+        "ISONE": "America/New_York",
+        "SPP": "America/Chicago",
+        "IESO": "America/Toronto",
+    }
+    
     def __init__(
         self, 
         group_id: str,
@@ -212,6 +222,12 @@ class GridStatusMultiSeriesPlugin(MultiSeriesPlugin):
         self.market = request_params.get("market", None)
         self.api_key = request_params.get("api_key", None)
         self.detected_timezones: Dict[str, str] = {}
+        
+        # Pre-populate timezones from defaults
+        default_tz = self.ISO_TIMEZONES.get(self.iso_name)
+        if default_tz:
+            for series_def in self._series_definitions:
+                self.detected_timezones[series_def.unique_id] = default_tz
         
         try:
             self.client = GridStatusApiClient(self.iso_name, api_key=self.api_key)

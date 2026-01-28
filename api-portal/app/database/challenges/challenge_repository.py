@@ -215,20 +215,7 @@ class ChallengeRoundRepository:
         await self.session.refresh(round_obj)
         return round_obj
 
-    async def update_preparation_params(
-        self, 
-        round_id: int, 
-        preparation_params: Dict[str, Any]
-    ) -> Optional[ChallengeRound]:
-        """Updates the preparation_params for a challenge round."""
-        round_obj = await self.get_by_id(round_id)
-        if not round_obj:
-            return None
-        
-        round_obj.preparation_params = preparation_params
-        await self.session.commit()
-        await self.session.refresh(round_obj)
-        return round_obj
+
 
     async def get_context_data(
         self,
@@ -335,6 +322,3 @@ class ChallengeRoundRepository:
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-
-# Backwards compatibility alias (will be removed in future)
-ChallengeRepository = ChallengeRoundRepository

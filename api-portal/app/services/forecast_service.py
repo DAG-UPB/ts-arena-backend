@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 
 from app.database.forecasts.repository import ForecastRepository
-from app.database.challenges.challenge_repository import ChallengeRepository
+from app.database.challenges.challenge_repository import ChallengeRoundRepository
 from app.database.models.model_info_repository import ModelInfoRepository
 from app.schemas.forecast import ForecastUploadRequest, ForecastUploadResponse
 from app.database.challenges.challenge import ChallengeSeriesPseudo
@@ -22,7 +22,7 @@ class ForecastService:
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
         self.forecast_repo = ForecastRepository(db_session)
-        self.challenge_repo = ChallengeRepository(db_session)
+        self.challenge_repo = ChallengeRoundRepository(db_session)
         self.model_repo = ModelInfoRepository(db_session)
 
     async def upload_forecasts(

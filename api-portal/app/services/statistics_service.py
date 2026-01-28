@@ -5,7 +5,7 @@ from statistics import mean
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database.repositories.challenge_repository import ChallengeRepository
+from app.database.challenges.challenge_repository import ChallengeRoundRepository
 from app.database.repositories.forecast_repository import ForecastRepository
 from app.database.repositories.statistics_repository import StatisticsRepository
 
@@ -25,7 +25,7 @@ class StatisticsService:
     """
 
     def __init__(self, db_session: AsyncSession):
-        self.challenge_repo = ChallengeRepository(db_session)
+        self.challenge_repo = ChallengeRoundRepository(db_session)
         self.forecast_repo = ForecastRepository(db_session)
         self.statistics_repo = StatisticsRepository(db_session)
 

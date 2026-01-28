@@ -325,9 +325,8 @@ CREATE TABLE challenges.rounds (
     registration_end TIMESTAMPTZ,
     start_time TIMESTAMPTZ,
     end_time TIMESTAMPTZ,
-    preparation_params JSONB,              -- Snapshot of parameters at creation time
-    status TEXT DEFAULT 'announced' 
-        CHECK (status IN ('announced', 'registration', 'active', 'completed', 'cancelled')),
+    status TEXT DEFAULT 'registration' 
+        CHECK (status IN ('registration', 'active', 'completed', 'cancelled')),
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -458,7 +457,6 @@ SELECT
     cd.categories AS definition_categories,
     cd.subcategories AS definition_subcategories,
     CASE
-        WHEN NOW() < cr.registration_start THEN 'announced'
         WHEN NOW() >= cr.registration_start AND NOW() <= cr.registration_end THEN 'registration'
         WHEN NOW() > cr.registration_end AND NOW() <= cr.end_time THEN 'active'
         WHEN NOW() > cr.end_time THEN 'completed'
@@ -509,7 +507,6 @@ SELECT
     cr.updated_at,
     -- Computed status from timestamps (fallback)
     CASE
-        WHEN NOW() < cr.registration_start THEN 'announced'
         WHEN NOW() >= cr.registration_start AND NOW() <= cr.registration_end THEN 'registration'
         WHEN NOW() > cr.registration_end AND NOW() <= cr.end_time THEN 'active'
         WHEN NOW() > cr.end_time THEN 'completed'

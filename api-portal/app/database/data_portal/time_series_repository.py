@@ -411,7 +411,7 @@ class TimeSeriesRepository:
         self,
         series_id: int,
         series_name: str,
-        challenge_id: int,
+        round_id: int,
         n: int,
         before_time: Optional[datetime] = None
     ) -> int:
@@ -421,7 +421,7 @@ class TimeSeriesRepository:
         Args:
             series_id: Source time series ID
             series_name: Series identifier for challenge context data
-            challenge_id: Target challenge ID
+            round_id: Target round ID
             n: Number of points to copy
             before_time: Optional cutoff time (exclusive)
             
@@ -439,7 +439,7 @@ class TimeSeriesRepository:
             # Prepare bulk insert
             values = [
                 {
-                    "round_id": challenge_id,
+                    "round_id": round_id,
                     "series_id": series_id,
                     "ts": point["ts"],
                     "value": point["value"],
@@ -461,17 +461,17 @@ class TimeSeriesRepository:
             
             await self.session.flush()
             
-            logger.info(f"Copied {len(data)} points from series_id {series_id} to challenge {challenge_id}")
+            logger.info(f"Copied {len(data)} points from series_id {series_id} to round {round_id}")
             return len(data)
         except Exception as e:
-            logger.error(f"Error copying data to challenge: {e}")
+            logger.error(f"Error copying data to round: {e}")
             raise
 
 
     async def copy_bulk_to_challenge(
         self,
         series_mapping: Dict[int, str],
-        challenge_id: int,
+        round_id: int,
         n: int,
         before_time: Optional[datetime] = None
     ) -> Dict[int, int]:
@@ -481,7 +481,7 @@ class TimeSeriesRepository:
         
         Args:
             series_mapping: Dictionary mapping series_id to series_name for challenge
-            challenge_id: Target challenge ID
+            round_id: Target round ID
             n: Number of last points to copy per series (mutually exclusive with time range)            
         Returns:
             Dictionary mapping series_id to number of rows copied
@@ -492,13 +492,13 @@ class TimeSeriesRepository:
             # Copy last N points for each series
             for series_id, series_name in series_mapping.items():
                 count = await self.copy_last_n_to_challenge(
-                    series_id, series_name, challenge_id, n, before_time
+                    series_id, series_name, round_id, n, before_time
                 )
                 result[series_id] = count
-            logger.info(f"Bulk copied data to challenge {challenge_id}: {sum(result.values())} total points")
+            logger.info(f"Bulk copied data to round {round_id}: {sum(result.values())} total points")
             return result
         except Exception as e:
-            logger.error(f"Error in bulk copy to challenge: {e}")
+            logger.error(f"Error in bulk copy to round: {e}")
             raise
 
     # ==========================================================================
@@ -697,14 +697,14 @@ class TimeSeriesRepository:
 
     async def calculate_context_data_stats(
         self,
-        challenge_id: int,
+        round_id: int,
         series_id: int
     ) -> Optional[Dict[str, Any]]:
         """
         Calculates statistics for context data of a specific series in a challenge.
         
         Args:
-            challenge_id: The challenge ID
+            round_id: The round ID
             series_id: The series ID
             
         Returns:
@@ -725,7 +725,7 @@ class TimeSeriesRepository:
             
             result = await self.session.execute(
                 query, 
-                {"round_id": challenge_id, "series_id": series_id}
+                {"round_id": round_id, "series_id": series_id}
             )
             row = result.fetchone()
             
@@ -737,7 +737,7 @@ class TimeSeriesRepository:
                     "value_std": float(row.value_std) if row.value_std is not None else None
                 }
             
-            logger.warning(f"No context data found for challenge {challenge_id}, series {series_id}")
+            logger.warning(f"No context data found for round {round_id}, series {series_id}")
             return None
             
         except Exception as e:
@@ -901,7 +901,7 @@ class TimeSeriesRepository:
         self,
         series_id: int,
         series_name: str,
-        challenge_id: int,
+        round_id: int,
         n: int,
         resolution: str,
         before_time: Optional[datetime] = None
@@ -912,7 +912,7 @@ class TimeSeriesRepository:
         Args:
             series_id: Source time series ID
             series_name: Series identifier for challenge context data
-            challenge_id: Target challenge ID
+            round_id: Target round ID
             n: Number of points to copy
             resolution: Target resolution ("15min", "1h", "1d")
             before_time: Optional cutoff time (exclusive)
@@ -931,7 +931,7 @@ class TimeSeriesRepository:
             # Prepare bulk insert
             values = [
                 {
-                    "round_id": challenge_id,
+                    "round_id": round_id,
                     "series_id": series_id,
                     "ts": point["ts"],
                     "value": point["value"],
@@ -942,7 +942,7 @@ class TimeSeriesRepository:
             
             # Use raw SQL for better performance with TimescaleDB
             stmt = text("""
-                INSERT INTO challenges.challenge_context_data 
+                INSERT INTO challenges.context_data 
                 (round_id, series_id, ts, value, metadata)
                 VALUES (:round_id, :series_id, :ts, :value, :metadata)
                 ON CONFLICT (round_id, series_id, ts) DO NOTHING
@@ -953,16 +953,16 @@ class TimeSeriesRepository:
             
             await self.session.flush()
             
-            logger.info(f"Copied {len(data)} points from series_id {series_id} (resolution: {resolution}) to challenge {challenge_id}")
+            logger.info(f"Copied {len(data)} points from series_id {series_id} (resolution: {resolution}) to round {round_id}")
             return len(data)
         except Exception as e:
-            logger.error(f"Error copying data to challenge with resolution {resolution}: {e}")
+            logger.error(f"Error copying data to round with resolution {resolution}: {e}")
             raise
 
     async def copy_bulk_to_challenge_by_resolution(
         self,
         series_mapping: Dict[int, str],
-        challenge_id: int,
+        round_id: int,
         n: int,
         resolution: str,
         before_time: Optional[datetime] = None
@@ -972,7 +972,7 @@ class TimeSeriesRepository:
         
         Args:
             series_mapping: Dictionary mapping series_id to series_name for challenge
-            challenge_id: Target challenge ID
+            round_id: Target round ID
             n: Number of last points to copy per series
             resolution: Target resolution ("15min", "1h", "1d")
             before_time: Optional cutoff time (exclusive)
@@ -986,12 +986,12 @@ class TimeSeriesRepository:
             # Copy last N points for each series from the resolution view
             for series_id, series_name in series_mapping.items():
                 count = await self.copy_last_n_to_challenge_by_resolution(
-                    series_id, series_name, challenge_id, n, resolution, before_time
+                    series_id, series_name, round_id, n, resolution, before_time
                 )
                 result[series_id] = count
             
-            logger.info(f"Bulk copied data (resolution: {resolution}) to challenge {challenge_id}: {sum(result.values())} total points")
+            logger.info(f"Bulk copied data (resolution: {resolution}) to round {round_id}: {sum(result.values())} total points")
             return result
         except Exception as e:
-            logger.error(f"Error in bulk copy to challenge with resolution {resolution}: {e}")
+            logger.error(f"Error in bulk copy to round with resolution {resolution}: {e}")
             raise

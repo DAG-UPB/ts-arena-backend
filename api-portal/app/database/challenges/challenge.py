@@ -79,8 +79,7 @@ class ChallengeRound(Base):
     registration_end = Column(DateTime(timezone=True))
     start_time = Column(DateTime(timezone=True))
     end_time = Column(DateTime(timezone=True))
-    preparation_params = Column(JSONB, nullable=True)
-    status = Column(Text, default='announced')
+    status = Column(Text, default='registration')
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -157,7 +156,6 @@ class VChallengeRoundWithStatus(Base):
     registration_end = Column(DateTime(timezone=True))
     start_time = Column(DateTime(timezone=True))
     end_time = Column(DateTime(timezone=True))
-    preparation_params = Column(JSONB, nullable=True)
     status = Column(String)
     created_at = Column(DateTime(timezone=True))
     updated_at = Column(DateTime(timezone=True))

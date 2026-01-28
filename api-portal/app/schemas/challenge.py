@@ -7,7 +7,6 @@ import isodate
 
 class RoundStatus(str, Enum):
     """Possible statuses for a challenge round."""
-    ANNOUNCED = "announced"
     REGISTRATION = "registration"
     ACTIVE = "active"
     COMPLETED = "completed"
@@ -102,7 +101,6 @@ class ChallengeRoundCreate(BaseModel):
     registration_end: Optional[datetime] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
-    preparation_params: Optional[Dict[str, Any]] = None
 
 
 class ChallengeRoundResponse(ChallengeRoundBase):
@@ -126,7 +124,6 @@ class ChallengeRoundFull(ChallengeRoundBase):
     id: int
     definition_id: Optional[int] = None
     status: RoundStatus
-    preparation_params: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -153,32 +150,3 @@ class ChallengeContextData(BaseModel):
             return None
         return isodate.duration_isoformat(frequency)
 
-
-# ==========================================================
-# Legacy aliases for backwards compatibility
-# ==========================================================
-
-class ChallengeBase(ChallengeRoundBase):
-    """Deprecated: Use ChallengeRoundBase instead."""
-    pass
-
-
-class ChallengeCreate(ChallengeRoundCreate):
-    """Deprecated: Use ChallengeRoundCreate instead."""
-    pass
-
-
-class Challenge(ChallengeRoundFull):
-    """Deprecated: Use ChallengeRoundFull instead."""
-    pass
-
-
-class ChallengeStatus(BaseModel):
-    """Status info for a challenge round."""
-    round_id: int = Field(..., alias="challenge_id")  # Backwards compat
-    round_name: str = Field(..., alias="challenge_name")
-    status: str
-    start_date: datetime
-    end_date: datetime
-    
-    model_config = ConfigDict(populate_by_name=True)

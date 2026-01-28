@@ -4,7 +4,7 @@ from app.api.dependencies import get_challenge_service, require_auth
 from app.schemas.challenge import (
     ChallengeDefinitionResponse,
     ChallengeRoundResponse,
-    ChallengeRoundFull,
+    ChallengeRoundResponse,
     ChallengeContextData,
     RoundStatus,
 )
@@ -57,7 +57,7 @@ async def get_challenge_definition(
 async def get_challenge_rounds(
     status: Optional[List[str]] = Query(
         None, 
-        description="Filter by round status (announced, registration, active, completed)"
+        description="Filter by round status (registration, active, completed)"
     ),
     definition_id: Optional[int] = Query(
         None,
@@ -69,11 +69,11 @@ async def get_challenge_rounds(
     """
     Get challenge rounds.
     
-    By default returns rounds with status 'announced' or 'registration'.
+    By default returns rounds with status 'registration'.
     Participants can see what rounds are open for joining.
     """
     if status is None:
-        status = ["announced", "registration"]
+        status = ["registration"]
     
     rounds = await challenge_service.list_rounds(
         statuses=status,
@@ -127,63 +127,4 @@ async def get_round_context_data(
         raise HTTPException(status_code=404, detail=str(e))
 
 
-# ==========================================================
-# Legacy endpoints for backwards compatibility
-# ==========================================================
 
-@router.get("/{challenge_id}", response_model=ChallengeRoundFull, deprecated=True)
-async def get_challenge(
-    challenge_id: int,
-    current_user: dict = Depends(require_auth),
-    challenge_service: ChallengeService = Depends(get_challenge_service)
-):
-    """
-    DEPRECATED: Use /rounds/{round_id} instead.
-    
-    Get a single challenge (round) by its ID.
-    """
-    round_obj = await challenge_service.get_round(challenge_id)
-    if not round_obj:
-        raise HTTPException(status_code=404, detail="Challenge not found")
-    return round_obj
-
-
-@router.get("/", response_model=List[ChallengeRoundFull], deprecated=True)
-async def get_all_challenges(
-    status: Optional[List[str]] = Query(None),
-    current_user: dict = Depends(require_auth),
-    challenge_service: ChallengeService = Depends(get_challenge_service)
-):
-    """
-    DEPRECATED: Use /rounds instead.
-    
-    Get all challenges (rounds).
-    """
-    if status is None:
-        status = ["registration", "announced"]
-    
-    rounds = await challenge_service.list_rounds(statuses=status)
-    
-    return sorted(
-        rounds,
-        key=lambda c: c.registration_start if c.registration_start else datetime.max.replace(tzinfo=timezone.utc)
-    )
-
-
-@router.get(
-    "/{challenge_id}/context-data",
-    response_model=List[ChallengeContextData],
-    deprecated=True
-)
-async def get_context_data_bulk(
-    challenge_id: int,
-    current_user: dict = Depends(require_auth),
-    challenge_service: ChallengeService = Depends(get_challenge_service)
-):
-    """
-    DEPRECATED: Use /rounds/{round_id}/context-data instead.
-    """
-    try:
-        return await challenge_service.get_context_data_bulk(challenge_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))

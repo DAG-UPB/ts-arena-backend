@@ -34,16 +34,12 @@ def job_error_handler(func: Callable[..., Awaitable[None]]) -> Callable[..., Awa
 
 
 @job_error_handler
-async def create_challenge_from_schedule_job(schedule_params: Dict[str, Any]) -> None:
+async def create_round_from_definition_job(definition_id: int) -> None:
     """
-    Job function that creates a new challenge based on schedule parameters.
-    It delegates the actual business logic to the ChallengeService.
-    
-    Args:
-        schedule_params: Dictionary containing challenge creation parameters
+    Job function that creates a new challenge round from a definition.
     """
     logger = logging.getLogger("challenge-scheduler")
-    logger.info(f"Starting job to create challenge from schedule with params: {schedule_params}")
+    logger.info(f"Starting job to create round from definition {definition_id}")
 
     try:
         # Get scheduler from global reference
@@ -52,41 +48,35 @@ async def create_challenge_from_schedule_job(schedule_params: Dict[str, Any]) ->
         async with SessionLocal() as session:
             challenge_service = ChallengeService(session, scheduler=scheduler)
             
-            challenge = await challenge_service.create_challenge_from_schedule(schedule_params)
+            round_obj = await challenge_service.create_round_from_definition(definition_id)
             
-            logger.info(f"Successfully created challenge '{challenge.name}' (ID: {challenge.id})")
+            logger.info(f"Successfully created round '{round_obj.name}' (ID: {round_obj.id})")
 
     except Exception as e:
-        logger.exception(f"Failed to create challenge from schedule. Error: {e}")
+        logger.exception(f"Failed to create round from definition {definition_id}. Error: {e}")
         raise  # Re-raise to let decorator handle it
 
 
 @job_error_handler
-async def prepare_challenge_context_data_job(
-    challenge_id: int, 
-    preparation_params: Dict[str, Any]
-) -> None:
+async def prepare_round_context_data_job(round_id: int) -> None:
     """
-    Job function that prepares context data for a challenge.
+    Job function that prepares context data for a challenge round.
     Called at registration_start to ensure fresh data.
     """
     logger = logging.getLogger("challenge-scheduler")
-    logger.info(f"Starting context data preparation for challenge {challenge_id}")
+    logger.info(f"Starting context data preparation for round {round_id}")
 
     try:
         async with SessionLocal() as session:
             challenge_service = ChallengeService(session)
             
-            # Execute preparation with stored parameters
-            await challenge_service._execute_context_data_preparation(
-                challenge_id=challenge_id,
-                preparation_params=preparation_params
-            )
+            # Execute preparation
+            await challenge_service.prepare_round_context_data(round_id)
             
-            logger.info(f"Successfully prepared context data for challenge {challenge_id}")
+            logger.info(f"Successfully prepared context data for round {round_id}")
 
     except Exception as e:
-        logger.exception(f"Failed to prepare context data for challenge {challenge_id}: {e}")
+        logger.exception(f"Failed to prepare context data for round {round_id}: {e}")
         raise  # Re-raise to let decorator handle it
 
 
@@ -105,39 +95,39 @@ async def periodic_challenge_scores_evaluation_job() -> None:
     logger.info("Starting periodic challenge scores evaluation job")
     
     try:
-        # Step 1: Retrieve list of Challenges to evaluate (Short-lived Session)
-        challenge_ids = []
+        # Step 1: Retrieve list of Rounds to evaluate (Short-lived Session)
+        round_ids = []
         async with SessionLocal() as session:
             score_service = ScoreEvaluationService(session)
-            challenge_ids = await score_service.get_ids_needing_evaluation()
+            round_ids = await score_service.get_ids_needing_evaluation()
         
-        if not challenge_ids:
-            logger.info("No challenges need evaluation at this time.")
+        if not round_ids:
+            logger.info("No rounds need evaluation at this time.")
             return
 
-        logger.info(f"Found {len(challenge_ids)} challenge(s) needing evaluation")
+        logger.info(f"Found {len(round_ids)} round(s) needing evaluation")
 
-        # Step 2: Process each challenge in a separate session
+        # Step 2: Process each round in a separate session
         # This prevents one long transaction from holding a DB connection for the entire batch.
         evaluated_count = 0
         finalized_count = 0
 
-        for challenge_id in challenge_ids:
+        for round_id in round_ids:
             try:
                 async with SessionLocal() as session:
                     score_service = ScoreEvaluationService(session)
-                    finalized = await score_service.evaluate_challenge_scores(challenge_id)
+                    finalized = await score_service.evaluate_challenge_scores(round_id)
                     
                     evaluated_count += 1
                     if finalized:
                         finalized_count += 1
             except Exception as e:
-                logger.error(f"Error evaluating challenge {challenge_id} in periodic job: {e}")
-                # Continue with next challenge instead of failing the whole job
+                logger.error(f"Error evaluating round {round_id} in periodic job: {e}")
+                # Continue with next round instead of failing the whole job
 
         logger.info(
             f"Periodic evaluation complete: "
-            f"{evaluated_count} challenges evaluated, "
+            f"{evaluated_count} rounds evaluated, "
             f"{finalized_count} finalized"
         )
     

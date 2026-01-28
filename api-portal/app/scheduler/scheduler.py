@@ -10,8 +10,8 @@ from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.cron import CronTrigger
 
 from app.scheduler.jobs import (
-    create_challenge_from_schedule_job,
-    prepare_challenge_context_data_job,
+    create_round_from_definition_job,
+    prepare_round_context_data_job,
     periodic_challenge_scores_evaluation_job
 )
 import yaml
@@ -179,7 +179,6 @@ class ChallengeScheduler:
         for schedule_config in schedules:
             schedule_id = schedule_config.get("id")
             cron_expression = schedule_config.get("cron")
-            params = schedule_config.get("params", {})
             run_on_startup = schedule_config.get("run_on_startup", False)
 
             if not schedule_id or not cron_expression:
@@ -188,23 +187,21 @@ class ChallengeScheduler:
 
             try:
                 # Sync definition to database
+                definition_id = None
                 async with SessionLocal() as session:
                     challenge_service = ChallengeService(session, scheduler=self)
-                    await challenge_service.sync_definition_from_yaml(schedule_id, schedule_config)
+                    definition_id = await challenge_service.sync_definition_from_yaml(schedule_id, schedule_config)
                 
-                # Create a deep copy of params to avoid shared references between jobs
-                import copy
-                params_copy = copy.deepcopy(params)
+                if definition_id is None:
+                    self.logger.error(f"Failed to sync definition for {schedule_id}")
+                    continue
                 
-                # Log the parameters being used for this schedule
-                self.logger.info(f"Schedule '{schedule_id}' params: {params_copy}")
-                
-                # Upsert cron job - scheduler is accessed via global reference in job
+                # Upsert cron job
                 await self.scheduler.add_schedule(
-                    func_or_task_id=create_challenge_from_schedule_job,
+                    func_or_task_id=create_round_from_definition_job,
                     trigger=CronTrigger.from_crontab(cron_expression, timezone=timezone.utc),
                     id=schedule_id,
-                    args=[params_copy],
+                    args=[definition_id],
                     coalesce=CoalescePolicy.latest,
                     misfire_grace_time=600,
                 )
@@ -212,8 +209,7 @@ class ChallengeScheduler:
 
                 if run_on_startup:
                     self.logger.info(f"Executing '{schedule_id}' on startup.")
-                    # Running the job directly for startup execution with a fresh copy
-                    await create_challenge_from_schedule_job(copy.deepcopy(params))
+                    await create_round_from_definition_job(definition_id)
 
             except Exception as e:
                 self.logger.exception(f"Failed to add or run schedule '{schedule_id}': {e}")
@@ -221,9 +217,8 @@ class ChallengeScheduler:
     async def schedule_challenge_preparation(
         self,
         job_id: str,
-        challenge_id: int,
-        run_at: datetime,
-        preparation_params: dict[str, Any]
+        round_id: int,
+        run_at: datetime
     ) -> None:
         """
         Schedules a one-time job to prepare challenge context data.
@@ -236,20 +231,20 @@ class ChallengeScheduler:
                 run_at = run_at.replace(tzinfo=timezone.utc)
             
             await self.scheduler.add_schedule(
-                func_or_task_id=prepare_challenge_context_data_job,
+                func_or_task_id=prepare_round_context_data_job,
                 trigger=DateTrigger(run_at),
                 id=job_id,
-                args=[challenge_id, preparation_params],
+                args=[round_id],
                 coalesce=CoalescePolicy.latest,
                 misfire_grace_time=300,  # 5 minute grace period
             )
             self.logger.info(
                 f"Scheduled challenge preparation job '{job_id}' "
-                f"for challenge {challenge_id} at {run_at}"
+                f"for challenge {round_id} at {run_at}"
             )
         except Exception as e:
             self.logger.exception(
-                f"Failed to schedule preparation job for challenge {challenge_id}: {e}"
+                f"Failed to schedule preparation job for challenge {round_id}: {e}"
             )
             raise
 

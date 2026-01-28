@@ -3,6 +3,7 @@ from typing import List, Optional, Any, Dict
 import random
 import logging
 import hashlib
+import isodate
 
 from app.schemas.challenge import (
     ChallengeRoundCreate, ChallengeRoundFull, ChallengeRoundResponse, 
@@ -23,7 +24,11 @@ class ChallengeService:
     FREQUENCY_TO_RESOLUTION = {
         "15 minutes": "15min",
         "1 hour": "1h",
+        "PT1H": "1h",
         "1 day": "1d",
+        "P1D": "1d",
+        "15 minutes": "15min",
+        "PT15M": "15min",
     }
     
     def __init__(self, db_session, scheduler=None):
@@ -34,8 +39,7 @@ class ChallengeService:
         self.db_session = db_session
         self.scheduler = scheduler
         
-        # Backwards compatibility alias
-        self.repository = self.round_repository
+
     
     def _frequency_to_resolution(self, frequency: str) -> str:
         """Maps challenge frequency to view resolution."""
@@ -165,19 +169,6 @@ class ChallengeService:
         # Get required series_ids for this definition
         required_series_ids = await self.definition_repository.get_current_series_ids(definition_id)
         
-        # Build preparation params
-        preparation_params = {
-            "domains": definition.domains,
-            "subdomains": definition.subdomains,
-            "categories": definition.categories,
-            "subcategories": definition.subcategories,
-            "frequency": str(definition.frequency),
-            "required_series_ids": required_series_ids,
-            "n_time_series": definition.n_time_series,
-            "context_length": definition.context_length,
-            "before_time": start_time.isoformat(),
-        }
-        
         round_obj = await self.round_repository.upsert_round(
             definition_id=definition_id,
             name=name,
@@ -189,185 +180,72 @@ class ChallengeService:
             registration_end=registration_end,
             start_time=start_time,
             end_time=end_time,
-            preparation_params=preparation_params,
-            status="announced",
+            status="registration",
         )
-        
+
         # Schedule data preparation job
         await self._schedule_round_preparation(
             round_id=round_obj.id,
-            registration_start=registration_start,
-            preparation_params=preparation_params
+            registration_start=registration_start
         )
         
         return ChallengeRoundFull.model_validate(round_obj, from_attributes=True)
 
-    async def create_challenge_from_schedule(
-        self, schedule_params: Dict[str, Any]
-    ) -> ChallengeRoundFull:
-        """
-        Creates a new challenge round based on a schedule's parameters.
-        Implements upsert logic: if a round with the same name exists, it returns the existing one.
-        
-        LEGACY: This method accepts schedule_params directly (for backwards compat).
-        New code should use create_round_from_definition.
-        """
-        now = datetime.now(timezone.utc)
-        name = f"{schedule_params['description']} - {now.strftime('%Y-%m-%d %H:%M:%S UTC')}"
 
-        logger.info(f"Creating challenge round '{name}'")
-
-        def parse_duration(duration_str: str) -> timedelta:
-            parts = duration_str.split()
-            value = int(parts[0])
-            unit = parts[1].lower()
-            if "minute" in unit:
-                return timedelta(minutes=value)
-            if "hour" in unit:
-                return timedelta(hours=value)
-            if "day" in unit:
-                return timedelta(days=value)
-            raise ValueError(f"Unsupported duration unit: {unit}")
-
-        # announce_lead is removed, registration starts effectively immediately or with minimal buffer
-        # announce_lead is removed
-        registration_duration = parse_duration(schedule_params.get("registration_duration", "1 hour"))
-        horizon_delta = parse_duration(schedule_params["forecast_horizon"])
-        frequency_delta = parse_duration(schedule_params["frequency"])
-        context_length = schedule_params["context_length"]
-
-        registration_start = now
-        registration_end = registration_start + registration_duration
-        start_time = registration_end
-        end_time = start_time + horizon_delta
-
-        # Resolve required series unique_ids to series_ids
-        required_unique_ids = schedule_params.get("required_time_series", [])
-        required_series_ids = []
-        for unique_id in required_unique_ids:
-            series = await self.time_series_repository.get_time_series_by_unique_id(unique_id)
-            if series:
-                required_series_ids.append(series.series_id)
-            else:
-                logger.warning(f"Time series with unique_id '{unique_id}' not found")
-
-        preparation_params = {
-            "domains": [schedule_params.get("domain")] if schedule_params.get("domain") else [],
-            "subdomains": [schedule_params.get("subdomain")] if schedule_params.get("subdomain") else [],
-            "frequency": schedule_params["frequency"],
-            "required_series_ids": required_series_ids,
-            "n_time_series": schedule_params["n_time_series"],
-            "context_length": context_length,
-            "before_time": start_time.isoformat(),
-        }
-
-        round_db = await self.round_repository.upsert_round(
-            name=name,
-            description=schedule_params["description"],
-            context_length=context_length,
-            horizon=horizon_delta,
-            frequency=frequency_delta,
-            registration_start=registration_start,
-            registration_end=registration_end,
-            start_time=start_time,
-            end_time=end_time,
-            preparation_params=preparation_params,
-            status="announced",
-        )
-        
-        round_obj = ChallengeRoundFull.model_validate(round_db, from_attributes=True)
-        
-        await self.round_repository.update_preparation_params(
-            round_id=round_obj.id,
-            preparation_params=preparation_params
-        )
-        
-        await self._schedule_round_preparation(
-            round_id=round_obj.id,
-            registration_start=registration_start,
-            preparation_params=preparation_params
-        )
-        
-        return round_obj
 
     async def _schedule_round_preparation(
         self,
         round_id: int,
-        registration_start: datetime,
-        preparation_params: Dict[str, Any]
+        registration_start: datetime
     ) -> None:
         """Schedules a one-time job to prepare challenge context data."""
         if self.scheduler:
             job_id = f"prepare_round_{round_id}"
             await self.scheduler.schedule_challenge_preparation(
                 job_id=job_id,
-                challenge_id=round_id,  # Keep param name for scheduler compat
-                run_at=registration_start,
-                preparation_params=preparation_params
+                round_id=round_id,
+                run_at=registration_start
             )
             logger.info(f"Scheduled preparation job '{job_id}' for round {round_id} at {registration_start}")
         else:
             logger.warning(f"Scheduler not available, cannot schedule preparation for round {round_id}")
 
-    async def prepare_challenge_context_data(self, challenge_id: int) -> None:
+    async def prepare_round_context_data(self, round_id: int) -> None:
         """
         Prepares context data for a challenge round.
         This is called by the scheduler at registration_start.
-        
-        Note: challenge_id here is actually round_id (kept for backwards compat with scheduler).
         """
-        round_id = challenge_id
         try:
             round_obj = await self.round_repository.get_by_id(round_id)
             if not round_obj:
                 raise ValueError(f"Round {round_id} not found")
             
-            if not round_obj.preparation_params:
-                raise ValueError(f"Round {round_id} has no preparation_params")
-                        
-            await self._execute_context_data_preparation(
+            if not round_obj.definition_id:
+                raise ValueError(f"Round {round_id} has no definition_id")
+
+            definition = await self.definition_repository.get_by_id(round_obj.definition_id)
+            if not definition:
+                raise ValueError(f"Definition {round_obj.definition_id} not found")
+
+            # Get required series
+            required_series_ids = await self.definition_repository.get_current_series_ids(definition.id)
+
+            await self._prepare_context_data(
                 round_id=round_id,
-                preparation_params=round_obj.preparation_params
+                domains=definition.domains or [],
+                subdomains=definition.subdomains or [],
+                categories=definition.categories or [],
+                subcategories=definition.subcategories or [],
+                frequency=isodate.duration_isoformat(definition.frequency),
+                required_series_ids=required_series_ids,
+                n_time_series=definition.n_time_series,
+                context_length=definition.context_length,
+                before_time=round_obj.start_time
             )
-            
-            # Update status to registration
-            await self.round_repository.update_status(round_id, "registration")
-            
-            logger.info(f"Successfully prepared context data for round {round_id}")
-            
+
         except Exception as e:
             logger.error(f"Error preparing context data for round {round_id}: {e}")
             await self.round_repository.update_status(round_id, "cancelled")
-
-    async def _execute_context_data_preparation(
-        self,
-        round_id: int,
-        preparation_params: Dict[str, Any]
-    ) -> None:
-        """Executes the actual context data preparation."""
-        domains = preparation_params.get("domains", [])
-        subdomains = preparation_params.get("subdomains", [])
-        categories = preparation_params.get("categories", [])
-        subcategories = preparation_params.get("subcategories", [])
-        frequency = preparation_params["frequency"]
-        required_series_ids = preparation_params.get("required_series_ids", [])
-        n_time_series = preparation_params["n_time_series"]
-        context_length = preparation_params["context_length"]
-        before_time_str = preparation_params["before_time"]
-        before_time = datetime.fromisoformat(before_time_str)
-        
-        await self._prepare_context_data(
-            round_id=round_id,
-            domains=domains,
-            subdomains=subdomains,
-            categories=categories,
-            subcategories=subcategories,
-            frequency=frequency,
-            required_series_ids=required_series_ids,
-            n_time_series=n_time_series,
-            context_length=context_length,
-            before_time=before_time
-        )
 
     async def _prepare_context_data(
         self,
@@ -447,7 +325,7 @@ class ChallengeService:
                 
                 copy_result = await self.time_series_repository.copy_bulk_to_challenge_by_resolution(
                     series_mapping=series_mapping,
-                    challenge_id=round_id,  # Kept as challenge_id for repo compat
+                    round_id=round_id,
                     n=context_length,
                     resolution=resolution,
                     before_time=before_time
@@ -460,7 +338,7 @@ class ChallengeService:
                 for entry in pseudo_entries:
                     series_id = entry["series_id"]
                     stats = await self.time_series_repository.calculate_context_data_stats(
-                        challenge_id=round_id,
+                        round_id=round_id,
                         series_id=series_id
                     )
                     if stats:
@@ -563,19 +441,3 @@ class ChallengeService:
             )
             for r in rounds
         ]
-
-    # ==========================================================
-    # Legacy methods for backwards compatibility
-    # ==========================================================
-
-    async def get_challenge(self, challenge_id: int):
-        """DEPRECATED: Use get_round instead."""
-        return await self.get_round(challenge_id)
-
-    async def list_challenges(self, statuses: Optional[List[str]] = None):
-        """DEPRECATED: Use list_rounds instead."""
-        return await self.list_rounds(statuses=statuses)
-
-    async def get_open_challenges_sorted(self):
-        """DEPRECATED: Use list_rounds with statuses filter instead."""
-        return await self.list_rounds(statuses=["announced", "registration", "active"])

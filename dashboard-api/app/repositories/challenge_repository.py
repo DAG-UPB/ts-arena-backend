@@ -187,7 +187,6 @@ class ChallengeRepository:
                     WHEN 'active' THEN 0
                     WHEN 'registration' THEN 1
                     WHEN 'completed' THEN 2
-                    WHEN 'announced' THEN 3
                     ELSE 4
                 END,
                 created_at DESC;

@@ -134,7 +134,7 @@ class ChallengeMetadataSchema(BaseModel):
                 "domains": ["Energy"],
                 "categories": ["Electricity"],
                 "subcategories": ["Load", "Generation", "Price"],
-                "statuses": ["active", "registration", "announced"]
+                "statuses": ["active", "registration"]
             }
         }
 
