@@ -69,8 +69,7 @@ class ChallengeRoundSchema(BaseModel):
         """Convert timedelta to ISO 8601 duration format for API responses."""
         return serialize_timedelta_to_iso8601(value)
 
-# Alias for backward compatibility
-ChallengeSchema = ChallengeRoundSchema
+
 
 
 class ChallengeMetaSchema(BaseModel):

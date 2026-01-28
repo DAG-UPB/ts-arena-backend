@@ -13,24 +13,8 @@ class ChallengeRepository:
     def __init__(self, conn):
         self.conn = conn
     
-    ) -> List[Dict[str, Any]]:
-    
-    # Alias for backward compatibility
-    def list_challenges(self, *args, **kwargs):
-        return self.list_rounds(*args, **kwargs)
-        """
-        List all challenges with optional filters.
-        
-        Args:
-            status: List of status values (e.g. ['active', 'completed'])
-            from_date: Challenges with end_time >= from_date
-            to_date: Challenges with end_time <= to_date
-            domains: List of domains (e.g. ['Energy', 'Finance'])
-            categories: List of categories
-            subcategories: List of subcategories
-            frequencies: List of frequencies as ISO 8601 (e.g. ['PT1H', 'P1D'])
-            horizons: List of horizons as ISO 8601
-        """
+
+
         
     def list_definitions(self) -> List[Dict[str, Any]]:
         """List all challenge definitions."""

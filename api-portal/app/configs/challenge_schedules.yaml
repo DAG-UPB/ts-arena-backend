@@ -34,7 +34,7 @@ schedules:
     registration_duration: 1 hour
     evaluation_delay: 0 hours
 - id: smard_load_challenge_24h_15min
-  cron: 45 7 * * *
+  cron: 0 7 * * *
   run_on_startup: false
   params:
     description: 'Net Load Challenge: 24h horizon, 15-min frequency'
@@ -64,7 +64,7 @@ schedules:
     registration_duration: 15 minutes
     evaluation_delay: 0 hours
 - id: smard_generation_challenge_24h_15min
-  cron: 45 19 * * *
+  cron: 0 19 * * *
   run_on_startup: false
   params:
     description: 'Generation Challenge: All generation types, 24h horizon, 15-min
