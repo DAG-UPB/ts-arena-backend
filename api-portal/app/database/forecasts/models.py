@@ -24,7 +24,7 @@ class Forecast(Base):
     )
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    round_id = Column(Integer, ForeignKey("challenges.challenge_rounds.id", ondelete="CASCADE"), nullable=False)
+    round_id = Column(Integer, ForeignKey("challenges.rounds.id", ondelete="CASCADE"), nullable=False)
     model_id = Column(Integer, ForeignKey("models.model_info.id", ondelete="CASCADE"), nullable=False)
     series_id = Column(Integer, ForeignKey("data_portal.time_series.series_id", ondelete="CASCADE"), nullable=False)
     ts = Column(DateTime(timezone=True), primary_key=True, nullable=False)
@@ -37,14 +37,14 @@ class Forecast(Base):
 
 
 class ChallengeScore(Base):
-    __tablename__ = "challenge_scores"
+    __tablename__ = "scores"
     __table_args__ = (
         UniqueConstraint("round_id", "model_id", "series_id"),
         {"schema": "forecasts"},
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    round_id = Column(Integer, ForeignKey("challenges.challenge_rounds.id", ondelete="CASCADE"), nullable=False)
+    round_id = Column(Integer, ForeignKey("challenges.rounds.id", ondelete="CASCADE"), nullable=False)
     model_id = Column(Integer, ForeignKey("models.model_info.id", ondelete="CASCADE"), nullable=False)
     series_id = Column(Integer, ForeignKey("data_portal.time_series.series_id", ondelete="CASCADE"), nullable=False)
     mase = Column(Float)

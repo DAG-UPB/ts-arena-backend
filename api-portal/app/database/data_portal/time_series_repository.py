@@ -450,7 +450,7 @@ class TimeSeriesRepository:
             
             # Use raw SQL for better performance with TimescaleDB
             stmt = text("""
-                INSERT INTO challenges.challenge_context_data 
+                INSERT INTO challenges.context_data 
                 (round_id, series_id, ts, value, metadata)
                 VALUES (:round_id, :series_id, :ts, :value, :metadata)
                 ON CONFLICT (round_id, series_id, ts) DO NOTHING
@@ -718,7 +718,7 @@ class TimeSeriesRepository:
                     MAX(ts) as max_ts,
                     AVG(value) as value_avg,
                     STDDEV(value) as value_std
-                FROM challenges.challenge_context_data
+                FROM challenges.context_data
                 WHERE round_id = :round_id
                   AND series_id = :series_id
             """)

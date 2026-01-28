@@ -13,7 +13,7 @@ class ChallengeDefinition(Base):
     Challenge definition/template from YAML configuration.
     Represents a recurring challenge type.
     """
-    __tablename__ = 'challenge_definitions'
+    __tablename__ = 'definitions'
     __table_args__ = {'schema': 'challenges'}
     
     id = Column(Integer, primary_key=True)
@@ -46,11 +46,11 @@ class ChallengeDefinitionSeriesScd2(Base):
     SCD Type 2 table tracking which time series are assigned to 
     each challenge definition over time.
     """
-    __tablename__ = 'challenge_definition_series_scd2'
+    __tablename__ = 'definition_series_scd2'
     __table_args__ = {'schema': 'challenges'}
     
     sk = Column(BigInteger, primary_key=True)
-    definition_id = Column(Integer, ForeignKey('challenges.challenge_definitions.id', ondelete="CASCADE"), nullable=False)
+    definition_id = Column(Integer, ForeignKey('challenges.definitions.id', ondelete="CASCADE"), nullable=False)
     series_id = Column(Integer, ForeignKey('data_portal.time_series.series_id', ondelete="CASCADE"), nullable=False)
     is_required = Column(Boolean, default=True, nullable=False)
     valid_from = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -66,11 +66,11 @@ class ChallengeRound(Base):
     Individual challenge round instance. 
     Each row represents one execution of a ChallengeDefinition.
     """
-    __tablename__ = 'challenge_rounds'
+    __tablename__ = 'rounds'
     __table_args__ = {'schema': 'challenges'}
     
     id = Column(Integer, primary_key=True)
-    definition_id = Column(Integer, ForeignKey('challenges.challenge_definitions.id'))
+    definition_id = Column(Integer, ForeignKey('challenges.definitions.id'))
     name = Column(Text, unique=True, nullable=False)
     description = Column(Text)
     context_length = Column(Integer, nullable=False)
@@ -94,14 +94,14 @@ class ChallengeRound(Base):
 
 
 class ChallengeParticipant(Base):
-    __tablename__ = 'challenge_participants'
+    __tablename__ = 'participants'
     __table_args__ = (
         UniqueConstraint('round_id', 'model_id', name='_round_model_uc'),
         {'schema': 'challenges'}
     )
 
     id = Column(Integer, primary_key=True)
-    round_id = Column(Integer, ForeignKey('challenges.challenge_rounds.id', ondelete="CASCADE"))
+    round_id = Column(Integer, ForeignKey('challenges.rounds.id', ondelete="CASCADE"))
     model_id = Column(Integer, ForeignKey('models.model_info.id', ondelete="CASCADE"))
     registered_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -110,11 +110,11 @@ class ChallengeParticipant(Base):
 
 
 class ChallengeContextData(Base):
-    __tablename__ = 'challenge_context_data'
+    __tablename__ = 'context_data'
     __table_args__ = {'schema': 'challenges'}
 
     id = Column(BigInteger, primary_key=True)
-    round_id = Column(Integer, ForeignKey('challenges.challenge_rounds.id', ondelete="CASCADE"))
+    round_id = Column(Integer, ForeignKey('challenges.rounds.id', ondelete="CASCADE"))
     series_id = Column(Integer, ForeignKey('data_portal.time_series.series_id', ondelete="CASCADE"), nullable=False)
     ts = Column(DateTime(timezone=True), primary_key=True, nullable=False)
     value = Column(Float)
@@ -124,11 +124,11 @@ class ChallengeContextData(Base):
 
 
 class ChallengeSeriesPseudo(Base):
-    __tablename__ = 'challenge_series_pseudo'
+    __tablename__ = 'series_pseudo'
     __table_args__ = {'schema': 'challenges'}
 
     id = Column(Integer, primary_key=True)
-    round_id = Column(Integer, ForeignKey('challenges.challenge_rounds.id', ondelete="CASCADE"))
+    round_id = Column(Integer, ForeignKey('challenges.rounds.id', ondelete="CASCADE"))
     series_id = Column(Integer, ForeignKey('data_portal.time_series.series_id', ondelete="CASCADE"), nullable=False)
     challenge_series_name = Column(Text, nullable=False)
     min_ts = Column(DateTime(timezone=True))
@@ -142,9 +142,9 @@ class ChallengeSeriesPseudo(Base):
 
 class VChallengeRoundWithStatus(Base):
     """
-    Read-only model for the challenges.v_challenge_rounds_with_status view.
+    Read-only model for the challenges.v_rounds_with_status view.
     """
-    __tablename__ = 'v_challenge_rounds_with_status'
+    __tablename__ = 'v_rounds_with_status'
     __table_args__ = {'schema': 'challenges', 'info': dict(is_view=True)}
 
     id = Column(Integer, primary_key=True)

@@ -234,7 +234,7 @@ CREATE SCHEMA IF NOT EXISTS challenges;
 -- ==========================================================
 -- Challenge Definitions (from YAML configuration)
 -- ==========================================================
-CREATE TABLE challenges.challenge_definitions (
+CREATE TABLE challenges.definitions (
     id SERIAL PRIMARY KEY,
     schedule_id TEXT UNIQUE NOT NULL,     -- YAML id: "smard_dam_challenge_24h_15min"
     name TEXT NOT NULL,                    -- Human readable name
@@ -257,36 +257,36 @@ CREATE TABLE challenges.challenge_definitions (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-COMMENT ON TABLE challenges.challenge_definitions IS 
+COMMENT ON TABLE challenges.definitions IS 
 'Challenge definitions/templates from YAML configuration. Each represents a recurring challenge type.';
 
-COMMENT ON COLUMN challenges.challenge_definitions.schedule_id IS 
+COMMENT ON COLUMN challenges.definitions.schedule_id IS 
 'Unique identifier matching the YAML schedule id (e.g., smard_dam_challenge_24h_15min)';
 
-COMMENT ON COLUMN challenges.challenge_definitions.domains IS 
+COMMENT ON COLUMN challenges.definitions.domains IS 
 'List of domains to filter time series by (e.g., ["Smard", "Fingrid"])';
 
-COMMENT ON COLUMN challenges.challenge_definitions.subdomains IS 
+COMMENT ON COLUMN challenges.definitions.subdomains IS 
 'List of subdomains to filter time series by';
 
-COMMENT ON COLUMN challenges.challenge_definitions.categories IS 
+COMMENT ON COLUMN challenges.definitions.categories IS 
 'List of categories to filter time series by';
 
-COMMENT ON COLUMN challenges.challenge_definitions.subcategories IS 
+COMMENT ON COLUMN challenges.definitions.subcategories IS 
 'List of subcategories to filter time series by';
 
-COMMENT ON COLUMN challenges.challenge_definitions.is_active IS 
+COMMENT ON COLUMN challenges.definitions.is_active IS 
 'When FALSE, scheduler skips this challenge. Historical rounds remain accessible.';
 
-COMMENT ON COLUMN challenges.challenge_definitions.frequency IS 
+COMMENT ON COLUMN challenges.definitions.frequency IS 
 'Target frequency for this challenge (e.g., 15 minutes, 1 hour). Determines which aggregation view to use.';
 
 -- ==========================================================
 -- Challenge Definition Series (SCD Type 2)
 -- ==========================================================
-CREATE TABLE challenges.challenge_definition_series_scd2 (
+CREATE TABLE challenges.definition_series_scd2 (
     sk BIGSERIAL PRIMARY KEY,
-    definition_id INTEGER NOT NULL REFERENCES challenges.challenge_definitions(id) ON DELETE CASCADE,
+    definition_id INTEGER NOT NULL REFERENCES challenges.definitions(id) ON DELETE CASCADE,
     series_id INTEGER NOT NULL REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
     is_required BOOLEAN NOT NULL DEFAULT TRUE,  -- Required series vs optional pool
     valid_from TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -297,26 +297,26 @@ CREATE TABLE challenges.challenge_definition_series_scd2 (
 
 -- Ensure only one current assignment per definition + series
 CREATE UNIQUE INDEX uq_def_series_current 
-ON challenges.challenge_definition_series_scd2(definition_id, series_id) 
+ON challenges.definition_series_scd2(definition_id, series_id) 
 WHERE is_current = TRUE;
 
-CREATE INDEX idx_def_series_definition ON challenges.challenge_definition_series_scd2(definition_id);
-CREATE INDEX idx_def_series_series ON challenges.challenge_definition_series_scd2(series_id);
+CREATE INDEX idx_def_series_definition ON challenges.definition_series_scd2(definition_id);
+CREATE INDEX idx_def_series_series ON challenges.definition_series_scd2(series_id);
 
-COMMENT ON TABLE challenges.challenge_definition_series_scd2 IS 
+COMMENT ON TABLE challenges.definition_series_scd2 IS 
 'SCD Type 2 table tracking which time series are assigned to each challenge definition over time.
 When a series is added or removed, the previous record is closed (valid_to set, is_current=FALSE) 
 and a new record is created.';
 
-COMMENT ON COLUMN challenges.challenge_definition_series_scd2.is_required IS 
+COMMENT ON COLUMN challenges.definition_series_scd2.is_required IS 
 'TRUE = required series that must be included. FALSE = part of optional random selection pool.';
 
 -- ==========================================================
 -- Challenge Rounds (individual instances of challenge definitions)
 -- ==========================================================
-CREATE TABLE challenges.challenge_rounds (
+CREATE TABLE challenges.rounds (
     id SERIAL PRIMARY KEY,
-    definition_id INTEGER REFERENCES challenges.challenge_definitions(id),
+    definition_id INTEGER REFERENCES challenges.definitions(id),
     name TEXT UNIQUE NOT NULL,             -- Generated: "definition description - timestamp"
     description TEXT,
     context_length INTEGER NOT NULL,
@@ -333,42 +333,42 @@ CREATE TABLE challenges.challenge_rounds (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-COMMENT ON TABLE challenges.challenge_rounds IS 
+COMMENT ON TABLE challenges.rounds IS 
 'Individual challenge round instances. Each row represents one execution of a challenge_definition.';
 
-COMMENT ON COLUMN challenges.challenge_rounds.definition_id IS 
+COMMENT ON COLUMN challenges.rounds.definition_id IS 
 'Links to the parent challenge definition.';
 
-COMMENT ON COLUMN challenges.challenge_rounds.status IS 
+COMMENT ON COLUMN challenges.rounds.status IS 
 'Lifecycle status: announced (pre-registration), registration (accepting participants), 
 active (forecasting in progress), completed (ended), cancelled (aborted).';
 
-COMMENT ON COLUMN challenges.challenge_rounds.context_length IS 
+COMMENT ON COLUMN challenges.rounds.context_length IS 
 'Number of historical data points to use as context for forecasting';
 
-CREATE INDEX idx_challenge_rounds_definition ON challenges.challenge_rounds(definition_id);
-CREATE INDEX idx_challenge_rounds_status ON challenges.challenge_rounds(status);
-CREATE INDEX idx_challenge_rounds_time_range ON challenges.challenge_rounds(registration_start, registration_end, end_time);
+CREATE INDEX idx_rounds_definition ON challenges.rounds(definition_id);
+CREATE INDEX idx_rounds_status ON challenges.rounds(status);
+CREATE INDEX idx_rounds_time_range ON challenges.rounds(registration_start, registration_end, end_time);
 
 -- ==========================================================
 -- Challenge Participants
 -- ==========================================================
-CREATE TABLE challenges.challenge_participants (
+CREATE TABLE challenges.participants (
     id SERIAL PRIMARY KEY,
-    round_id INTEGER REFERENCES challenges.challenge_rounds(id) ON DELETE CASCADE,
+    round_id INTEGER REFERENCES challenges.rounds(id) ON DELETE CASCADE,
     model_id INTEGER REFERENCES models.model_info(id) ON DELETE CASCADE,
     registered_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE (round_id, model_id)
 );
 
-CREATE INDEX idx_challenge_participants_round ON challenges.challenge_participants(round_id);
+CREATE INDEX idx_participants_round ON challenges.participants(round_id);
 
 -- ==========================================================
 -- Challenge Context Data
 -- ==========================================================
-CREATE TABLE challenges.challenge_context_data (
+CREATE TABLE challenges.context_data (
     id BIGSERIAL,
-    round_id INTEGER REFERENCES challenges.challenge_rounds(id) ON DELETE CASCADE,
+    round_id INTEGER REFERENCES challenges.rounds(id) ON DELETE CASCADE,
     series_id INTEGER NOT NULL REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
     ts TIMESTAMPTZ NOT NULL,
     value DOUBLE PRECISION,
@@ -376,15 +376,15 @@ CREATE TABLE challenges.challenge_context_data (
     PRIMARY KEY (id, ts),
     UNIQUE (round_id, series_id, ts)
 );
-SELECT create_hypertable('challenges.challenge_context_data', 'ts', if_not_exists => TRUE);
-CREATE INDEX idx_context_round_series ON challenges.challenge_context_data(round_id, series_id);
+SELECT create_hypertable('challenges.context_data', 'ts', if_not_exists => TRUE);
+CREATE INDEX idx_context_round_series ON challenges.context_data(round_id, series_id);
 
 -- ==========================================================
 -- Challenge Series Pseudo (anonymized series names per round)
 -- ==========================================================
-CREATE TABLE challenges.challenge_series_pseudo (
+CREATE TABLE challenges.series_pseudo (
   id SERIAL PRIMARY KEY,
-  round_id INTEGER REFERENCES challenges.challenge_rounds(id) ON DELETE CASCADE,
+  round_id INTEGER REFERENCES challenges.rounds(id) ON DELETE CASCADE,
   series_id INTEGER NOT NULL REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
   challenge_series_name TEXT NOT NULL,
   min_ts TIMESTAMPTZ,
@@ -395,26 +395,26 @@ CREATE TABLE challenges.challenge_series_pseudo (
   UNIQUE (round_id, series_id)
 );
 
-COMMENT ON COLUMN challenges.challenge_series_pseudo.min_ts IS 
+COMMENT ON COLUMN challenges.series_pseudo.min_ts IS 
 'First timestamp in the context data for this series';
 
-COMMENT ON COLUMN challenges.challenge_series_pseudo.max_ts IS 
+COMMENT ON COLUMN challenges.series_pseudo.max_ts IS 
 'Last timestamp in the context data for this series';
 
-COMMENT ON COLUMN challenges.challenge_series_pseudo.value_avg IS 
+COMMENT ON COLUMN challenges.series_pseudo.value_avg IS 
 'Average value of the context data for this series';
 
-COMMENT ON COLUMN challenges.challenge_series_pseudo.value_std IS 
+COMMENT ON COLUMN challenges.series_pseudo.value_std IS 
 'Standard deviation of the context data for this series';
 
-CREATE INDEX idx_challenge_series_pseudo_round ON challenges.challenge_series_pseudo(round_id);
+CREATE INDEX idx_series_pseudo_round ON challenges.series_pseudo(round_id);
 
 -- === Schema: forecasts ===
 CREATE SCHEMA IF NOT EXISTS forecasts;
 
 CREATE TABLE forecasts.forecasts (
     id BIGSERIAL,
-    round_id INTEGER REFERENCES challenges.challenge_rounds(id) ON DELETE CASCADE,
+    round_id INTEGER REFERENCES challenges.rounds(id) ON DELETE CASCADE,
     model_id INTEGER REFERENCES models.model_info(id) ON DELETE CASCADE,
     series_id INTEGER NOT NULL REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
     ts TIMESTAMPTZ NOT NULL,
@@ -427,9 +427,9 @@ CREATE TABLE forecasts.forecasts (
 SELECT create_hypertable('forecasts.forecasts', 'ts', if_not_exists => TRUE);
 CREATE INDEX idx_forecasts_round ON forecasts.forecasts(round_id);
 
-CREATE TABLE forecasts.challenge_scores (
+CREATE TABLE forecasts.scores (
     id SERIAL PRIMARY KEY,
-    round_id INTEGER REFERENCES challenges.challenge_rounds(id) ON DELETE CASCADE,
+    round_id INTEGER REFERENCES challenges.rounds(id) ON DELETE CASCADE,
     model_id INTEGER REFERENCES models.model_info(id) ON DELETE CASCADE,
     series_id INTEGER REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
     mase DOUBLE PRECISION,
@@ -444,12 +444,12 @@ CREATE TABLE forecasts.challenge_scores (
     calculated_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE (round_id, model_id, series_id)
 );
-CREATE INDEX idx_challenge_scores_round ON forecasts.challenge_scores(round_id);
+CREATE INDEX idx_scores_round ON forecasts.scores(round_id);
 
 -- ==========================================================
 -- View: Challenge Round Status (computed from timestamps)
 -- ==========================================================
-CREATE OR REPLACE VIEW challenges.v_challenge_rounds_with_status AS
+CREATE OR REPLACE VIEW challenges.v_rounds_with_status AS
 SELECT
     cr.*,
     cd.schedule_id AS definition_schedule_id,
@@ -465,13 +465,13 @@ SELECT
         WHEN NOW() > cr.end_time THEN 'completed'
         ELSE 'undefined'
     END AS computed_status
-FROM challenges.challenge_rounds cr
-LEFT JOIN challenges.challenge_definitions cd ON cr.definition_id = cd.id;
+FROM challenges.rounds cr
+LEFT JOIN challenges.definitions cd ON cr.definition_id = cd.id;
 
 -- ==========================================================
 -- View: Challenge Context Data Range
 -- ==========================================================
-CREATE OR REPLACE VIEW challenges.v_challenge_context_data_range AS 
+CREATE OR REPLACE VIEW challenges.v_context_data_range AS 
 SELECT DISTINCT
     round_id,
     series_id,
@@ -481,12 +481,12 @@ SELECT DISTINCT
         PARTITION BY round_id, series_id
         ORDER BY ts DESC
     ) AS latest_value
-FROM challenges.challenge_context_data;
+FROM challenges.context_data;
 
 -- ==========================================================
 -- View: Challenge Rounds with Metadata (for participant filtering)
 -- ==========================================================
-CREATE OR REPLACE VIEW challenges.v_challenge_rounds_with_metadata AS
+CREATE OR REPLACE VIEW challenges.v_rounds_with_metadata AS
 SELECT
     cr.id as round_id,
     cr.name,
@@ -530,9 +530,9 @@ SELECT
     (SELECT COUNT(*) 
      FROM forecasts.forecasts f 
      WHERE f.round_id = cr.id) AS forecast_count
-FROM challenges.challenge_rounds cr
-LEFT JOIN challenges.challenge_definitions cd ON cr.definition_id = cd.id
-LEFT JOIN challenges.challenge_series_pseudo csp ON csp.round_id = cr.id
+FROM challenges.rounds cr
+LEFT JOIN challenges.definitions cd ON cr.definition_id = cd.id
+LEFT JOIN challenges.series_pseudo csp ON csp.round_id = cr.id
 LEFT JOIN data_portal.time_series ts ON ts.series_id = csp.series_id
 LEFT JOIN data_portal.domain_category dc ON ts.domain_category_id = dc.id
 GROUP BY 
@@ -540,7 +540,7 @@ GROUP BY
     cr.registration_start, cr.registration_end, cr.start_time, cr.end_time, 
     cr.context_length, cr.horizon, cr.frequency, cr.status, cr.created_at, cr.updated_at;
 
-COMMENT ON VIEW challenges.v_challenge_rounds_with_metadata IS 
+COMMENT ON VIEW challenges.v_rounds_with_metadata IS 
 'Challenge rounds with aggregated metadata for participant-facing filtering.
 Includes definition info, round timing, and aggregated domain/category data from time series.';
 
@@ -616,9 +616,9 @@ SELECT
     dc.domain,
     dc.category,
     dc.subcategory
-FROM forecasts.challenge_scores cs
-JOIN challenges.challenge_rounds cr ON cr.id = cs.round_id
-LEFT JOIN challenges.challenge_definitions cd ON cr.definition_id = cd.id
+FROM forecasts.scores cs
+JOIN challenges.rounds cr ON cr.id = cs.round_id
+LEFT JOIN challenges.definitions cd ON cr.definition_id = cd.id
 JOIN models.model_info mi ON mi.id = cs.model_id
 JOIN auth.users u ON u.id = mi.user_id
 JOIN data_portal.time_series ts ON ts.series_id = cs.series_id
@@ -636,13 +636,13 @@ COMMENT ON VIEW forecasts.v_ranking_base IS
 -- ==========================================================
 
 -- Index for challenge_scores lookup
-CREATE INDEX IF NOT EXISTS idx_challenge_scores_lookup 
-ON forecasts.challenge_scores(round_id, model_id, series_id) 
+CREATE INDEX IF NOT EXISTS idx_scores_lookup 
+ON forecasts.scores(round_id, model_id, series_id) 
 WHERE mase IS NOT NULL;
 
 -- Index for time-based filtering on challenge rounds
-CREATE INDEX IF NOT EXISTS idx_challenge_rounds_end_time 
-ON challenges.challenge_rounds(end_time) 
+CREATE INDEX IF NOT EXISTS idx_rounds_end_time 
+ON challenges.rounds(end_time) 
 WHERE end_time IS NOT NULL;
 
 -- Index for domain/frequency filtering
@@ -658,8 +658,8 @@ CREATE INDEX IF NOT EXISTS idx_model_info_user
 ON models.model_info(user_id);
 
 -- Index for challenge_series_pseudo
-CREATE INDEX IF NOT EXISTS idx_challenge_series_pseudo_series
-ON challenges.challenge_series_pseudo(series_id);
+CREATE INDEX IF NOT EXISTS idx_series_pseudo_series
+ON challenges.series_pseudo(series_id);
 
 -- ==========================================================
 -- 10) Continuous Aggregates for Multi-Granularity Time Series

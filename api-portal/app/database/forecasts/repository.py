@@ -88,8 +88,8 @@ class ForecastRepository:
         
         query = text("""
             SELECT DISTINCT c.id as round_id
-            FROM challenges.v_challenge_rounds_with_status c
-            LEFT JOIN forecasts.challenge_scores cs ON c.id = cs.round_id
+            FROM challenges.v_rounds_with_status c
+            LEFT JOIN forecasts.scores cs ON c.id = cs.round_id
             WHERE c.status IN ('active', 'completed')
               AND (cs.id IS NULL OR cs.final_evaluation = FALSE)
             ORDER BY c.id
@@ -454,7 +454,7 @@ class ForecastRepository:
             SELECT 
                 COUNT(*) as total_scores,
                 COUNT(*) FILTER (WHERE evaluation_status = 'complete') as complete_scores
-            FROM forecasts.challenge_scores
+            FROM forecasts.scores
             WHERE round_id = :round_id
         """)
         

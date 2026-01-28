@@ -93,10 +93,10 @@ class ModelRepository:
                         mi.name AS model_name,
                         COUNT(cs.challenge_id) AS n_completed,
                         AVG(cs.mase) AS avg_mase
-                    FROM forecasts.challenge_scores cs
+                    FROM forecasts.scores cs
                     JOIN models.model_info mi ON mi.id = cs.model_id
                     JOIN auth.users u ON u.id = mi.user_id
-                    JOIN challenges.challenges c ON c.id = cs.challenge_id
+                    JOIN challenges.rounds c ON c.id = cs.challenge_id
                     WHERE cs.mase IS NOT NULL
                 """
                 params = []

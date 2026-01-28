@@ -29,7 +29,7 @@ class ForecastRepository:
             cur.execute(
                 """
                 SELECT frequency
-                FROM challenges.challenges
+                FROM forecasts.challenge_scores
                 WHERE id = %s
                 """,
                 (challenge_id,),
@@ -85,7 +85,7 @@ class ForecastRepository:
                     tsd.value::FLOAT as current_value
                 FROM forecasts.forecasts f
                 JOIN models.model_info mi ON mi.id = f.model_id
-                JOIN challenges.v_challenge_context_data_range as ccd ON ccd.challenge_id = f.challenge_id AND ccd.series_id = f.series_id
+                JOIN challenges.v_context_data_range as ccd ON ccd.challenge_id = f.challenge_id AND ccd.series_id = f.series_id
                 LEFT JOIN {table_name} tsd ON tsd.series_id = f.series_id AND tsd.ts = f.ts
                 WHERE f.challenge_id = %s AND f.series_id = %s
                 ORDER BY f.created_at ASC, f.ts ASC;

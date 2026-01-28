@@ -60,7 +60,7 @@ class ChallengeRepository:
                 domains,
                 categories,
                 subcategories
-            FROM challenges.v_challenge_rounds_with_metadata
+            FROM challenges.v_rounds_with_metadata
             WHERE 1=1
         """
         
@@ -154,7 +154,7 @@ class ChallengeRepository:
                     c.end_time,
                     c.registration_start,
                     c.registration_end
-                FROM challenges.v_challenge_rounds_with_status c 
+                FROM challenges.v_rounds_with_status c 
                 WHERE c.id = %s
                 """,
                 (challenge_id,),
@@ -183,10 +183,10 @@ class ChallengeRepository:
                     dc.domain,
                     dc.category,
                     dc.subcategory
-                FROM challenges.challenge_series_pseudo csp
+                FROM challenges.series_pseudo csp
                 JOIN data_portal.time_series ts ON ts.series_id = csp.series_id
-                JOIN challenges.v_challenge_rounds_with_status c ON c.id = csp.round_id
-                JOIN challenges.v_challenge_context_data_range cdr 
+                JOIN challenges.v_rounds_with_status c ON c.id = csp.round_id
+                JOIN challenges.v_context_data_range cdr 
                     ON cdr.round_id = csp.round_id 
                     AND cdr.series_id = csp.series_id
                 LEFT JOIN data_portal.domain_category dc ON ts.domain_category_id = dc.id
@@ -214,7 +214,7 @@ class ChallengeRepository:
                     frequency,  -- Challenge frequency (direct, not unnested)
                     horizon,
                     status
-                FROM challenges.v_challenge_rounds_with_metadata
+                FROM challenges.v_rounds_with_metadata
             )
             SELECT
                 -- Aggregate unique values
@@ -281,7 +281,7 @@ class ChallengeRepository:
             cur.execute(
                 """
                 SELECT frequency
-                FROM challenges.challenge_rounds
+                FROM challenges.rounds
                 WHERE id = %s
                 """,
                 (challenge_id,),
