@@ -7,6 +7,7 @@ class ModelRankingSchema(BaseModel):
     """Global model ranking (Legacy - kept for backward compatibility)."""
     model_config = {"protected_namespaces": ()}
     
+    model_id: int
     model_name: str
     n_completed: int
     avg_mase: float

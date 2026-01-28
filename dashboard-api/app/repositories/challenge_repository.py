@@ -13,17 +13,11 @@ class ChallengeRepository:
     def __init__(self, conn):
         self.conn = conn
     
-    def list_challenges(
-        self,
-        status: Optional[List[str]] = None,
-        from_date: Optional[datetime] = None,
-        to_date: Optional[datetime] = None,
-        domains: Optional[List[str]] = None,
-        categories: Optional[List[str]] = None,
-        subcategories: Optional[List[str]] = None,
-        frequencies: Optional[List[str]] = None,  # ISO 8601 Strings
-        horizons: Optional[List[str]] = None,     # ISO 8601 Strings
     ) -> List[Dict[str, Any]]:
+    
+    # Alias for backward compatibility
+    def list_challenges(self, *args, **kwargs):
+        return self.list_rounds(*args, **kwargs)
         """
         List all challenges with optional filters.
         
@@ -38,10 +32,93 @@ class ChallengeRepository:
             horizons: List of horizons as ISO 8601
         """
         
+    def list_definitions(self) -> List[Dict[str, Any]]:
+        """List all challenge definitions."""
+        query = """
+            SELECT 
+                id,
+                schedule_id,
+                name,
+                description,
+                domains,
+                categories,
+                subcategories,
+                frequency,
+                horizon,
+                created_at
+            FROM challenges.definitions
+            ORDER BY name;
+        """
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(query)
+            return [dict(row) for row in cur.fetchall()]
+
+    def get_definition(self, definition_id: int) -> Optional[Dict[str, Any]]:
+        """Get a specific challenge definition."""
+        query = """
+            SELECT 
+                id,
+                schedule_id,
+                name,
+                description,
+                domains,
+                categories,
+                subcategories,
+                frequency,
+                horizon,
+                created_at
+            FROM challenges.definitions
+            WHERE id = %s;
+        """
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(query, (definition_id,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def get_definition_series(self, definition_id: int) -> List[Dict[str, Any]]:
+        """List all time series that have appeared in any round of this definition."""
+        query = """
+            SELECT DISTINCT
+                ts.series_id,
+                ts.name,
+                ts.description,
+                ts.frequency,
+                ts.unique_id,
+                dc.domain,
+                dc.category,
+                dc.subcategory
+            FROM challenges.rounds r
+            JOIN challenges.series_pseudo csp ON csp.round_id = r.id
+            JOIN data_portal.time_series ts ON ts.series_id = csp.series_id
+            LEFT JOIN data_portal.domain_category dc ON ts.domain_category_id = dc.id
+            WHERE r.definition_id = %s
+            ORDER BY ts.name;
+        """
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(query, (definition_id,))
+            return [dict(row) for row in cur.fetchall()]
+
+    def list_rounds(
+        self,
+        status: Optional[List[str]] = None,
+        from_date: Optional[datetime] = None,
+        to_date: Optional[datetime] = None,
+        domains: Optional[List[str]] = None,
+        categories: Optional[List[str]] = None,
+        subcategories: Optional[List[str]] = None,
+        frequencies: Optional[List[str]] = None,  # ISO 8601 Strings
+        horizons: Optional[List[str]] = None,     # ISO 8601 Strings
+        definition_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        List all challenge rounds with optional filters.
+        """
+        
         # Use new view with challenge frequency
         query = """
             SELECT 
-                round_id as challenge_id,
+                round_id as id,
+                COALESCE(definition_id, 0) as definition_id,
                 name,
                 description,
                 registration_start,
@@ -65,6 +142,10 @@ class ChallengeRepository:
         """
         
         params = []
+
+        if definition_id:
+            query += " AND definition_id = %s"
+            params.append(definition_id)
         
         if status and len(status) > 0:
             placeholders = ','.join(['%s'] * len(status))

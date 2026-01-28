@@ -10,3 +10,9 @@ class ModelSchema(BaseModel):
     architecture: str | None
     pretraining_data: str | None
     publishing_date: datetime | None
+
+class ModelDetailSchema(ModelSchema):
+    """Model with aggregated statistics."""
+    parameters: dict | None = None
+    challenges_participated: int = 0
+    forecasts_made: int = 0

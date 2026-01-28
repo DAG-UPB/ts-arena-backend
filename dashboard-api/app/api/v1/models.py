@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from typing import List, Optional
 
 from app.core.dependencies import get_api_key
 from app.database.connection import get_db_connection
 from app.repositories.model_repository import ModelRepository
+from app.repositories.forecast_repository import ForecastRepository
 from app.schemas.common import RankingResponseSchema, ModelRankingSchema
-from app.schemas.model import ModelSchema
+from app.schemas.model import ModelSchema, ModelDetailSchema
 
 router = APIRouter(prefix="/api/v1", tags=["Models"])
 
@@ -25,6 +26,39 @@ async def list_models_for_challenge(
     repo = ModelRepository(conn)
     models = repo.list_models_for_challenge(challenge_id)
     return models
+
+
+@router.get("/models/{model_id}", response_model=ModelDetailSchema)
+async def get_model_details(
+    model_id: int,
+    api_key: str = Depends(get_api_key),
+    conn = Depends(get_db_connection)
+):
+    """
+    Get detailed information about a model.
+    """
+    repo = ModelRepository(conn)
+    model = repo.get_model_details(model_id)
+    
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+        
+    return model
+
+
+@router.get("/models/{model_id}/series/{series_id}/forecasts")
+async def get_model_series_forecasts(
+    model_id: int,
+    series_id: int,
+    api_key: str = Depends(get_api_key),
+    conn = Depends(get_db_connection)
+):
+    """
+    Get all forecasts made by this model for a specific series, along with Ground Truth.
+    """
+    repo = ForecastRepository(conn)
+    data = repo.get_model_series_long_term_forecasts(model_id, series_id)
+    return data
 
 
 @router.get("/models/rankings")
@@ -59,6 +93,11 @@ async def get_filtered_rankings(
         description="Comma-separated list of horizons in ISO 8601 format (e.g., 'PT6H,P1D')",
         example="PT6H,P1D"
     ),
+    definition_id: Optional[int] = Query(
+        None,
+        description="Filter by definition ID (e.g., 'Day-Ahead Power')",
+        example=1
+    ),
     min_challenges: int = Query(
         1,
         ge=1,
@@ -85,6 +124,7 @@ async def get_filtered_rankings(
     - **Subcategory**: Filter by one or more subcategories (e.g., Load, Generation)
     - **Frequency**: Filter by data frequency in ISO 8601 format (e.g., PT1H for 1 hour)
     - **Horizon**: Filter by forecast horizon in ISO 8601 format (e.g., P1D for 1 day)
+    - **Definition**: Filter by challenge definition (e.g., Day-Ahead Power)
     - **Min Challenges**: Show only models that participated in at least N challenges
     
     **Filter Format:**
@@ -146,6 +186,7 @@ async def get_filtered_rankings(
         subcategories=subcategories_list,
         frequencies=frequencies_list,
         horizons=horizons_list,
+        definition_id=definition_id,
         min_challenges=min_challenges,
         limit=limit
     )
@@ -164,6 +205,8 @@ async def get_filtered_rankings(
         filters_applied['frequency'] = frequencies_list
     if horizons_list:
         filters_applied['horizon'] = horizons_list
+    if definition_id:
+        filters_applied['definition_id'] = definition_id
     if min_challenges > 1:
         filters_applied['min_challenges'] = min_challenges
     if limit != 100:

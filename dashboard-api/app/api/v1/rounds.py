@@ -7,50 +7,31 @@ from app.core.utils import parse_comma_separated
 from app.database.connection import get_db_connection
 from app.repositories.challenge_repository import ChallengeRepository
 from app.schemas.challenge import (
-    ChallengeSchema,
+    ChallengeRoundSchema,
     ChallengeMetaSchema,
     ChallengeSeriesSchema,
     ChallengeMetadataSchema,
-    TimeSeriesDataSchema,
-    TimeSeriesDataPoint
+    TimeSeriesDataSchema
 )
 
-router = APIRouter(prefix="/api/v1/challenges", tags=["Challenges (Deprecated)"])
+router = APIRouter(prefix="/api/v1/rounds", tags=["Rounds"])
 
 
 @router.get("/metadata", response_model=ChallengeMetadataSchema)
-async def get_challenge_metadata(
+async def get_rounds_metadata(
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
 ):
     """
-    Available filter options for challenge listing.
-    
-    Returns all unique values for:
-    - **frequencies**: Available time series frequencies (ISO 8601)
-    - **horizons**: Available forecast horizons (ISO 8601)
-    - **domains**: Available domains
-    - **categories**: Available categories
-    - **subcategories**: Available subcategories
-    - **statuses**: Available challenge statuses
-    
-    **Use Case:**
-    Frontend can pre-fill filter dropdowns/multi-selects before
-    actual challenge data is fetched.
-    
-    **Performance:**
-    Lightweight Query - only unique values, no complete challenge data.
-    
-    **Headers:**
-    - X-API-Key: Valid API Key
+    Available filter options for round listing.
     """
     repo = ChallengeRepository(conn)
     metadata = repo.get_challenge_metadata()
     return metadata
 
 
-@router.get("", response_model=List[ChallengeSchema])
-async def list_challenges(
+@router.get("", response_model=List[ChallengeRoundSchema])
+async def list_rounds(
     # Existing filters
     status: Optional[str] = Query(
         None, 
@@ -59,14 +40,14 @@ async def list_challenges(
     from_date: Optional[datetime] = Query(
         None, 
         alias="from",
-        description="Challenges with end_time >= from"
+        description="Rounds with end_time >= from"
     ),
     to_date: Optional[datetime] = Query(
         None, 
         alias="to",
-        description="Challenges with end_time <= to"
+        description="Rounds with end_time <= to"
     ),
-    # NEW: Filter parameters
+    # Filter parameters
     frequency: Optional[str] = Query(
         None,
         description="Comma-separated frequencies in ISO 8601 format (e.g., 'PT1H,P1D')",
@@ -92,32 +73,16 @@ async def list_challenges(
         description="Comma-separated list of horizons in ISO 8601 format (e.g., 'PT6H,P1D')",
         example="PT6H,P1D"
     ),
+    definition_id: Optional[int] = Query(
+        None,
+        description="Filter by definition ID"
+    ),
     # Dependencies
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
 ):
     """
-    List all challenges with optional filters.
-    
-    **Filter Parameters:**
-    - `status`: Comma-separated status values (e.g. "active,completed")
-    - `from`: Challenges with end_time >= from
-    - `to`: Challenges with end_time <= to
-    - `frequency`: Frequencies in ISO 8601 (e.g. "PT1H" for 1 hour, "P1D" for 1 day)
-    - `domain`: Domains (e.g. "Energy,Finance")
-    - `category`: Categories (e.g. "Electricity")
-    - `subcategory`: Subcategories (e.g. "Load,Generation")
-    - `horizon`: Forecast horizons in ISO 8601 (e.g. "PT6H,P1D")
-    
-    **ISO 8601 Duration Examples:**
-    - `PT15M` = 15 minutes
-    - `PT1H` = 1 hour
-    - `PT6H` = 6 hours
-    - `P1D` = 1 day
-    - `P7D` = 7 days
-    
-    **Headers:**
-    - X-API-Key: Valid API key
+    List all challenge rounds with optional filters.
     """
     # Parse comma-separated parameters
     status_list = parse_comma_separated(status)
@@ -128,7 +93,7 @@ async def list_challenges(
     horizon_list = parse_comma_separated(horizon)
     
     repo = ChallengeRepository(conn)
-    challenges = repo.list_challenges(
+    rounds = repo.list_rounds(
         status=status_list,
         from_date=from_date,
         to_date=to_date,
@@ -136,52 +101,80 @@ async def list_challenges(
         categories=category_list,
         subcategories=subcategory_list,
         frequencies=frequency_list,
-        horizons=horizon_list
+        horizons=horizon_list,
+        definition_id=definition_id
     )
-    return challenges
+    return rounds
 
 
-@router.get("/{challenge_id}", response_model=ChallengeMetaSchema)
-async def get_challenge_meta(
-    challenge_id: int,
+@router.get("/{round_id}", response_model=ChallengeMetaSchema)
+async def get_round_meta(
+    round_id: int,
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
 ):
     """
-    Metadata for a challenge.
-    
-    **Headers:**
-    - X-API-Key: Valid API key
+    Metadata for a challenge round.
     """
     repo = ChallengeRepository(conn)
-    meta = repo.get_challenge_meta(challenge_id)
+    meta = repo.get_challenge_meta(round_id)
     
     if not meta:
-        raise HTTPException(status_code=404, detail="Challenge not found")
+        raise HTTPException(status_code=404, detail="Challenge round not found")
     
     return meta
 
 
-@router.get("/{challenge_id}/series", response_model=List[ChallengeSeriesSchema])
-async def get_challenge_series(
-    challenge_id: int,
+@router.get("/{round_id}/series", response_model=List[ChallengeSeriesSchema])
+async def get_round_series(
+    round_id: int,
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
 ):
     """
-    Time series for a challenge.
-    
-    **Headers:**
-    - X-API-Key: Valid API key
+    Time series for a challenge round.
     """
     repo = ChallengeRepository(conn)
-    series = repo.get_challenge_series(challenge_id)
+    series = repo.get_challenge_series(round_id)
     return series
 
 
-@router.get("/{challenge_id}/series/{series_id}/data", response_model=TimeSeriesDataSchema)
+@router.get("/{round_id}/leaderboard", response_model=List)
+async def get_round_leaderboard(
+    round_id: int,
+    api_key: str = Depends(get_api_key),
+    conn = Depends(get_db_connection)
+):
+    """
+    Get leaderboard (rankings) for a specific round.
+    """
+    repo = ChallengeRepository(conn)
+    leaderboard = repo.get_round_leaderboard(round_id)
+    return leaderboard
+
+
+@router.get("/{round_id}/models/{model_id}", response_model=dict)
+async def get_model_round_performance(
+    round_id: int,
+    model_id: int,
+    api_key: str = Depends(get_api_key),
+    conn = Depends(get_db_connection)
+):
+    """
+    Get metrics for a specific model in a round.
+    """
+    repo = ChallengeRepository(conn)
+    perf = repo.get_model_performance_in_round(round_id, model_id)
+    
+    if not perf:
+        raise HTTPException(status_code=404, detail="Model performance not found for this round")
+        
+    return perf
+
+
+@router.get("/{round_id}/series/{series_id}/data", response_model=TimeSeriesDataSchema)
 async def get_series_data(
-    challenge_id: int,
+    round_id: int,
     series_id: int,
     start_time: datetime = Query(..., description="Start timestamp"),
     end_time: datetime = Query(..., description="End timestamp"),
@@ -189,12 +182,9 @@ async def get_series_data(
     conn = Depends(get_db_connection)
 ):
     """
-    Time series data for a series.
-    
-    **Headers:**
-    - X-API-Key: Valid API key
+    Time series data for a series in a round.
     """
     repo = ChallengeRepository(conn)
-    data = repo.get_challenge_data_for_series(challenge_id, series_id, start_time, end_time)
+    data = repo.get_challenge_data_for_series(round_id, series_id, start_time, end_time)
     
     return {"data": data}

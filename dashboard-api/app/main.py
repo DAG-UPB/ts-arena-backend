@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.api.v1 import challenges, forecasts, models, health
+from app.api.v1 import challenges, forecasts, models, health, definitions, rounds
 
 app = FastAPI(
     title=settings.API_TITLE,
@@ -20,6 +20,8 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(definitions.router)
+app.include_router(rounds.router)
 app.include_router(challenges.router)
 app.include_router(forecasts.router)
 app.include_router(models.router)
