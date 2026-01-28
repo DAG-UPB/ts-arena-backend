@@ -81,6 +81,15 @@ class BasePlugin(ABC):
         """Returns the update frequency for this data source"""
         return self._meta.update_frequency
     
+    def get_detected_timezone(self) -> Optional[str]:
+        """
+        Returns the timezone detected from the last data fetch.
+        
+        Returns:
+            Timezone string (e.g. 'US/Eastern') or None if not detected/supported.
+        """
+        return None
+    
     @abstractmethod
     async def get_historical_data(
         self, 
@@ -162,6 +171,18 @@ class MultiSeriesPlugin(ABC):
     def get_unique_ides(self) -> List[str]:
         """Returns list of all unique ides in this group"""
         return [s.unique_id for s in self._series_definitions]
+    
+    def get_detected_timezone(self, unique_id: str) -> Optional[str]:
+        """
+        Returns the timezone detected from the last data fetch for a specific series.
+        
+        Args:
+            unique_id: The unique series identifier
+            
+        Returns:
+            Timezone string (e.g. 'US/Eastern') or None if not detected/supported.
+        """
+        return None
     
     @abstractmethod
     async def get_historical_data_multi(

@@ -109,6 +109,10 @@ class EIADataSourcePlugin(BasePlugin):
         self.frequency = self._defaults.get("frequency", "hourly")
         self.facet_args = self._defaults.get("facet_args", {})
         self.sub_id = self._defaults.get("sub_id", "")
+        self.detected_timezone: Optional[str] = None
+
+    def get_detected_timezone(self) -> Optional[str]:
+        return self.detected_timezone
 
     async def get_historical_data(
         self, 
@@ -133,5 +137,15 @@ class EIADataSourcePlugin(BasePlugin):
             facet_args=self.facet_args,
             sub_id=self.sub_id,
         )
+
+        # Detect timezone from first data point
+        if processed and len(processed) > 0 and "ts" in processed[0]:
+            try:
+                ts_str = processed[0]["ts"]
+                ts = pd.Timestamp(ts_str)
+                if ts.tz:
+                    self.detected_timezone = str(ts.tz)
+            except Exception:
+                pass
 
         return {"data": processed}

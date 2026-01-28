@@ -96,6 +96,9 @@ class FingridDataSourcePlugin(BasePlugin):
             logger.error("API_KEY_SOURCE_FINGRID not found in environment variables")
         self.client = FingridApiClient(self.api_key or "")
 
+    def get_detected_timezone(self) -> Optional[str]:
+        return "Europe/Helsinki"
+
     async def get_historical_data(
         self, 
         start_date: str, 

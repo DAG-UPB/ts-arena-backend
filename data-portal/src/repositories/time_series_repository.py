@@ -156,6 +156,33 @@ class TimeSeriesDataRepository:
         logger.info(f"Created new time series: {name} (series_id={series_id})")
         return series_id
     
+    async def update_series_timezone(self, series_id: int, timezone: str) -> None:
+        """
+        Update the timezone for a time series.
+        
+        Args:
+            series_id: The series ID
+            timezone: Timezone string (e.g., 'US/Pacific', 'UTC', '+02:00')
+        """
+        if not timezone:
+            return
+            
+        # Check if already set to avoid unnecessary updates? 
+        # But upsert/update is cheap enough.
+        
+        query = text("""
+            UPDATE data_portal.time_series 
+            SET ts_timezone = :timezone 
+            WHERE series_id = :series_id
+            AND (ts_timezone IS NULL OR ts_timezone != :timezone)
+        """)
+        
+        await self.session.execute(query, {
+            "series_id": series_id,
+            "timezone": timezone
+        })
+        await self.session.commit()
+    
     async def upsert_data_points(
         self,
         series_id: int,

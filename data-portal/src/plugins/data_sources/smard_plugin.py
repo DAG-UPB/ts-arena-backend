@@ -167,6 +167,9 @@ class SmardDataSourcePlugin(BasePlugin):
         self.region = self._defaults.get("region", "DE")
         self.resolution = self._defaults.get("resolution", "hour")
 
+    def get_detected_timezone(self) -> Optional[str]:
+        return "Europe/Berlin"
+
     async def get_historical_data(
         self,
         start_date: str,

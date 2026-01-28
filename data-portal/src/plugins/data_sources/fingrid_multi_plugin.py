@@ -132,6 +132,9 @@ class FingridMultiSeriesPlugin(MultiSeriesPlugin):
         page_size = request_params.get("page_size", 20000)
         self.client = FingridMultiApiClient(self.api_key or "", page_size)
 
+    def get_detected_timezone(self, unique_id: str) -> Optional[str]:
+        return "Europe/Helsinki"
+
     async def get_historical_data_multi(
         self, 
         start_date: str, 

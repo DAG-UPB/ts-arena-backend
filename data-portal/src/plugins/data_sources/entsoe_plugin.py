@@ -101,8 +101,13 @@ class EntsoeDataSourcePlugin(BasePlugin):
         self.api_key = self._defaults.get("api_key", "")
         self.document_type = self._defaults.get("document_type", "A65")  # e.g., load
         self.process_type = self._defaults.get("process_type", "A16")    # e.g., day-ahead
+        self.process_type = self._defaults.get("process_type", "A16")    # e.g., day-ahead
         self.domain = self._defaults.get("outBiddingZone_Domain", "10Y1001A1001A83F")  # DE
         self.client = EntsoeApiClient(self.api_key)
+        self.detected_timezone: Optional[str] = None
+
+    def get_detected_timezone(self) -> Optional[str]:
+        return self.detected_timezone
 
     async def get_historical_data(
         self,
@@ -131,6 +136,16 @@ class EntsoeDataSourcePlugin(BasePlugin):
             period_end=period_end,
             outBiddingZone_Domain=self.domain
         )
+        
+        # Detect timezone from first data point
+        if data and len(data) > 0 and "ts" in data[0]:
+            try:
+                ts_str = data[0]["ts"]
+                ts = pd.Timestamp(ts_str)
+                if ts.tz:
+                    self.detected_timezone = str(ts.tz)
+            except Exception:
+                pass
         
         if data is None:
             return {"data": [], "error": "Failed to fetch or parse ENTSO-E data."}

@@ -307,6 +307,12 @@ class DataPortalScheduler:
                         f"SCD2: {scd2_stats['inserted']} new, {scd2_stats['updated']} updated, "
                         f"{scd2_stats['unchanged']} unchanged."
                     )
+                    
+                    # Update timezone if detected
+                    detected_timezone = plugin.get_detected_timezone()
+                    if detected_timezone:
+                        await repo.update_series_timezone(series_id, detected_timezone)
+                        logger.info(f"[{unique_id}] Updated timezone to {detected_timezone}")
                 
             except Exception as e:
                 duration = (datetime.now() - job_start).total_seconds()
@@ -400,6 +406,11 @@ class DataPortalScheduler:
                         await scd2_repo.upsert_data_points(series_id, imputed_data)
                         
                         logger.debug(f"[{group_id}] Stored {rows_affected} points for {unique_id}")
+                        
+                        # Update timezone if detected
+                        detected_tz = plugin.get_detected_timezone(unique_id)
+                        if detected_tz:
+                            await repo.update_series_timezone(series_id, detected_tz)
                     
                     duration = (datetime.now() - job_start).total_seconds()
                     imputation_msg = ""

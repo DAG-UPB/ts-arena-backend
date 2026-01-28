@@ -70,12 +70,17 @@ class GridStatusApiClient:
         "IESO": gridstatus.IESO,
     }
     
-    def __init__(self, iso_name: str):
+    def __init__(self, iso_name: str, api_key: Optional[str] = None):
         self.iso_name = iso_name
         iso_class = self.ISO_CLASSES.get(iso_name)
         if not iso_class:
             raise ValueError(f"Unsupported ISO: {iso_name}. Supported: {list(self.ISO_CLASSES.keys())}")
-        self.iso = iso_class()
+        
+        # Initialize ISO client, passing api_key if provided and supported (e.g. for PJM)
+        if iso_name == "PJM" and api_key:
+             self.iso = iso_class(api_key=api_key)
+        else:
+             self.iso = iso_class()
     
     async def _wait_for_rate_limit(self):
         """Simple async rate limiter to avoid overwhelming the APIs."""
@@ -111,15 +116,23 @@ class GridStatusApiClient:
             loop = asyncio.get_event_loop()
             
             if dataset == "load":
-                df = await loop.run_in_executor(
-                    None, 
-                    lambda: self.iso.get_load(start=start_dt, end=end_dt)
-                )
+                if self.iso_name == "MISO":
+                    # MISO requires day-by-day fetching
+                    df = await self._fetch_miso_daily(self.iso.get_load, start_dt, end_dt, loop)
+                else:
+                    df = await loop.run_in_executor(
+                        None, 
+                        lambda: self.iso.get_load(start=start_dt, end=end_dt)
+                    )
             elif dataset == "fuel_mix":
-                df = await loop.run_in_executor(
-                    None, 
-                    lambda: self.iso.get_fuel_mix(start=start_dt, end=end_dt)
-                )
+                if self.iso_name == "MISO":
+                    # MISO requires day-by-day fetching
+                    df = await self._fetch_miso_daily(self.iso.get_fuel_mix, start_dt, end_dt, loop)
+                else:
+                    df = await loop.run_in_executor(
+                        None, 
+                        lambda: self.iso.get_fuel_mix(start=start_dt, end=end_dt)
+                    )
             elif dataset == "lmp":
                 lmp_market = market or "REAL_TIME_5_MIN"
                 df = await loop.run_in_executor(
@@ -131,10 +144,41 @@ class GridStatusApiClient:
                 return None
             
             return df
-            
+
+
         except Exception as e:
             logger.error(f"Error fetching {dataset} from {self.iso_name}: {e}")
             return None
+
+    async def _fetch_miso_daily(self, method, start_dt, end_dt, loop):
+        """Helper to fetch MISO data day by day."""
+        # Normalize to dates
+        start_date = start_dt.normalize()
+        end_date = end_dt.normalize() if end_dt else pd.Timestamp.now().normalize()
+        
+        # MISO fetch includes the end date day, so we need to be careful with ranges?
+        # pd.date_range includes end by default.
+        date_range = pd.date_range(start=start_date, end=end_date, freq='D')
+        
+        tasks = []
+        for date in date_range:
+            # Capture date in lambda default arg
+            tasks.append(
+                loop.run_in_executor(None, lambda d=date: method(date=d))
+            )
+        
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        dfs = []
+        for r in results:
+            if isinstance(r, pd.DataFrame) and not r.empty:
+                dfs.append(r)
+            elif isinstance(r, Exception):
+                logger.warning(f"Error fetching MISO data for a day: {r}")
+        
+        if not dfs:
+            return None
+            
+        return pd.concat(dfs).sort_index() if not dfs[0].empty else None
 
 
 class GridStatusMultiSeriesPlugin(MultiSeriesPlugin):
@@ -166,12 +210,18 @@ class GridStatusMultiSeriesPlugin(MultiSeriesPlugin):
         self.iso_name = request_params.get("iso", "CAISO")
         self.dataset = request_params.get("dataset", "load")
         self.market = request_params.get("market", None)
+        self.api_key = request_params.get("api_key", None)
+        self.detected_timezones: Dict[str, str] = {}
         
         try:
-            self.client = GridStatusApiClient(self.iso_name)
+            self.client = GridStatusApiClient(self.iso_name, api_key=self.api_key)
         except ValueError as e:
             logger.error(f"Failed to initialize GridStatus client: {e}")
+            logger.error(f"Failed to initialize GridStatus client: {e}")
             self.client = None
+    
+    def get_detected_timezone(self, unique_id: str) -> Optional[str]:
+        return self.detected_timezones.get(unique_id)
     
     async def get_historical_data_multi(
         self, 
@@ -219,8 +269,31 @@ class GridStatusMultiSeriesPlugin(MultiSeriesPlugin):
                 ts_col = 'Time'
             elif 'Interval Start' in df.columns:
                 ts_col = 'Interval Start'
+            elif 'Interval Start' in df.columns:
+                ts_col = 'Interval Start'
             else:
                 ts_col = df.columns[0]
+            
+            # Detect timezone from the timestamp column
+            try:
+                # Check if column is timezone-aware
+                if pd.api.types.is_datetime64_any_dtype(df[ts_col]):
+                    # If it's already datetime, accessing .dt.tz should work if it's aware
+                    # However, read_csv or similar might not preserve it unless parse_dates used
+                    # But gridstatus returns live objects usually.
+                    
+                    # If it's not datetime, we might need to convert?
+                    # But let's assume it returned valid types.
+                    
+                    # Note: df[ts_col].dt.tz returns the timezone object or None
+                    tz = getattr(df[ts_col].dt, 'tz', None)
+                    if tz:
+                        tz_str = str(tz)
+                        # Map pytz/dateutil to string
+                        for series_def in self._series_definitions:
+                            self.detected_timezones[series_def.unique_id] = tz_str
+            except Exception as e:
+                logger.warning(f"Failed to detect timezone for {self._group_id}: {e}")
             
             # Extract data for each series based on extract_filter
             for series_def in self._series_definitions:
