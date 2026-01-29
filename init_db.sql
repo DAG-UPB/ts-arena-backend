@@ -61,6 +61,7 @@ CREATE TABLE data_portal.time_series (
   update_frequency TEXT,
   update_frequency_timepoint TEXT,
   ts_timezone TEXT,
+  imputation_policy TEXT,
   domain_category_id INTEGER REFERENCES data_portal.domain_category(id),
   unique_id TEXT UNIQUE NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

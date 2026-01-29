@@ -180,6 +180,7 @@ class PluginLoader:
                 domain=metadata.get('domain', ''),
                 category=metadata.get('category', ''),
                 subcategory=metadata.get('subcategory'),
+                imputation_policy=metadata.get('imputation_policy'),
                 update_frequency=update_frequency,
                 extract_filter=extract_filter
             )
@@ -236,7 +237,8 @@ class PluginLoader:
             domain=metadata_dict.get('domain', ''),
             category=metadata_dict.get('category') or metadata_dict.get('subdomain', ''),
             subcategory=metadata_dict.get('subcategory', ''),
-            update_frequency=calculate_update_frequency(metadata_dict.get('frequency', '1 hour'))
+            update_frequency=calculate_update_frequency(metadata_dict.get('frequency', '1 hour')),
+            imputation_policy=metadata_dict.get('imputation_policy')
         )
         
         # Dynamically import the plugin class

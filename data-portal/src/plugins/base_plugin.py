@@ -17,6 +17,7 @@ class TimeSeriesDefinition:
     domain: str
     category: str
     subcategory: Optional[str] = None
+    imputation_policy: Optional[str] = None
     update_frequency: Optional[str] = None
     extract_filter: Dict[str, Any] = field(default_factory=dict)
 
@@ -33,8 +34,10 @@ class TimeSeriesMetadata:
         unit: str,
         domain: str,
         category: str,
+        category: str,
         subcategory: Optional[str],
-        update_frequency: str
+        update_frequency: str,
+        imputation_policy: Optional[str] = None
     ):
         """
         Initialize time series metadata.
@@ -50,6 +53,7 @@ class TimeSeriesMetadata:
             category: Category (e.g., 'generation', 'temperature')
             subcategory: Subcategory (e.g., 'nuclear', 'wind')
             update_frequency: How often the data source is updated (PostgreSQL INTERVAL string)
+            imputation_policy: Policy for imputing missing values (e.g., 'linear', 'ffill', 'zero')
         """
         self.unique_id = unique_id
         self.name = name
@@ -59,7 +63,9 @@ class TimeSeriesMetadata:
         self.domain = domain
         self.category = category
         self.subcategory = subcategory
+        self.subcategory = subcategory
         self.update_frequency = update_frequency
+        self.imputation_policy = imputation_policy
 
 
 class BasePlugin(ABC):

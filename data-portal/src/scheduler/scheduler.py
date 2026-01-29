@@ -250,6 +250,7 @@ class DataPortalScheduler:
                         domain=getattr(metadata, 'domain', ''),
                         category=getattr(metadata, 'category', ''),
                         subcategory=getattr(metadata, 'subcategory', ''),
+                        imputation_policy=getattr(metadata, 'imputation_policy', None),
                         update_frequency=metadata.update_frequency
                     )
                     
@@ -381,6 +382,7 @@ class DataPortalScheduler:
                             domain=series_def.domain,
                             category=series_def.category,
                             subcategory=series_def.subcategory or '',
+                            imputation_policy=series_def.imputation_policy,
                             update_frequency=series_def.update_frequency or '15 minutes'
                         )
                         

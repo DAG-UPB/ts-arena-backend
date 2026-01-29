@@ -77,6 +77,7 @@ class TimeSeriesDataRepository:
         domain: str = "",
         category: str = "",
         subcategory: str = "",
+        imputation_policy: Optional[str] = None,
         update_frequency: str = "1 day"
     ) -> int:
         """
@@ -90,7 +91,9 @@ class TimeSeriesDataRepository:
             unit: Unit of measurement
             domain: Domain category
             category: Category
+            category: Category
             subcategory: Subcategory
+            imputation_policy: Imputation policy (e.g., 'linear', 'ffill')
             update_frequency: How often data is updated, as ISO 8601 or PostgreSQL format
             
         Returns:
@@ -124,11 +127,11 @@ class TimeSeriesDataRepository:
         insert_query = text("""
             INSERT INTO data_portal.time_series (
                 name, description, frequency, unit, update_frequency, 
-                domain_category_id, unique_id
+                imputation_policy, domain_category_id, unique_id
             )
             VALUES (
                 :name, :description, :frequency, :unit, :update_frequency,
-                :domain_category_id, :unique_id
+                :imputation_policy, :domain_category_id, :unique_id
             )
             RETURNING series_id
         """)
@@ -142,6 +145,9 @@ class TimeSeriesDataRepository:
                 "frequency": frequency_dt,  # Use timedelta directly
                 "unit": unit,
                 "update_frequency": update_frequency,
+                "unit": unit,
+                "update_frequency": update_frequency,
+                "imputation_policy": imputation_policy,
                 "domain_category_id": domain_category_id
             }
         )
