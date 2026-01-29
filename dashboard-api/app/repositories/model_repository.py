@@ -144,7 +144,7 @@ class ModelRepository:
         frequencies: Optional[List[str]] = None,
         horizons: Optional[List[str]] = None,
         definition_id: Optional[int] = None,
-        min_challenges: int = 1,
+        min_rounds: int = 1,
         limit: int = 100
     ) -> List[Dict[str, Any]]:
         """
@@ -157,7 +157,7 @@ class ModelRepository:
             subcategories: List of subcategories (e.g. ["Load", "Generation"])
             frequencies: List of frequencies as ISO 8601 (e.g. ["PT1H", "P1D"])
             horizons: List of horizons as ISO 8601 (e.g. ["PT6H", "P1D"])
-            min_challenges: Minimum number of participated challenges
+            min_rounds: Minimum number of participated rounds
             limit: Max. number of results
         
         Returns:
@@ -167,7 +167,7 @@ class ModelRepository:
             SELECT
                 cs.model_id,
                 MAX(mi.name) AS model_name,
-                COUNT(DISTINCT cs.challenge_id) AS challenges_participated,
+                COUNT(DISTINCT cs.round_id) AS rounds_participated,
                 AVG(cs.mase) AS avg_mase,
                 STDDEV(cs.mase) AS stddev_mase,
                 MIN(cs.mase) AS min_mase,
@@ -177,7 +177,7 @@ class ModelRepository:
                 ARRAY_AGG(DISTINCT vr.frequency::INTERVAL ORDER BY vr.frequency) FILTER (WHERE vr.frequency IS NOT NULL) AS frequencies_covered,
                 ARRAY_AGG(DISTINCT vr.horizon::INTERVAL ORDER BY vr.horizon) FILTER (WHERE vr.horizon IS NOT NULL) AS horizons_covered
             FROM forecasts.v_ranking_base vr
-            JOIN forecasts.scores cs ON cs.round_id = vr.challenge_id AND cs.model_id = vr.model_id
+            JOIN forecasts.scores cs ON cs.round_id = vr.round_id AND cs.model_id = vr.model_id
             JOIN models.model_info mi ON mi.id = cs.model_id
             LEFT JOIN challenges.rounds r ON r.id = cs.round_id
             WHERE 1=1
@@ -197,7 +197,7 @@ class ModelRepository:
             delta = range_mapping.get(time_range)
             if delta:
                 since = now - delta
-                query += " AND challenge_end_time >= %s"
+                query += " AND round_end_time >= %s"
                 params.append(since)
         
         # Domain filter
@@ -257,12 +257,12 @@ class ModelRepository:
         
         # Group and aggregate
         query += """
-            GROUP BY model_id, model_name
-            HAVING COUNT(DISTINCT challenge_id) >= %s
-            ORDER BY avg_mase ASC NULLS LAST, challenges_participated DESC
+            GROUP BY cs.model_id, model_name
+            HAVING COUNT(DISTINCT cs.round_id) >= %s
+            ORDER BY avg_mase ASC NULLS LAST, rounds_participated DESC
             LIMIT %s;
         """
-        params.extend([min_challenges, limit])
+        params.extend([min_rounds, limit])
         
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(query, tuple(params))

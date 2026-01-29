@@ -43,7 +43,7 @@ class RankingFiltersSchema(BaseModel):
     subcategory: Optional[List[str]] = Field(None, description="Subcategory filters applied")
     frequency: Optional[List[str]] = Field(None, description="Frequency filters applied (ISO 8601)")
     horizon: Optional[List[str]] = Field(None, description="Horizon filters applied (ISO 8601)")
-    min_challenges: Optional[int] = Field(None, description="Minimum challenges threshold applied")
+    min_rounds: Optional[int] = Field(None, description="Minimum rounds threshold applied")
     limit: Optional[int] = Field(None, description="Result limit applied")
 
 

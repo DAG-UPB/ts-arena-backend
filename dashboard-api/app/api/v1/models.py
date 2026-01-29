@@ -28,39 +28,6 @@ async def list_models_for_challenge(
     return models
 
 
-@router.get("/models/{model_id}", response_model=ModelDetailSchema)
-async def get_model_details(
-    model_id: int,
-    api_key: str = Depends(get_api_key),
-    conn = Depends(get_db_connection)
-):
-    """
-    Get detailed information about a model.
-    """
-    repo = ModelRepository(conn)
-    model = repo.get_model_details(model_id)
-    
-    if not model:
-        raise HTTPException(status_code=404, detail="Model not found")
-        
-    return model
-
-
-@router.get("/models/{model_id}/series/{series_id}/forecasts")
-async def get_model_series_forecasts(
-    model_id: int,
-    series_id: int,
-    api_key: str = Depends(get_api_key),
-    conn = Depends(get_db_connection)
-):
-    """
-    Get all forecasts made by this model for a specific series, along with Ground Truth.
-    """
-    repo = ForecastRepository(conn)
-    data = repo.get_model_series_long_term_forecasts(model_id, series_id)
-    return data
-
-
 @router.get("/models/rankings")
 async def get_filtered_rankings(
     time_range: Optional[str] = Query(
@@ -98,10 +65,10 @@ async def get_filtered_rankings(
         description="Filter by definition ID (e.g., 'Day-Ahead Power')",
         example=1
     ),
-    min_challenges: int = Query(
+    min_rounds: int = Query(
         1,
         ge=1,
-        description="Minimum number of challenges a model must have participated in",
+        description="Minimum number of rounds a model must have participated in",
         example=3
     ),
     limit: int = Query(
@@ -125,7 +92,7 @@ async def get_filtered_rankings(
     - **Frequency**: Filter by data frequency in ISO 8601 format (e.g., PT1H for 1 hour)
     - **Horizon**: Filter by forecast horizon in ISO 8601 format (e.g., P1D for 1 day)
     - **Definition**: Filter by challenge definition (e.g., Day-Ahead Power)
-    - **Min Challenges**: Show only models that participated in at least N challenges
+    - **Min Rounds**: Show only models that participated in at least N rounds
     
     **Filter Format:**
     - Multiple values: Comma-separated (e.g., `domain=Energy,Finance`)
@@ -157,7 +124,7 @@ async def get_filtered_rankings(
       "filters_applied": {
         "time_range": "30d",
         "domain": ["Energy", "Finance"],
-        "min_challenges": 3
+        "min_rounds": 3
       }
     }
     ```
@@ -187,7 +154,7 @@ async def get_filtered_rankings(
         frequencies=frequencies_list,
         horizons=horizons_list,
         definition_id=definition_id,
-        min_challenges=min_challenges,
+        min_rounds=min_rounds,
         limit=limit
     )
     
@@ -207,8 +174,8 @@ async def get_filtered_rankings(
         filters_applied['horizon'] = horizons_list
     if definition_id:
         filters_applied['definition_id'] = definition_id
-    if min_challenges > 1:
-        filters_applied['min_challenges'] = min_challenges
+    if min_rounds > 1:
+        filters_applied['min_rounds'] = min_rounds
     if limit != 100:
         filters_applied['limit'] = limit
     
@@ -254,3 +221,36 @@ async def get_ranking_filters(
     filter_options = repo.get_available_filter_options()
     
     return filter_options
+
+
+@router.get("/models/{model_id}", response_model=ModelDetailSchema)
+async def get_model_details(
+    model_id: int,
+    api_key: str = Depends(get_api_key),
+    conn = Depends(get_db_connection)
+):
+    """
+    Get detailed information about a model.
+    """
+    repo = ModelRepository(conn)
+    model = repo.get_model_details(model_id)
+    
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+        
+    return model
+
+
+@router.get("/models/{model_id}/series/{series_id}/forecasts")
+async def get_model_series_forecasts(
+    model_id: int,
+    series_id: int,
+    api_key: str = Depends(get_api_key),
+    conn = Depends(get_db_connection)
+):
+    """
+    Get all forecasts made by this model for a specific series, along with Ground Truth.
+    """
+    repo = ForecastRepository(conn)
+    data = repo.get_model_series_long_term_forecasts(model_id, series_id)
+    return data
