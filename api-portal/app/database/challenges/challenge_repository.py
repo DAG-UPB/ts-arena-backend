@@ -195,9 +195,25 @@ class ChallengeRoundRepository:
         """
         query = select(VChallengeRoundWithStatus)
         if statuses:
-            query = query.where(VChallengeRoundWithStatus.status.in_(statuses))
-        if definition_id:
-            query = query.where(VChallengeRoundWithStatus.definition_id == definition_id)
+            from sqlalchemy import or_, and_
+            conditions = []
+            # specific check for 'cancelled' using static status
+            if 'cancelled' in statuses:
+                conditions.append(VChallengeRoundWithStatus.status == 'cancelled')
+            
+            # for other statuses (active, completed, registration), use computed_status
+            # but ensure we don't include cancelled rounds
+            other_statuses = [s for s in statuses if s != 'cancelled']
+            if other_statuses:
+                conditions.append(
+                    and_(
+                        VChallengeRoundWithStatus.computed_status.in_(other_statuses),
+                        VChallengeRoundWithStatus.status != 'cancelled'
+                    )
+                )
+            
+            if conditions:
+                query = query.where(or_(*conditions))
         
         query = query.order_by(VChallengeRoundWithStatus.created_at.desc())
 
