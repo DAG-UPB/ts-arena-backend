@@ -150,3 +150,27 @@ class ChallengeContextData(BaseModel):
             return None
         return isodate.duration_isoformat(frequency)
 
+
+# ==========================================================
+# Complete Round Data Schema
+# ==========================================================
+
+class ForecastDataPoint(BaseModel):
+    readable_id: str
+    ts: datetime
+    value: float
+
+class ActualDataPoint(BaseModel):
+    ts: datetime
+    value: float
+
+class SeriesRoundData(BaseModel):
+    series_id: int
+    challenge_series_name: str
+    context: List[ContextDataPoint]
+    actuals: List[ActualDataPoint]
+    forecasts: Dict[str, List[ContextDataPoint]] # readable_id (str) -> data points
+
+class ChallengeRoundData(BaseModel):
+    round_id: int
+    series_data: List[SeriesRoundData]

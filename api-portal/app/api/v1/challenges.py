@@ -1,15 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
-from app.api.dependencies import get_challenge_service, require_auth
+from fastapi.responses import StreamingResponse
+from app.api.dependencies import get_challenge_service, require_auth, get_export_service
 from app.schemas.challenge import (
     ChallengeDefinitionResponse,
     ChallengeRoundResponse,
     ChallengeRoundResponse,
     ChallengeContextData,
     RoundStatus,
+    ChallengeRoundData,
 )
 from app.services.challenge_service import ChallengeService
 from datetime import datetime, timezone
+from app.services.export_service import ExportService
 
 
 router = APIRouter(prefix="/challenge", tags=["challenge"])
@@ -127,4 +130,73 @@ async def get_round_context_data(
         raise HTTPException(status_code=404, detail=str(e))
 
 
+@router.get(
+    "/rounds/{round_id}/data",
+    response_model=ChallengeRoundData,
+    summary="Get complete round data (Context + Forecasts + Actuals)",
+    include_in_schema=False,
+)
+async def get_round_data(
+    round_id: int,
+    current_user: dict = Depends(require_auth),
+    challenge_service: ChallengeService = Depends(get_challenge_service)
+):
+    """
+    Returns comprehensive data for the challenge round:
+    - **Context**: Historical data available at round creation (Time Travel).
+    - **Forecasts**: All submitted forecasts for the round.
+    - **Actuals**: Ground truth data available at evaluation time (Time Travel).
+    """
+    try:
+        return await challenge_service.get_round_data(round_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
+
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get(
+    "/export/{year}/{month}",
+    response_class=StreamingResponse,
+    summary="Export monthly challenge data as Zip/Parquet",
+    include_in_schema=False
+)
+async def export_monthly_data(
+    year: int,
+    month: int,
+    definition_id: Optional[int] = Query(None, description="Filter by challenge definition ID"),
+    current_user: dict = Depends(require_auth),
+    export_service: ExportService = Depends(get_export_service)
+):
+    """
+    Exports all challenge data for the specified month.
+    
+    Returns a ZIP file containing:
+    - **rounds_metadata.parquet**: Metadata for all rounds in the month.
+    - **context.parquet**: Historical context data (Time Travel).
+    - **actuals.parquet**: Ground truth actuals (Time Travel).
+    - **forecasts.parquet**: Submitted forecasts.
+    """
+    try:
+        if month < 1 or month > 12:
+            raise HTTPException(status_code=400, detail="Invalid month")
+            
+        zip_buffer = await export_service.export_monthly_data(year, month, definition_id)
+        
+        filename = f"challenge_export_{year}_{month:02d}"
+        
+        if definition_id:
+            filename += f"_def{definition_id}"
+        filename += ".zip"
+        
+        return StreamingResponse(
+            iter([zip_buffer.getvalue()]), 
+            media_type="application/zip", 
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Export error: {e}")
+        raise HTTPException(status_code=500, detail="Error generating export")

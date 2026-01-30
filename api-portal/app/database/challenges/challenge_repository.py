@@ -2,7 +2,7 @@ from typing import List, Optional, Any, Dict
 import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.database.challenges.challenge import (
     ChallengeDefinition, 
@@ -337,4 +337,87 @@ class ChallengeRoundRepository:
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
+
+    async def get_round_complete_data(self, round_id: int) -> Dict[str, Any]:
+        """
+        Retrieves complete round data (Context, Actuals, Forecasts) using Time Travel.
+        """
+        
+        sql = text("""
+            WITH round_info AS (
+                SELECT 
+                    r.id, 
+                    r.created_at, 
+                    r.start_time, 
+                    r.end_time,
+                    -- Use calculated_at from scores where final_evaluation is true as evaluation time
+                    -- If no evaluation yet, use NOW() for actuals (or NULL if strictly after eval)
+                    COALESCE(
+                        MAX(s.calculated_at) FILTER (WHERE s.final_evaluation),
+                        NOW()
+                    ) as eval_time
+                FROM challenges.rounds r
+                LEFT JOIN forecasts.scores s ON r.id = s.round_id
+                WHERE r.id = :round_id
+                GROUP BY r.id
+            )
+            SELECT 
+                sp.series_id,
+                sp.challenge_series_name,
+                -- Context Data (as of round creation)
+                (
+                    SELECT COALESCE(json_agg(json_build_object('ts', c.ts, 'value', c.value) ORDER BY c.ts), '[]')
+                    FROM data_portal.time_series_data_scd2 c, round_info ri
+                    WHERE c.series_id = sp.series_id 
+                      AND c.valid_during @> ri.created_at 
+                      AND c.ts < ri.start_time
+                ) as context,
+                -- Actual Data (as of evaluation time)
+                (
+                    SELECT COALESCE(json_agg(json_build_object('ts', a.ts, 'value', a.value) ORDER BY a.ts), '[]')
+                    FROM data_portal.time_series_data_scd2 a, round_info ri
+                    WHERE a.series_id = sp.series_id 
+                      AND a.valid_during @> ri.eval_time 
+                      AND a.ts >= ri.start_time 
+                      AND a.ts <= ri.end_time
+                ) as actuals,
+                -- Forecast Data (grouped by readable_id)
+                (
+                    SELECT COALESCE(
+                        json_object_agg(
+                            f.readable_id, 
+                            (SELECT json_agg(json_build_object('ts', f2.ts, 'value', f2.predicted_value) ORDER BY f2.ts)
+                             FROM forecasts.forecasts f2
+                             JOIN models.model_info mi2 ON f2.model_id = mi2.id
+                             WHERE f2.round_id = sp.round_id 
+                               AND f2.series_id = sp.series_id 
+                               AND mi2.readable_id = f.readable_id)
+                        ), '{}'::json
+                    )
+                    FROM (
+                        SELECT DISTINCT mi.readable_id 
+                        FROM forecasts.forecasts f
+                        JOIN models.model_info mi ON f.model_id = mi.id
+                        WHERE f.round_id = sp.round_id AND f.series_id = sp.series_id
+                    ) f
+                ) as forecasts
+            FROM challenges.series_pseudo sp
+            WHERE sp.round_id = :round_id
+        """)
+        
+        result = await self.session.execute(sql, {"round_id": round_id})
+        rows = result.mappings().all()
+        
+        series_data = []
+        for row in rows:
+            series_data.append({
+                "series_id": row.series_id,
+                "challenge_series_name": row.challenge_series_name,
+                "context": row.context,
+                "actuals": row.actuals,
+                "forecasts": row.forecasts
+            })
+            
+        return {"round_id": round_id, "series_data": series_data}
+
 

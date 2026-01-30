@@ -7,7 +7,8 @@ import isodate
 
 from app.schemas.challenge import (
     ChallengeRoundCreate, ChallengeRoundFull, ChallengeRoundResponse, 
-    ChallengeDefinitionResponse, ChallengeContextData, ContextDataPoint
+    ChallengeDefinitionResponse, ChallengeContextData, ContextDataPoint,
+    ChallengeRoundData
 )
 from app.database.challenges.challenge_repository import (
     ChallengeDefinitionRepository, ChallengeRoundRepository
@@ -379,6 +380,16 @@ class ChallengeService:
             )
             for series_name, series_data in raw.items()
         ]
+
+    async def get_round_data(self, round_id: int) -> ChallengeRoundData:
+        """Returns complete round data (Context, Actuals, Forecasts)."""
+        # Ensure round exists
+        round_obj = await self.round_repository.get_by_id(round_id)
+        if not round_obj:
+            raise ValueError(f"Round {round_id} not found")
+            
+        raw_data = await self.round_repository.get_round_complete_data(round_id)
+        return ChallengeRoundData(**raw_data)
 
     async def get_round(self, round_id: int) -> Optional[ChallengeRoundResponse]:
         """Get a single challenge round by ID with definition info."""

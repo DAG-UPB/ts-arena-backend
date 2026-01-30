@@ -18,3 +18,4 @@ PyJWT[crypto]
 python-multipart
 scikit-learn
 isodate
+pyarrow
