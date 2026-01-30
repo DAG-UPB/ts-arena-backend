@@ -176,7 +176,8 @@ class ModelRepository:
                 ARRAY_AGG(DISTINCT vr.domain ORDER BY vr.domain) FILTER (WHERE vr.domain IS NOT NULL) AS domains_covered,
                 ARRAY_AGG(DISTINCT vr.category ORDER BY vr.category) FILTER (WHERE vr.category IS NOT NULL) AS categories_covered,
                 ARRAY_AGG(DISTINCT vr.frequency::INTERVAL ORDER BY vr.frequency) FILTER (WHERE vr.frequency IS NOT NULL) AS frequencies_covered,
-                ARRAY_AGG(DISTINCT vr.horizon::INTERVAL ORDER BY vr.horizon) FILTER (WHERE vr.horizon IS NOT NULL) AS horizons_covered
+                ARRAY_AGG(DISTINCT vr.horizon::INTERVAL ORDER BY vr.horizon) FILTER (WHERE vr.horizon IS NOT NULL) AS horizons_covered,
+                ARRAY_AGG(DISTINCT r.definition_id ORDER BY r.definition_id) FILTER (WHERE r.definition_id IS NOT NULL) AS challenges_participated_ids
             FROM forecasts.v_ranking_base vr
             JOIN forecasts.scores cs ON cs.round_id = vr.round_id AND cs.model_id = vr.model_id
             JOIN models.model_info mi ON mi.id = cs.model_id
