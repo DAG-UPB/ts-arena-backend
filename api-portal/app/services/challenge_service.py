@@ -452,3 +452,61 @@ class ChallengeService:
             )
             for r in rounds
         ]
+
+    async def generate_naive_forecast_template(
+        self,
+        round_id: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Generates a naive forecast template for a round.
+        
+        Uses persistence (last known value) as the prediction method.
+        Returns a structure ready for direct upload via /forecasts/upload.
+        """
+        # Get round details
+        round_obj = await self.round_repository.get_by_id(round_id)
+        if not round_obj:
+            raise ValueError(f"Round {round_id} not found")
+        
+        # Get context data
+        context_data = await self.get_context_data_bulk(round_id)
+        if not context_data:
+            raise ValueError(f"No context data available for round {round_id}")
+        
+        # Calculate forecast timestamps based on horizon and frequency
+        # Forecast starts at registration_end (= start_time of actual forecast period)
+        forecast_start = round_obj.start_time
+        forecast_end = round_obj.end_time
+        frequency = round_obj.frequency
+        
+        if not frequency:
+            raise ValueError(f"Round {round_id} has no frequency defined")
+        
+        # Generate timestamps
+        forecast_timestamps = []
+        current_ts = forecast_start
+        while current_ts < forecast_end:
+            forecast_timestamps.append(current_ts)
+            current_ts += frequency
+        
+        # Build naive forecast for each series
+        result = []
+        for series_data in context_data:
+            # Get last known value (naive persistence)
+            if not series_data.data:
+                continue
+            
+            last_value = series_data.data[-1].value
+            
+            forecasts = [
+                {"ts": ts.isoformat(), "value": last_value}
+                for ts in forecast_timestamps
+            ]
+            
+            result.append({
+                "challenge_series_name": series_data.challenge_series_name,
+                "forecasts": forecasts
+            })
+        
+        return result
+

@@ -28,7 +28,6 @@ class TimeSeriesModel(Base):
     frequency = Column(Interval)
     unit = Column(Text)
     update_frequency = Column(Text, nullable=False)
-    update_frequency_timepoint = Column(Text)
     domain_category_id = Column(Integer, ForeignKey("data_portal.domain_category.id"))
     unique_id = Column(Text, unique=True, nullable=False)
     ts_timezone = Column(Text)

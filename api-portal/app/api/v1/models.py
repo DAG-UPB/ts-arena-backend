@@ -31,7 +31,7 @@ async def register_model(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.post("/register/admin", response_model=ModelInfo, status_code=201)
+@router.post("/register/admin", response_model=ModelInfo, status_code=201, tags=["admin"])
 async def register_model_admin(
     payload: ModelInfoCreateInternal,
     current_user: dict = Depends(require_internal_user),

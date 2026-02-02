@@ -153,6 +153,35 @@ async def get_round_data(
         raise HTTPException(status_code=404, detail=str(e))
 
 
+@router.get(
+    "/rounds/{round_id}/naive-forecast-template",
+    summary="Get a naive forecast template for easy upload",
+    description=(
+        "Returns a ready-to-upload naive forecast template. "
+        "Uses persistence (last context value) as the prediction method. "
+        "Timestamps are correctly calculated based on round horizon and frequency."
+    )
+)
+async def get_naive_forecast_template(
+    round_id: int,
+    current_user: dict = Depends(require_auth),
+    challenge_service: ChallengeService = Depends(get_challenge_service)
+):
+    """
+    Returns a naive forecast template ready for direct upload.
+    
+    The template uses the last known context value as the prediction 
+    for all forecast timestamps (persistence/naive method).
+    
+    Simply add your `model_name` and upload via POST /forecasts/upload.
+    """
+    try:
+        template = await challenge_service.generate_naive_forecast_template(round_id)
+        return {
+            "round_id": round_id,
+            "forecasts": template,
+            "usage_hint": "Add 'model_name' field and POST to /api/v1/forecasts/upload"
+        }
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
