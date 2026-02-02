@@ -143,7 +143,7 @@ class ModelRepository:
         subcategories: Optional[List[str]] = None,
         frequencies: Optional[List[str]] = None,
         horizons: Optional[List[str]] = None,
-        definition_id: Optional[int] = None,
+        definition_names: Optional[List[str]] = None,
         min_rounds: int = 1,
         limit: int = 100
     ) -> List[Dict[str, Any]]:
@@ -157,7 +157,7 @@ class ModelRepository:
             subcategories: List of subcategories (e.g. ["Load", "Generation"])
             frequencies: List of frequencies as ISO 8601 (e.g. ["PT1H", "P1D"])
             horizons: List of horizons as ISO 8601 (e.g. ["PT6H", "P1D"])
-            definition_id: Challenge definition ID to filter by
+            definition_names: List of challenge definition names to filter by
             min_rounds: Minimum number of participated rounds
             limit: Max. number of results
         
@@ -176,11 +176,13 @@ class ModelRepository:
                 ARRAY_AGG(DISTINCT vr.domain ORDER BY vr.domain) FILTER (WHERE vr.domain IS NOT NULL) AS domains_covered,
                 ARRAY_AGG(DISTINCT vr.category ORDER BY vr.category) FILTER (WHERE vr.category IS NOT NULL) AS categories_covered,
                 ARRAY_AGG(DISTINCT vr.frequency::INTERVAL ORDER BY vr.frequency) FILTER (WHERE vr.frequency IS NOT NULL) AS frequencies_covered,
-                ARRAY_AGG(DISTINCT vr.horizon::INTERVAL ORDER BY vr.horizon) FILTER (WHERE vr.horizon IS NOT NULL) AS horizons_covered
+                ARRAY_AGG(DISTINCT vr.horizon::INTERVAL ORDER BY vr.horizon) FILTER (WHERE vr.horizon IS NOT NULL) AS horizons_covered,
+                ARRAY_AGG(DISTINCT cd.name ORDER BY cd.name) FILTER (WHERE cd.name IS NOT NULL) AS challenge_definition_names
             FROM forecasts.v_ranking_base vr
             JOIN forecasts.scores cs ON cs.round_id = vr.round_id AND cs.model_id = vr.model_id
             JOIN models.model_info mi ON mi.id = cs.model_id
             LEFT JOIN challenges.rounds r ON r.id = cs.round_id
+            LEFT JOIN challenges.definitions cd ON cd.id = r.definition_id
             WHERE 1=1
         """
         
@@ -252,9 +254,10 @@ class ModelRepository:
                 query += " AND (" + " OR ".join(interval_conditions) + ")"
         
         # Definition ID filter
-        if definition_id:
-            query += " AND r.definition_id = %s"
-            params.append(definition_id)
+        if definition_names:
+            placeholders = ','.join(['%s'] * len(definition_names))
+            query += f" AND cd.name IN ({placeholders})"
+            params.extend(definition_names)
         
         # Group and aggregate
         query += """
@@ -328,7 +331,7 @@ class ModelRepository:
         Returns all available filter values.
         
         Returns:
-            Dict with domains, categories, subcategories, frequencies, horizons
+            Dict with domains, categories, subcategories, frequencies, horizons, time_ranges, definition_names
         """
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             # Get unique domains
@@ -388,12 +391,14 @@ class ModelRepository:
                     iso_horizon = isodate.duration_isoformat(horizon_interval)
                     horizons.append(iso_horizon)
             
-            # Get unique challenge IDs
+            # Get unique challenge definition names
             cur.execute("""
-                SELECT DISTINCT id
+                SELECT DISTINCT name
                 FROM challenges.definitions
+                WHERE name IS NOT NULL
+                ORDER BY name
             """)
-            challenge_ids = [row['id'] for row in cur.fetchall()]
+            definition_names = [row['name'] for row in cur.fetchall()]
             
             return {
                 "domains": domains,
@@ -402,5 +407,139 @@ class ModelRepository:
                 "frequencies": frequencies,
                 "horizons": horizons,
                 "time_ranges": ["7d", "30d", "90d", "365d"],
-                "challenge_ids": challenge_ids
+                "definition_names": definition_names
             }
+    
+    def get_model_rankings_by_definition(
+        self,
+        model_id: int
+    ) -> Dict[str, Any]:
+        """
+        Get rankings for a model across all definitions it participated in.
+        Returns rankings for 7d, 30d, 90d, and 365d time ranges.
+        
+        Args:
+            model_id: The model ID
+            
+        Returns:
+            Dict with model info and rankings grouped by definition
+        """
+        now = datetime.utcnow()
+        time_ranges = {
+            "7d": now - timedelta(days=7),
+            "30d": now - timedelta(days=30),
+            "90d": now - timedelta(days=90),
+            "365d": now - timedelta(days=365),
+        }
+        
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # Get model name
+            cur.execute(
+                """
+                SELECT id, name
+                FROM models.model_info
+                WHERE id = %s
+                """,
+                (model_id,)
+            )
+            model_row = cur.fetchone()
+            if not model_row:
+                return None
+            
+            model_name = model_row['name']
+            
+            # Get all definitions the model participated in
+            cur.execute(
+                """
+                SELECT DISTINCT cd.id, cd.name
+                FROM forecasts.scores s
+                JOIN challenges.rounds r ON r.id = s.round_id
+                JOIN challenges.definitions cd ON cd.id = r.definition_id
+                WHERE s.model_id = %s
+                ORDER BY cd.name
+                """,
+                (model_id,)
+            )
+            definitions = [dict(row) for row in cur.fetchall()]
+            
+            # For each definition, calculate rankings for each time range
+            definition_rankings = []
+            for definition in definitions:
+                definition_id = definition['id']
+                definition_name = definition['name']
+                
+                rankings_data = {
+                    "definition_id": definition_id,
+                    "definition_name": definition_name,
+                    "rankings_7d": None,
+                    "rankings_30d": None,
+                    "rankings_90d": None,
+                    "rankings_365d": None,
+                }
+                
+                # Calculate rankings for each time range
+                for range_key, since_date in time_ranges.items():
+                    # Get model's ranking in this definition for this time range
+                    cur.execute(
+                        """
+                        WITH model_scores AS (
+                            SELECT
+                                s.model_id,
+                                mi.name as model_name,
+                                COUNT(DISTINCT s.round_id) as rounds_participated,
+                                AVG(s.mase) as avg_mase,
+                                STDDEV(s.mase) as stddev_mase,
+                                MIN(s.mase) as min_mase,
+                                MAX(s.mase) as max_mase
+                            FROM forecasts.scores s
+                            JOIN models.model_info mi ON mi.id = s.model_id
+                            JOIN challenges.rounds r ON r.id = s.round_id
+                            WHERE r.definition_id = %s
+                                AND r.end_time >= %s
+                                AND s.mase IS NOT NULL
+                                AND s.mase NOT IN ('NaN', 'Infinity', '-Infinity')
+                            GROUP BY s.model_id, mi.name
+                        ),
+                        ranked_models AS (
+                            SELECT
+                                model_id,
+                                model_name,
+                                rounds_participated,
+                                avg_mase,
+                                stddev_mase,
+                                min_mase,
+                                max_mase,
+                                RANK() OVER (ORDER BY avg_mase ASC NULLS LAST, rounds_participated DESC) as rank,
+                                COUNT(*) OVER () as total_models
+                            FROM model_scores
+                        )
+                        SELECT
+                            rank,
+                            total_models,
+                            rounds_participated,
+                            avg_mase,
+                            stddev_mase,
+                            min_mase,
+                            max_mase
+                        FROM ranked_models
+                        WHERE model_id = %s
+                        """,
+                        (definition_id, since_date, model_id)
+                    )
+                    
+                    ranking_row = cur.fetchone()
+                    if ranking_row:
+                        ranking_dict = dict(ranking_row)
+                        # Sanitize float values
+                        for key, value in ranking_dict.items():
+                            ranking_dict[key] = sanitize_float(value)
+                        rankings_data[f"rankings_{range_key}"] = ranking_dict
+                
+                definition_rankings.append(rankings_data)
+            
+            return {
+                "model_id": model_id,
+                "model_name": model_name,
+                "definition_rankings": definition_rankings
+            }
+
