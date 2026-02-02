@@ -10,7 +10,7 @@ from app.schemas.common import (
     ModelRankingSchema,
     ModelRankingsResponseSchema
 )
-from app.schemas.model import ModelSchema, ModelDetailSchema
+from app.schemas.model import ModelSchema, ModelDetailSchema, ModelSeriesByDefinitionSchema
 from app.schemas.forecast import ModelSeriesForecastsAcrossRoundsSchema
 
 router = APIRouter(prefix="/api/v1", tags=["Models"])
@@ -426,6 +426,98 @@ async def get_model_series_forecasts_across_rounds(
         raise HTTPException(
             status_code=404, 
             detail="Model, definition, or series not found"
+        )
+    
+    return result
+
+
+@router.get(
+    "/models/{model_id}/series-by-definition",
+    response_model=ModelSeriesByDefinitionSchema
+)
+async def get_model_series_by_definition(
+    model_id: int,
+    api_key: str = Depends(get_api_key),
+    conn = Depends(get_db_connection)
+):
+    """
+    Get all series grouped by definition for a specific model.
+    
+    This endpoint returns all time series that a model has forecasted for,
+    organized by challenge definition. If a series appears in multiple definitions,
+    it will be listed under each definition separately.
+    
+    **Path Parameters:**
+    - model_id: ID of the model
+    
+    **Response Structure:**
+    ```json
+    {
+      "model_id": 123,
+      "model_readable_id": "example-model",
+      "model_name": "Example Model",
+      "definitions": [
+        {
+          "definition_id": 1,
+          "definition_name": "Day-Ahead Power Forecast",
+          "series": [
+            {
+              "series_id": 456,
+              "series_name": "Power Load - Region A",
+              "series_unique_id": "power_load_region_a",
+              "forecast_count": 240,
+              "rounds_participated": 10
+            },
+            {
+              "series_id": 457,
+              "series_name": "Power Load - Region B",
+              "series_unique_id": "power_load_region_b",
+              "forecast_count": 180,
+              "rounds_participated": 8
+            }
+          ]
+        },
+        {
+          "definition_id": 2,
+          "definition_name": "Week-Ahead Power Forecast",
+          "series": [
+            {
+              "series_id": 456,
+              "series_name": "Power Load - Region A",
+              "series_unique_id": "power_load_region_a",
+              "forecast_count": 48,
+              "rounds_participated": 4
+            }
+          ]
+        }
+      ]
+    }
+    ```
+    
+    **Use Cases:**
+    - Get an overview of all series a model has forecasted
+    - Understand model's participation across different challenge definitions
+    - Identify series that span multiple definitions
+    - Analyze forecast activity and round participation per series
+    
+    **Headers:**
+    - X-API-Key: Valid API key required
+    
+    **Notes:**
+    - Returns 404 if model not found
+    - Series appearing in multiple definitions are listed separately under each
+    - Definitions are ordered alphabetically by name
+    - Series within each definition are ordered alphabetically by name
+    - forecast_count includes all forecast data points across all rounds
+    - rounds_participated shows distinct rounds where forecasts were submitted
+    """
+    repo = ModelRepository(conn)
+    result = repo.get_model_series_by_definition(model_id)
+    
+    if not result:
+        raise HTTPException(
+            status_code=404,
+            detail="Model not found"
         )
     
     return result
