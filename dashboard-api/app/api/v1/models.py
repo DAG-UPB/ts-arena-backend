@@ -11,6 +11,7 @@ from app.schemas.common import (
     ModelRankingsResponseSchema
 )
 from app.schemas.model import ModelSchema, ModelDetailSchema
+from app.schemas.forecast import ModelSeriesForecastsAcrossRoundsSchema
 
 router = APIRouter(prefix="/api/v1", tags=["Models"])
 
@@ -321,3 +322,111 @@ async def get_model_rankings(
         raise HTTPException(status_code=404, detail="Model not found")
     
     return result
+
+
+@router.get(
+    "/models/{model_id}/definitions/{definition_id}/series/{series_id}/forecasts",
+    response_model=ModelSeriesForecastsAcrossRoundsSchema
+)
+async def get_model_series_forecasts_across_rounds(
+    model_id: int,
+    definition_id: int,
+    series_id: int,
+    api_key: str = Depends(get_api_key),
+    conn = Depends(get_db_connection)
+):
+    """
+    Get forecasts for one model and one series across all rounds of a definition.
+    
+    This endpoint returns detailed information about a model's forecasts for a specific
+    series across all rounds belonging to a particular challenge definition. It clearly
+    distinguishes between two important cases:
+    
+    1. **Series not part of the round**: The series exists during the definition timespan
+       but was not included in that specific round's challenge (series_in_round=False)
+    
+    2. **Series part of round but no forecast**: The series was included in the round,
+       but the model did not submit a forecast for it (series_in_round=True, forecast_exists=False)
+    
+    3. **Forecast submitted**: The series was in the round and the model submitted forecasts
+       (series_in_round=True, forecast_exists=True, with forecast data points)
+    
+    **Path Parameters:**
+    - model_id: ID of the model
+    - definition_id: ID of the challenge definition
+    - series_id: ID of the time series
+    
+    **Response Structure:**
+    ```json
+    {
+      "model_id": 123,
+      "model_readable_id": "example-model",
+      "model_name": "Example Model",
+      "definition_id": 1,
+      "definition_name": "Day-Ahead Power Forecast",
+      "series_id": 456,
+      "series_name": "Power Load - Region A",
+      "rounds": [
+        {
+          "round_id": 1001,
+          "round_name": "Day-Ahead Power - 2024-01-01",
+          "start_time": "2024-01-01T00:00:00Z",
+          "end_time": "2024-01-02T00:00:00Z",
+          "series_in_round": true,
+          "forecast_exists": true,
+          "forecasts": [
+            {
+              "ts": "2024-01-02T00:00:00Z",
+              "y": 1234.5,
+              "ci": {"0.025": 1200.0, "0.975": 1270.0}
+            }
+          ]
+        },
+        {
+          "round_id": 1002,
+          "round_name": "Day-Ahead Power - 2024-01-02",
+          "start_time": "2024-01-02T00:00:00Z",
+          "end_time": "2024-01-03T00:00:00Z",
+          "series_in_round": true,
+          "forecast_exists": false,
+          "forecasts": null
+        },
+        {
+          "round_id": 1003,
+          "round_name": "Day-Ahead Power - 2024-01-03",
+          "start_time": "2024-01-03T00:00:00Z",
+          "end_time": "2024-01-04T00:00:00Z",
+          "series_in_round": false,
+          "forecast_exists": false,
+          "forecasts": null
+        }
+      ]
+    }
+    ```
+    
+    **Use Cases:**
+    - Track model performance over time for a specific series
+    - Identify missing forecasts (participation gaps)
+    - Distinguish between series not being in scope vs missing forecasts
+    - Analyze model consistency across rounds
+    
+    **Headers:**
+    - X-API-Key: Valid API key required
+    
+    **Notes:**
+    - Returns 404 if model, definition, or series not found
+    - Rounds are ordered by start_time (ascending)
+    - All rounds of the definition are included, regardless of forecast submission
+    - Confidence intervals (ci) are optional and depend on whether the model provided them
+    """
+    repo = ForecastRepository(conn)
+    result = repo.get_model_series_forecasts_across_rounds(model_id, definition_id, series_id)
+    
+    if not result:
+        raise HTTPException(
+            status_code=404, 
+            detail="Model, definition, or series not found"
+        )
+    
+    return result
+
