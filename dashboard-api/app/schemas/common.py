@@ -65,3 +65,23 @@ class APIInfoSchema(BaseModel):
     title: str
     version: str
     description: str
+
+
+class ModelDefinitionRankingSchema(BaseModel):
+    """Rankings for a model in a specific definition across different time ranges."""
+    definition_id: int = Field(..., description="Definition ID")
+    definition_name: str = Field(..., description="Definition name")
+    rankings_7d: Optional[Dict[str, Any]] = Field(None, description="7 day ranking stats")
+    rankings_30d: Optional[Dict[str, Any]] = Field(None, description="30 day ranking stats")
+    rankings_90d: Optional[Dict[str, Any]] = Field(None, description="90 day ranking stats")
+    rankings_365d: Optional[Dict[str, Any]] = Field(None, description="365 day ranking stats")
+
+
+class ModelRankingsResponseSchema(BaseModel):
+    """Response schema for model rankings across all definitions."""
+    model_id: int = Field(..., description="Model ID")
+    model_name: str = Field(..., description="Model name")
+    definition_rankings: List[ModelDefinitionRankingSchema] = Field(
+        default_factory=list,
+        description="Rankings grouped by definition"
+    )

@@ -5,7 +5,11 @@ from app.core.dependencies import get_api_key
 from app.database.connection import get_db_connection
 from app.repositories.model_repository import ModelRepository
 from app.repositories.forecast_repository import ForecastRepository
-from app.schemas.common import RankingResponseSchema, ModelRankingSchema
+from app.schemas.common import (
+    RankingResponseSchema,
+    ModelRankingSchema,
+    ModelRankingsResponseSchema
+)
 from app.schemas.model import ModelSchema, ModelDetailSchema
 
 router = APIRouter(prefix="/api/v1", tags=["Models"])
@@ -256,3 +260,64 @@ async def get_model_series_forecasts(
     repo = ForecastRepository(conn)
     data = repo.get_model_series_long_term_forecasts(model_id, series_id)
     return data
+
+
+@router.get("/models/{model_id}/rankings", response_model=ModelRankingsResponseSchema)
+async def get_model_rankings(
+    model_id: int,
+    api_key: str = Depends(get_api_key),
+    conn = Depends(get_db_connection)
+):
+    """
+    Get rankings for a model across all definitions it participated in.
+    
+    Returns rankings for 7 days, 30 days, 90 days, and 365 days time ranges.
+    For each definition and time range, provides:
+    - Rank among all models in that definition
+    - Total number of models
+    - Rounds participated
+    - Average MASE score
+    - Standard deviation, min, and max MASE scores
+    
+    **Response Example:**
+    ```json
+    {
+      "model_id": 123,
+      "model_name": "ExampleModel",
+      "definition_rankings": [
+        {
+          "definition_id": 1,
+          "definition_name": "Day-Ahead Power Forecast",
+          "rankings_7d": {
+            "rank": 5,
+            "total_models": 20,
+            "rounds_participated": 7,
+            "avg_mase": 0.85,
+            "stddev_mase": 0.12,
+            "min_mase": 0.65,
+            "max_mase": 1.05
+          },
+          "rankings_30d": { ... },
+          "rankings_90d": { ... },
+          "rankings_365d": { ... }
+        }
+      ]
+    }
+    ```
+    
+    **Headers:**
+    - X-API-Key: Valid API key required
+    
+    **Notes:**
+    - Only includes definitions where the model has participated
+    - Rankings are null for time ranges where no data exists
+    - Rankings are based on average MASE score (lower is better)
+    - Only valid MASE scores are considered (NaN, Infinity filtered out)
+    """
+    repo = ModelRepository(conn)
+    result = repo.get_model_rankings_by_definition(model_id)
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Model not found")
+    
+    return result
