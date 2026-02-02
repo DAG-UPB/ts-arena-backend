@@ -10,70 +10,6 @@ from src.plugins.base_plugin import BasePlugin, TimeSeriesMetadata, MultiSeriesP
 logger = logging.getLogger(__name__)
 
 
-def calculate_update_frequency(frequency: str) -> str:
-    """
-    Calculate update frequency as one quarter of the frequency.
-    
-    Args:
-        frequency: Time frequency as PostgreSQL INTERVAL string (e.g., '1 hour', '1 day', '15 minutes')
-        
-    Returns:
-        Update frequency string compatible with PostgreSQL INTERVAL (e.g., '15 minutes', '6 hours')
-    """
-    # Parse frequency
-    parts = frequency.split()
-    if len(parts) != 2:
-        return '15 minutes'  # fallback
-    
-    try:
-        value = int(parts[0])
-        unit = parts[1].lower()
-        
-        # Normalize unit to singular/plural
-        unit_singular = unit.rstrip('s')  # Remove trailing 's' if present
-        
-        # Convert to minutes for calculation
-        minutes_map = {
-            'minute': 1,
-            'hour': 60,
-            'day': 1440
-        }
-        
-        if unit_singular not in minutes_map:
-            logger.warning(f"Unknown time unit '{unit}' in frequency '{frequency}', using fallback")
-            return '15 minutes'
-        
-        # Convert to total minutes
-        total_minutes = value * minutes_map[unit_singular]
-        
-        # Calculate quarter
-        quarter_minutes = total_minutes // 4
-        
-        # Ensure minimum of 3 minutes
-        if quarter_minutes < 3:
-            quarter_minutes = 3
-        
-        # Convert back to appropriate unit
-        if quarter_minutes >= 1440 and quarter_minutes % 1440 == 0:
-            # Convert to days
-            result_value = quarter_minutes // 1440
-            result_unit = 'day' if result_value == 1 else 'days'
-        elif quarter_minutes >= 60 and quarter_minutes % 60 == 0:
-            # Convert to hours
-            result_value = quarter_minutes // 60
-            result_unit = 'hour' if result_value == 1 else 'hours'
-        else:
-            # Keep as minutes
-            result_value = quarter_minutes
-            result_unit = 'minute' if result_value == 1 else 'minutes'
-        
-        return f"{result_value} {result_unit}"
-
-    except (ValueError, IndexError) as e:
-        logger.warning(f"Failed to parse frequency '{frequency}': {e}, using fallback")
-        return '15 minutes'  # fallback
-
-
 class PluginLoader:
     """Loads and manages data source plugins from YAML configuration"""
     
@@ -169,7 +105,9 @@ class PluginLoader:
             
             # Calculate update_frequency from frequency if not provided
             frequency = metadata.get('frequency', '1 hour')
-            update_frequency = calculate_update_frequency(frequency)
+            
+            # Prefer 'schedule' from config
+            update_frequency = ts_config.get('schedule')
             
             # Auto-detect subdomain for known electricity-related plugins
             subdomain = metadata.get('subdomain')
@@ -248,7 +186,7 @@ class PluginLoader:
             subdomain=subdomain,
             category=metadata_dict.get('category') or metadata_dict.get('subdomain', ''),
             subcategory=metadata_dict.get('subcategory', ''),
-            update_frequency=calculate_update_frequency(metadata_dict.get('frequency', '1 hour')),
+            update_frequency=metadata_dict.get('schedule') or metadata_dict.get('update_frequency'),
             imputation_policy=metadata_dict.get('imputation_policy')
         )
         
