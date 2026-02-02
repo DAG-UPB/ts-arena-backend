@@ -190,12 +190,14 @@ class GridStatusMultiSeriesPlugin(MultiSeriesPlugin):
     
     Configure via request_groups in sources.yaml:
         request_params:
-          - iso: ISO name (CAISO, MISO, NYISO)
+          - iso: ISO name (CAISO, MISO, NYISO, PJM, ISONE, SPP, IESO)
           - dataset: Dataset type (load, fuel_mix, lmp)
           - market: (Optional) Market type for LMP (default: REAL_TIME_5_MIN)
         
         extract_filter (per timeseries):
-          - value_column: Column name to extract (e.g., 'Solar', 'Wind', 'Load')
+          - value_column: Column name to extract (e.g., 'Solar', 'Wind', 'Load', 'LMP')
+          - filter_column: (Optional) Column to filter rows by (e.g., 'Location')
+          - filter_value: (Optional) Value to match in filter_column (e.g., 'UN.NODE123')
     """
     
     ISO_TIMEZONES = {
@@ -314,6 +316,8 @@ class GridStatusMultiSeriesPlugin(MultiSeriesPlugin):
             # Extract data for each series based on extract_filter
             for series_def in self._series_definitions:
                 value_column = series_def.extract_filter.get("value_column")
+                filter_column = series_def.extract_filter.get("filter_column")
+                filter_value = series_def.extract_filter.get("filter_value")
                 
                 if not value_column:
                     logger.error(
@@ -328,9 +332,26 @@ class GridStatusMultiSeriesPlugin(MultiSeriesPlugin):
                     )
                     continue
                 
+                # Apply row filter if specified (e.g., filter by Location)
+                series_df = df
+                if filter_column and filter_value:
+                    if filter_column not in df.columns:
+                        logger.error(
+                            f"Filter column '{filter_column}' not found for {series_def.unique_id}. "
+                            f"Available: {list(df.columns)}"
+                        )
+                        continue
+                    series_df = df[df[filter_column] == filter_value]
+                    if series_df.empty:
+                        logger.warning(
+                            f"No rows match filter {filter_column}='{filter_value}' "
+                            f"for {series_def.unique_id}"
+                        )
+                        continue
+                
                 # Extract data points
                 data_points = []
-                for _, row in df.iterrows():
+                for _, row in series_df.iterrows():
                     ts = row[ts_col]
                     if pd.notna(ts):
                         val = row[value_column]
