@@ -154,7 +154,7 @@ async def get_filtered_rankings(
         subcategories=subcategories_list,
         frequencies=frequencies_list,
         horizons=horizons_list,
-        definition_names=definition_names,
+        definition_names=definition_names_list,
         min_rounds=min_rounds,
         limit=limit
     )
@@ -206,7 +206,7 @@ async def get_ranking_filters(
       "frequencies": ["PT15M", "PT1H", "P1D"],
       "horizons": ["PT1H", "PT6H", "P1D", "P7D"],
       "time_ranges": ["7d", "30d", "90d", "365d"],
-      "challenge_ids": []
+      "definition_names": ["Day-Ahead Power", "Week-Ahead Power"]
     }
     ```
     

@@ -157,7 +157,7 @@ class ModelRepository:
             subcategories: List of subcategories (e.g. ["Load", "Generation"])
             frequencies: List of frequencies as ISO 8601 (e.g. ["PT1H", "P1D"])
             horizons: List of horizons as ISO 8601 (e.g. ["PT6H", "P1D"])
-            definition_id: Challenge definition ID to filter by
+            definition_names: List of challenge definition names to filter by
             min_rounds: Minimum number of participated rounds
             limit: Max. number of results
         
@@ -331,7 +331,7 @@ class ModelRepository:
         Returns all available filter values.
         
         Returns:
-            Dict with domains, categories, subcategories, frequencies, horizons
+            Dict with domains, categories, subcategories, frequencies, horizons, time_ranges, definition_names
         """
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             # Get unique domains
@@ -391,12 +391,14 @@ class ModelRepository:
                     iso_horizon = isodate.duration_isoformat(horizon_interval)
                     horizons.append(iso_horizon)
             
-            # Get unique challenge IDs
+            # Get unique challenge definition names
             cur.execute("""
-                SELECT DISTINCT id
+                SELECT DISTINCT name
                 FROM challenges.definitions
+                WHERE name IS NOT NULL
+                ORDER BY name
             """)
-            challenge_ids = [row['id'] for row in cur.fetchall()]
+            definition_names = [row['name'] for row in cur.fetchall()]
             
             return {
                 "domains": domains,
@@ -405,5 +407,5 @@ class ModelRepository:
                 "frequencies": frequencies,
                 "horizons": horizons,
                 "time_ranges": ["7d", "30d", "90d", "365d"],
-                "challenge_ids": challenge_ids
+                "definition_names": definition_names
             }
