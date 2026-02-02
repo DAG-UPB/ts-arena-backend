@@ -480,6 +480,7 @@ class ModelRepository:
                 # Calculate rankings for each time range
                 for range_key, since_date in time_ranges.items():
                     # Get model's ranking in this definition for this time range
+                    # TODO: Check if None mase handling is correct
                     cur.execute(
                         """
                         WITH model_scores AS (
@@ -541,5 +542,76 @@ class ModelRepository:
                 "model_id": model_id,
                 "model_name": model_name,
                 "definition_rankings": definition_rankings
+            }
+
+    def get_model_series_by_definition(self, model_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get all series grouped by definition for a specific model.
+        
+        Series that appear in multiple definitions will be listed under each definition.
+        Includes forecast counts and rounds participated for each series.
+        
+        Args:
+            model_id: The ID of the model
+            
+        Returns:
+            Dictionary with model info and definitions with their series,
+            or None if model not found
+        """
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # Get model info
+            cur.execute("""
+                SELECT id, readable_id, name
+                FROM models.model_info
+                WHERE id = %s
+            """, (model_id,))
+            model_row = cur.fetchone()
+            if not model_row:
+                return None
+            
+            # Get all series grouped by definition
+            cur.execute("""
+                SELECT 
+                    d.id as definition_id,
+                    d.name as definition_name,
+                    ts.series_id,
+                    ts.name as series_name,
+                    ts.unique_id as series_unique_id,
+                    COUNT(DISTINCT f.id) as forecast_count,
+                    COUNT(DISTINCT r.id) as rounds_participated
+                FROM forecasts.forecasts f
+                JOIN challenges.rounds r ON r.id = f.round_id
+                JOIN challenges.definitions d ON d.id = r.definition_id
+                JOIN data_portal.time_series ts ON ts.series_id = f.series_id
+                WHERE f.model_id = %s
+                GROUP BY d.id, d.name, ts.series_id, ts.name, ts.unique_id
+                ORDER BY d.name, ts.name
+            """, (model_id,))
+            rows = [dict(r) for r in cur.fetchall()]
+            
+            # Group by definition
+            definitions_dict = {}
+            for row in rows:
+                def_id = row['definition_id']
+                if def_id not in definitions_dict:
+                    definitions_dict[def_id] = {
+                        'definition_id': def_id,
+                        'definition_name': row['definition_name'],
+                        'series': []
+                    }
+                
+                definitions_dict[def_id]['series'].append({
+                    'series_id': row['series_id'],
+                    'series_name': row['series_name'],
+                    'series_unique_id': row['series_unique_id'],
+                    'forecast_count': row['forecast_count'],
+                    'rounds_participated': row['rounds_participated']
+                })
+            
+            return {
+                'model_id': model_row['id'],
+                'model_readable_id': model_row['readable_id'],
+                'model_name': model_row['name'],
+                'definitions': list(definitions_dict.values())
             }
 
