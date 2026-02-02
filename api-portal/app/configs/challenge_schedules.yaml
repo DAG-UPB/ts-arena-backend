@@ -246,9 +246,9 @@ schedules:
     categories: []
     subcategories: []
     required_time_series:
-    - electricity_market_price_Trading Hub_TH_NP15_GEN-APND_5min
-    - electricity_market_price_Trading Hub_TH_SP15_GEN-APND_5min
-    - electricity_market_price_Trading Hub_TH_ZP26_GEN-APND_5min
+    - "electricity_market_price_Trading Hub_TH_NP15_GEN-APND_5min"
+    - "electricity_market_price_Trading Hub_TH_SP15_GEN-APND_5min"
+    - "electricity_market_price_Trading Hub_TH_ZP26_GEN-APND_5min"
     - electricity_market_price_Zone_CAPITL_5min
     - electricity_market_price_Zone_CENTRL_5min
     - electricity_market_price_Zone_DUNWOD_5min
@@ -350,9 +350,9 @@ schedules:
     categories: []
     subcategories: []
     required_time_series:
-    - electricity_market_price_Trading Hub_TH_NP15_GEN-APND_5min
-    - electricity_market_price_Trading Hub_TH_SP15_GEN-APND_5min
-    - electricity_market_price_Trading Hub_TH_ZP26_GEN-APND_5min
+    - "electricity_market_price_Trading Hub_TH_NP15_GEN-APND_5min"
+    - "electricity_market_price_Trading Hub_TH_SP15_GEN-APND_5min"
+    - "electricity_market_price_Trading Hub_TH_ZP26_GEN-APND_5min"
     - electricity_market_price_Zone_CAPITL_5min
     - electricity_market_price_Zone_CENTRL_5min
     - electricity_market_price_Zone_DUNWOD_5min
@@ -372,7 +372,7 @@ schedules:
     frequency: 1 hour
     context_length: 1000
     forecast_horizon: 3 days
-    registration_duration: 3 days 1 hour
+    registration_duration: 1 hour
     evaluation_delay: 0 hours
 - id: gridstatus_load_challenge_72h_1h
   cron: 0 10 * * *

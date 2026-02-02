@@ -54,7 +54,7 @@ request_groups:
   gridstatus-caiso-generation:
     module: src.plugins.data_sources.gridstatus_plugin
     class: GridStatusMultiSeriesPlugin
-    schedule: 60 seconds
+    schedule: 180 seconds
     request_params:
       iso: CAISO
       dataset: fuel_mix
@@ -218,7 +218,7 @@ request_groups:
   gridstatus-caiso-load:
     module: src.plugins.data_sources.gridstatus_plugin
     class: GridStatusMultiSeriesPlugin
-    schedule: 60 seconds
+    schedule: 180 seconds
     request_params:
       iso: CAISO
       dataset: load
@@ -238,7 +238,7 @@ request_groups:
   gridstatus-caiso-trading-hub-prices:
     module: src.plugins.data_sources.gridstatus_plugin
     class: GridStatusMultiSeriesPlugin
-    schedule: 60 seconds
+    schedule: 180 seconds
     request_params:
       iso: CAISO
       dataset: lmp
@@ -370,7 +370,7 @@ request_groups:
         value_column: Loss
         filter_column: Location
         filter_value: TH_ZP26_GEN-APND
-    - unique_id: electricity_market_price_Trading Hub_TH_NP15_GEN-APND_5min
+    - unique_id: "electricity_market_price_Trading Hub_TH_NP15_GEN-APND_5min"
       metadata:
         name: CAISO-NP15-MarketPrice-5min
         description: California ISO NP15 trading hub total market price
@@ -384,7 +384,7 @@ request_groups:
         value_column: LMP
         filter_column: Location
         filter_value: TH_NP15_GEN-APND
-    - unique_id: electricity_market_price_Trading Hub_TH_SP15_GEN-APND_5min
+    - unique_id: "electricity_market_price_Trading Hub_TH_SP15_GEN-APND_5min"
       metadata:
         name: CAISO-SP15-MarketPrice-5min
         description: California ISO SP15 trading hub total market price
@@ -398,7 +398,7 @@ request_groups:
         value_column: LMP
         filter_column: Location
         filter_value: TH_SP15_GEN-APND
-    - unique_id: electricity_market_price_Trading Hub_TH_ZP26_GEN-APND_5min
+    - unique_id: "electricity_market_price_Trading Hub_TH_ZP26_GEN-APND_5min"
       metadata:
         name: CAISO-ZP26-MarketPrice-5min
         description: California ISO ZP26 trading hub total market price
@@ -415,7 +415,7 @@ request_groups:
   gridstatus-nyiso-generation:
     module: src.plugins.data_sources.gridstatus_plugin
     class: GridStatusMultiSeriesPlugin
-    schedule: 60 seconds
+    schedule: 180 seconds
     request_params:
       iso: NYISO
       dataset: fuel_mix
@@ -507,7 +507,7 @@ request_groups:
   gridstatus-nyiso-load:
     module: src.plugins.data_sources.gridstatus_plugin
     class: GridStatusMultiSeriesPlugin
-    schedule: 60 seconds
+    schedule: 180 seconds
     request_params:
       iso: NYISO
       dataset: load
@@ -659,7 +659,7 @@ request_groups:
   gridstatus-nyiso-zone-prices:
     module: src.plugins.data_sources.gridstatus_plugin
     class: GridStatusMultiSeriesPlugin
-    schedule: 60 seconds
+    schedule: 180 seconds
     request_params:
       iso: NYISO
       dataset: lmp
