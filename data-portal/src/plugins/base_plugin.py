@@ -16,6 +16,7 @@ class TimeSeriesDefinition:
     unit: str
     domain: str
     category: str
+    subdomain: Optional[str] = None
     subcategory: Optional[str] = None
     imputation_policy: Optional[str] = None
     update_frequency: Optional[str] = None
@@ -33,7 +34,7 @@ class TimeSeriesMetadata:
         frequency: str,
         unit: str,
         domain: str,
-        category: str,
+        subdomain: Optional[str],
         category: str,
         subcategory: Optional[str],
         update_frequency: str,
@@ -50,7 +51,7 @@ class TimeSeriesMetadata:
                       This will be stored as INTERVAL type in the database
             unit: Unit of measurement (e.g., 'MWh', '°C')
             domain: Domain category (e.g., 'energy', 'weather')
-            category: Category (e.g., 'generation', 'temperature')
+            subdomain: Subdomain (e.g., 'renewable', 'fossil')
             subcategory: Subcategory (e.g., 'nuclear', 'wind')
             update_frequency: How often the data source is updated (PostgreSQL INTERVAL string)
             imputation_policy: Policy for imputing missing values (e.g., 'linear', 'ffill', 'zero')
@@ -61,8 +62,8 @@ class TimeSeriesMetadata:
         self.frequency = frequency
         self.unit = unit
         self.domain = domain
+        self.subdomain = subdomain
         self.category = category
-        self.subcategory = subcategory
         self.subcategory = subcategory
         self.update_frequency = update_frequency
         self.imputation_policy = imputation_policy

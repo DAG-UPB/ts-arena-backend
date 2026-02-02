@@ -171,6 +171,12 @@ class PluginLoader:
             frequency = metadata.get('frequency', '1 hour')
             update_frequency = calculate_update_frequency(frequency)
             
+            # Auto-detect subdomain for known electricity-related plugins
+            subdomain = metadata.get('subdomain')
+            if subdomain is None:
+                if 'smard' in module_name.lower() or 'gridstatus' in module_name.lower():
+                    subdomain = 'electricity'
+            
             definition = TimeSeriesDefinition(
                 unique_id=unique_id,
                 name=metadata.get('name', unique_id),
@@ -179,6 +185,7 @@ class PluginLoader:
                 unit=metadata.get('unit', ''),
                 domain=metadata.get('domain', ''),
                 category=metadata.get('category', ''),
+                subdomain=subdomain,
                 subcategory=metadata.get('subcategory'),
                 imputation_policy=metadata.get('imputation_policy'),
                 update_frequency=update_frequency,
@@ -225,9 +232,12 @@ class PluginLoader:
         if not module_name or not class_name:
             raise ValueError(f"Missing module or class for plugin {unique_id}")
         
-        # Create metadata object
-        # Note: frequency values from YAML are strings that will be automatically
-        # converted to PostgreSQL INTERVAL type when inserted into the database
+        # Auto-detect subdomain for known electricity-related plugins
+        subdomain = metadata_dict.get('subdomain')
+        if subdomain is None:
+            if 'smard' in module_name.lower() or 'gridstatus' in module_name.lower():
+                subdomain = 'electricity'
+        
         metadata = TimeSeriesMetadata(
             unique_id=unique_id,
             name=metadata_dict.get('name', unique_id),
@@ -235,6 +245,7 @@ class PluginLoader:
             frequency=metadata_dict.get('frequency', '1 hour'),
             unit=metadata_dict.get('unit', ''),
             domain=metadata_dict.get('domain', ''),
+            subdomain=subdomain,
             category=metadata_dict.get('category') or metadata_dict.get('subdomain', ''),
             subcategory=metadata_dict.get('subcategory', ''),
             update_frequency=calculate_update_frequency(metadata_dict.get('frequency', '1 hour')),
