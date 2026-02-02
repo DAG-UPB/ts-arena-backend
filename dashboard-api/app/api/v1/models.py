@@ -60,10 +60,10 @@ async def get_filtered_rankings(
         description="Comma-separated list of horizons in ISO 8601 format (e.g., 'PT6H,P1D')",
         example="PT6H,P1D"
     ),
-    definition_id: Optional[int] = Query(
+    definition_names: Optional[str] = Query(
         None,
-        description="Filter by definition ID (e.g., 'Day-Ahead Power')",
-        example=1
+        description="Comma-separated list of definition names (e.g., 'Day-Ahead Power,Week-Ahead Power')",
+        example="Day-Ahead Power,Week-Ahead Power"
     ),
     min_rounds: int = Query(
         1,
@@ -143,6 +143,7 @@ async def get_filtered_rankings(
     subcategories_list = [s.strip() for s in subcategory.split(',')] if subcategory else None
     frequencies_list = [f.strip() for f in frequency.split(',')] if frequency else None
     horizons_list = [h.strip() for h in horizon.split(',')] if horizon else None
+    definition_names_list = [d.strip() for d in definition_names.split(',')] if definition_names else None
     
     # Get filtered rankings
     repo = ModelRepository(conn)
@@ -153,7 +154,7 @@ async def get_filtered_rankings(
         subcategories=subcategories_list,
         frequencies=frequencies_list,
         horizons=horizons_list,
-        definition_id=definition_id,
+        definition_names=definition_names,
         min_rounds=min_rounds,
         limit=limit
     )
@@ -172,8 +173,8 @@ async def get_filtered_rankings(
         filters_applied['frequency'] = frequencies_list
     if horizons_list:
         filters_applied['horizon'] = horizons_list
-    if definition_id:
-        filters_applied['definition_id'] = definition_id
+    if definition_names:
+        filters_applied['definition_names'] = definition_names
     if min_rounds > 1:
         filters_applied['min_rounds'] = min_rounds
     if limit != 100:

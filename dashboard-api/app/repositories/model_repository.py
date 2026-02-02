@@ -143,7 +143,7 @@ class ModelRepository:
         subcategories: Optional[List[str]] = None,
         frequencies: Optional[List[str]] = None,
         horizons: Optional[List[str]] = None,
-        definition_id: Optional[int] = None,
+        definition_names: Optional[List[str]] = None,
         min_rounds: int = 1,
         limit: int = 100
     ) -> List[Dict[str, Any]]:
@@ -254,9 +254,10 @@ class ModelRepository:
                 query += " AND (" + " OR ".join(interval_conditions) + ")"
         
         # Definition ID filter
-        if definition_id:
-            query += " AND r.definition_id = %s"
-            params.append(definition_id)
+        if definition_names:
+            placeholders = ','.join(['%s'] * len(definition_names))
+            query += f" AND cd.name IN ({placeholders})"
+            params.extend(definition_names)
         
         # Group and aggregate
         query += """
