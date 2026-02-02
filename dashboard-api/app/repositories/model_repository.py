@@ -480,6 +480,7 @@ class ModelRepository:
                 # Calculate rankings for each time range
                 for range_key, since_date in time_ranges.items():
                     # Get model's ranking in this definition for this time range
+                    # TODO: Check if None mase handling is correct
                     cur.execute(
                         """
                         WITH model_scores AS (
