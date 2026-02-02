@@ -233,3 +233,212 @@ schedules:
     forecast_horizon: 30 minutes
     registration_duration: 15 minutes
     evaluation_delay: 0 hours
+schedules:
+- id: gridstatus_hub_zone_challenge_24h_15min
+  cron: 0 16 * * *
+  run_on_startup: false
+  params:
+    description: 'Hub Zone Market Price Challenge: 24h horizon, 15-min frequency'
+    domains:
+    - energy
+    subdomains:
+    - price
+    categories: []
+    subcategories: []
+    required_time_series:
+    - electricity_market_price_Trading Hub_TH_NP15_GEN-APND_5min
+    - electricity_market_price_Trading Hub_TH_SP15_GEN-APND_5min
+    - electricity_market_price_Trading Hub_TH_ZP26_GEN-APND_5min
+    - electricity_market_price_Zone_CAPITL_5min
+    - electricity_market_price_Zone_CENTRL_5min
+    - electricity_market_price_Zone_DUNWOD_5min
+    - electricity_market_price_Zone_GENESE_5min
+    - electricity_market_price_Zone_H Q_5min
+    - electricity_market_price_Zone_HUD VL_5min
+    - electricity_market_price_Zone_LONGIL_5min
+    - electricity_market_price_Zone_MHK VL_5min
+    - electricity_market_price_Zone_MILLWD_5min
+    - electricity_market_price_Zone_N.Y.C._5min
+    - electricity_market_price_Zone_NORTH_5min
+    - electricity_market_price_Zone_NPX_5min
+    - electricity_market_price_Zone_O H_5min
+    - electricity_market_price_Zone_PJM_5min
+    - electricity_market_price_Zone_WEST_5min
+    n_time_series: 18
+    frequency: 15 minutes
+    context_length: 1000
+    forecast_horizon: 1 day
+    registration_duration: 15 minutes
+    evaluation_delay: 0 hours
+- id: gridstatus_load_challenge_24h_15min
+  cron: 0 9 * * *
+  run_on_startup: false
+  params:
+    description: 'Load Challenge: 24h horizon, 15-min frequency'
+    domains:
+    - energy
+    subdomains:
+    - consumption
+    categories:
+    - load
+    subcategories: []
+    required_time_series:
+    - electricity_capitl_load_ISO_NYISO_5min
+    - electricity_centrl_load_ISO_NYISO_5min
+    - electricity_dunwod_load_ISO_NYISO_5min
+    - electricity_genese_load_ISO_NYISO_5min
+    - electricity_hud vl_load_ISO_NYISO_5min
+    - electricity_longil_load_ISO_NYISO_5min
+    - electricity_mhk vl_load_ISO_NYISO_5min
+    - electricity_millwd_load_ISO_NYISO_5min
+    - electricity_n.y.c._load_ISO_NYISO_5min
+    - electricity_north_load_ISO_NYISO_5min
+    - electricity_west_load_ISO_NYISO_5min
+    n_time_series: 11
+    frequency: 15 minutes
+    context_length: 1000
+    forecast_horizon: 1 day
+    registration_duration: 15 minutes
+    evaluation_delay: 0 hours
+- id: gridstatus_generation_challenge_24h_15min
+  cron: 0 20 * * *
+  run_on_startup: false
+  params:
+    description: 'Generation Challenge: All generation types ISO, 24h horizon, 15-min
+      frequency'
+    domains:
+    - energy
+    subdomains:
+    - generation
+    categories: []
+    subcategories: []
+    required_time_series:
+    - electricity_batteries_ISO_CAISO_5min
+    - electricity_biogas_power_plant_generation_ISO_CAISO_5min
+    - electricity_biomass_power_plant_generation_ISO_CAISO_5min
+    - electricity_coal_power_plant_generation_ISO_CAISO_5min
+    - electricity_dual_fuel_power_plant_generation_ISO_NYISO_5min
+    - electricity_geothermal_power_plant_generation_ISO_CAISO_5min
+    - electricity_hydropower_power_plant_generation_ISO_NYISO_5min
+    - electricity_large_hydropower_power_plant_generation_ISO_CAISO_5min
+    - electricity_natural_gas_power_plant_generation_ISO_CAISO_5min
+    - electricity_natural_gas_power_plant_generation_ISO_NYISO_5min
+    - electricity_nuclear_power_plant_generation_ISO_CAISO_5min
+    - electricity_nuclear_power_plant_generation_ISO_NYISO_5min
+    - electricity_other_conventional_power_plant_generation_ISO_CAISO_5min
+    - electricity_other_fossil_fuels_power_plant_generation_ISO_NYISO_5min
+    - electricity_other_renewable_power_plant_generation_ISO_NYISO_5min
+    - electricity_photovoltaic_power_plant_generation_ISO_CAISO_5min
+    - electricity_small_hydropower_power_plant_generation_ISO_CAISO_5min
+    - electricity_wind_onshore_power_plant_generation_ISO_CAISO_5min
+    - electricity_wind_onshore_power_plant_generation_ISO_NYISO_5min
+    n_time_series: 19
+    frequency: 15 minutes
+    context_length: 1000
+    forecast_horizon: 1 day
+    registration_duration: 15 minutes
+    evaluation_delay: 0 hours
+- id: gridstatus_hub_zone_challenge_72h_1h
+  cron: 0 17 * * *
+  run_on_startup: false
+  params:
+    description: 'Hub Zone Market Price Challenge: 72h horizon, 1h frequency'
+    domains:
+    - energy
+    subdomains:
+    - price
+    categories: []
+    subcategories: []
+    required_time_series:
+    - electricity_market_price_Trading Hub_TH_NP15_GEN-APND_5min
+    - electricity_market_price_Trading Hub_TH_SP15_GEN-APND_5min
+    - electricity_market_price_Trading Hub_TH_ZP26_GEN-APND_5min
+    - electricity_market_price_Zone_CAPITL_5min
+    - electricity_market_price_Zone_CENTRL_5min
+    - electricity_market_price_Zone_DUNWOD_5min
+    - electricity_market_price_Zone_GENESE_5min
+    - electricity_market_price_Zone_H Q_5min
+    - electricity_market_price_Zone_HUD VL_5min
+    - electricity_market_price_Zone_LONGIL_5min
+    - electricity_market_price_Zone_MHK VL_5min
+    - electricity_market_price_Zone_MILLWD_5min
+    - electricity_market_price_Zone_N.Y.C._5min
+    - electricity_market_price_Zone_NORTH_5min
+    - electricity_market_price_Zone_NPX_5min
+    - electricity_market_price_Zone_O H_5min
+    - electricity_market_price_Zone_PJM_5min
+    - electricity_market_price_Zone_WEST_5min
+    n_time_series: 18
+    frequency: 1 hour
+    context_length: 1000
+    forecast_horizon: 3 days
+    registration_duration: 3 days 1 hour
+    evaluation_delay: 0 hours
+- id: gridstatus_load_challenge_72h_1h
+  cron: 0 10 * * *
+  run_on_startup: false
+  params:
+    description: 'Load Challenge: 72h horizon, 1h frequency'
+    domains:
+    - energy
+    subdomains:
+    - consumption
+    categories:
+    - load
+    subcategories: []
+    required_time_series:
+    - electricity_capitl_load_ISO_NYISO_5min
+    - electricity_centrl_load_ISO_NYISO_5min
+    - electricity_dunwod_load_ISO_NYISO_5min
+    - electricity_genese_load_ISO_NYISO_5min
+    - electricity_hud vl_load_ISO_NYISO_5min
+    - electricity_longil_load_ISO_NYISO_5min
+    - electricity_mhk vl_load_ISO_NYISO_5min
+    - electricity_millwd_load_ISO_NYISO_5min
+    - electricity_n.y.c._load_ISO_NYISO_5min
+    - electricity_north_load_ISO_NYISO_5min
+    - electricity_west_load_ISO_NYISO_5min
+    n_time_series: 11
+    frequency: 1 hour
+    context_length: 1000
+    forecast_horizon: 3 days
+    registration_duration: 1 hour
+    evaluation_delay: 0 hours
+- id: gridstatus_generation_challenge_72h_1h
+  cron: 0 21 * * *
+  run_on_startup: false
+  params:
+    description: 'Generation Challenge: All generation types ISO, 72h horizon, 1h
+      frequency'
+    domains:
+    - energy
+    subdomains:
+    - generation
+    categories: []
+    subcategories: []
+    required_time_series:
+    - electricity_batteries_ISO_CAISO_5min
+    - electricity_biogas_power_plant_generation_ISO_CAISO_5min
+    - electricity_biomass_power_plant_generation_ISO_CAISO_5min
+    - electricity_coal_power_plant_generation_ISO_CAISO_5min
+    - electricity_dual_fuel_power_plant_generation_ISO_NYISO_5min
+    - electricity_geothermal_power_plant_generation_ISO_CAISO_5min
+    - electricity_hydropower_power_plant_generation_ISO_NYISO_5min
+    - electricity_large_hydropower_power_plant_generation_ISO_CAISO_5min
+    - electricity_natural_gas_power_plant_generation_ISO_CAISO_5min
+    - electricity_natural_gas_power_plant_generation_ISO_NYISO_5min
+    - electricity_nuclear_power_plant_generation_ISO_CAISO_5min
+    - electricity_nuclear_power_plant_generation_ISO_NYISO_5min
+    - electricity_other_conventional_power_plant_generation_ISO_CAISO_5min
+    - electricity_other_fossil_fuels_power_plant_generation_ISO_NYISO_5min
+    - electricity_other_renewable_power_plant_generation_ISO_NYISO_5min
+    - electricity_photovoltaic_power_plant_generation_ISO_CAISO_5min
+    - electricity_small_hydropower_power_plant_generation_ISO_CAISO_5min
+    - electricity_wind_onshore_power_plant_generation_ISO_CAISO_5min
+    - electricity_wind_onshore_power_plant_generation_ISO_NYISO_5min
+    n_time_series: 19
+    frequency: 1 hour
+    context_length: 1000
+    forecast_horizon: 3 days
+    registration_duration: 1 hour
+    evaluation_delay: 0 hours

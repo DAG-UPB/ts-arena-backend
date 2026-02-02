@@ -54,7 +54,7 @@ request_groups:
   gridstatus-caiso-generation:
     module: src.plugins.data_sources.gridstatus_plugin
     class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
+    schedule: 60 seconds
     request_params:
       iso: CAISO
       dataset: fuel_mix
@@ -218,7 +218,7 @@ request_groups:
   gridstatus-caiso-load:
     module: src.plugins.data_sources.gridstatus_plugin
     class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
+    schedule: 60 seconds
     request_params:
       iso: CAISO
       dataset: load
@@ -233,10 +233,12 @@ request_groups:
         category: load
         sub_category: net_consumption
         aggregation_level: ISO
+      extract_filter:
+        value_column: Load
   gridstatus-caiso-trading-hub-prices:
     module: src.plugins.data_sources.gridstatus_plugin
     class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
+    schedule: 60 seconds
     request_params:
       iso: CAISO
       dataset: lmp
@@ -252,6 +254,10 @@ request_groups:
         category: price
         sub_category: lmp_congestion
         aggregation_level: Trading Hub
+      extract_filter:
+        value_column: Congestion
+        filter_column: Location
+        filter_value: TH_NP15_GEN-APND
     - unique_id: electricity_lmp_congestion_Trading Hub_TH_SP15_GEN-APND_5min
       metadata:
         name: CAISO-SP15-LMP-Congestion-5min
@@ -262,6 +268,10 @@ request_groups:
         category: price
         sub_category: lmp_congestion
         aggregation_level: Trading Hub
+      extract_filter:
+        value_column: Congestion
+        filter_column: Location
+        filter_value: TH_SP15_GEN-APND
     - unique_id: electricity_lmp_congestion_Trading Hub_TH_ZP26_GEN-APND_5min
       metadata:
         name: CAISO-ZP26-LMP-Congestion-5min
@@ -272,6 +282,10 @@ request_groups:
         category: price
         sub_category: lmp_congestion
         aggregation_level: Trading Hub
+      extract_filter:
+        value_column: Congestion
+        filter_column: Location
+        filter_value: TH_ZP26_GEN-APND
     - unique_id: electricity_lmp_energy_Trading Hub_TH_NP15_GEN-APND_5min
       metadata:
         name: CAISO-NP15-LMP-Energy-5min
@@ -282,6 +296,10 @@ request_groups:
         category: price
         sub_category: lmp_energy
         aggregation_level: Trading Hub
+      extract_filter:
+        value_column: Energy
+        filter_column: Location
+        filter_value: TH_NP15_GEN-APND
     - unique_id: electricity_lmp_energy_Trading Hub_TH_SP15_GEN-APND_5min
       metadata:
         name: CAISO-SP15-LMP-Energy-5min
@@ -292,6 +310,10 @@ request_groups:
         category: price
         sub_category: lmp_energy
         aggregation_level: Trading Hub
+      extract_filter:
+        value_column: Energy
+        filter_column: Location
+        filter_value: TH_SP15_GEN-APND
     - unique_id: electricity_lmp_energy_Trading Hub_TH_ZP26_GEN-APND_5min
       metadata:
         name: CAISO-ZP26-LMP-Energy-5min
@@ -302,6 +324,10 @@ request_groups:
         category: price
         sub_category: lmp_energy
         aggregation_level: Trading Hub
+      extract_filter:
+        value_column: Energy
+        filter_column: Location
+        filter_value: TH_ZP26_GEN-APND
     - unique_id: electricity_lmp_loss_Trading Hub_TH_NP15_GEN-APND_5min
       metadata:
         name: CAISO-NP15-LMP-Loss-5min
@@ -312,6 +338,10 @@ request_groups:
         category: price
         sub_category: lmp_loss
         aggregation_level: Trading Hub
+      extract_filter:
+        value_column: Loss
+        filter_column: Location
+        filter_value: TH_NP15_GEN-APND
     - unique_id: electricity_lmp_loss_Trading Hub_TH_SP15_GEN-APND_5min
       metadata:
         name: CAISO-SP15-LMP-Loss-5min
@@ -322,6 +352,10 @@ request_groups:
         category: price
         sub_category: lmp_loss
         aggregation_level: Trading Hub
+      extract_filter:
+        value_column: Loss
+        filter_column: Location
+        filter_value: TH_SP15_GEN-APND
     - unique_id: electricity_lmp_loss_Trading Hub_TH_ZP26_GEN-APND_5min
       metadata:
         name: CAISO-ZP26-LMP-Loss-5min
@@ -332,6 +366,10 @@ request_groups:
         category: price
         sub_category: lmp_loss
         aggregation_level: Trading Hub
+      extract_filter:
+        value_column: Loss
+        filter_column: Location
+        filter_value: TH_ZP26_GEN-APND
     - unique_id: electricity_market_price_Trading Hub_TH_NP15_GEN-APND_5min
       metadata:
         name: CAISO-NP15-MarketPrice-5min
@@ -342,6 +380,10 @@ request_groups:
         category: price
         sub_category: market_price
         aggregation_level: Trading Hub
+      extract_filter:
+        value_column: LMP
+        filter_column: Location
+        filter_value: TH_NP15_GEN-APND
     - unique_id: electricity_market_price_Trading Hub_TH_SP15_GEN-APND_5min
       metadata:
         name: CAISO-SP15-MarketPrice-5min
@@ -352,6 +394,10 @@ request_groups:
         category: price
         sub_category: market_price
         aggregation_level: Trading Hub
+      extract_filter:
+        value_column: LMP
+        filter_column: Location
+        filter_value: TH_SP15_GEN-APND
     - unique_id: electricity_market_price_Trading Hub_TH_ZP26_GEN-APND_5min
       metadata:
         name: CAISO-ZP26-MarketPrice-5min
@@ -362,10 +408,14 @@ request_groups:
         category: price
         sub_category: market_price
         aggregation_level: Trading Hub
+      extract_filter:
+        value_column: LMP
+        filter_column: Location
+        filter_value: TH_ZP26_GEN-APND
   gridstatus-nyiso-generation:
     module: src.plugins.data_sources.gridstatus_plugin
     class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
+    schedule: 60 seconds
     request_params:
       iso: NYISO
       dataset: fuel_mix
@@ -457,7 +507,7 @@ request_groups:
   gridstatus-nyiso-load:
     module: src.plugins.data_sources.gridstatus_plugin
     class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
+    schedule: 60 seconds
     request_params:
       iso: NYISO
       dataset: load
@@ -472,6 +522,8 @@ request_groups:
         category: load
         sub_category: capitl_load
         aggregation_level: ISO
+      extract_filter:
+        value_column: CAPITL
     - unique_id: electricity_centrl_load_ISO_NYISO_5min
       metadata:
         name: NYISO-NYISO-CENTRL-Load-5min
@@ -482,6 +534,8 @@ request_groups:
         category: load
         sub_category: centrl_load
         aggregation_level: ISO
+      extract_filter:
+        value_column: CENTRL
     - unique_id: electricity_dunwod_load_ISO_NYISO_5min
       metadata:
         name: NYISO-NYISO-DUNWOD-Load-5min
@@ -492,6 +546,8 @@ request_groups:
         category: load
         sub_category: dunwod_load
         aggregation_level: ISO
+      extract_filter:
+        value_column: DUNWOD
     - unique_id: electricity_genese_load_ISO_NYISO_5min
       metadata:
         name: NYISO-NYISO-GENESE-Load-5min
@@ -502,6 +558,8 @@ request_groups:
         category: load
         sub_category: genese_load
         aggregation_level: ISO
+      extract_filter:
+        value_column: GENESE
     - unique_id: electricity_hud vl_load_ISO_NYISO_5min
       metadata:
         name: NYISO-NYISO-HUD VL-Load-5min
@@ -512,6 +570,8 @@ request_groups:
         category: load
         sub_category: hud vl_load
         aggregation_level: ISO
+      extract_filter:
+        value_column: HUD VL
     - unique_id: electricity_longil_load_ISO_NYISO_5min
       metadata:
         name: NYISO-NYISO-LONGIL-Load-5min
@@ -522,6 +582,8 @@ request_groups:
         category: load
         sub_category: longil_load
         aggregation_level: ISO
+      extract_filter:
+        value_column: LONGIL
     - unique_id: electricity_mhk vl_load_ISO_NYISO_5min
       metadata:
         name: NYISO-NYISO-MHK VL-Load-5min
@@ -532,6 +594,8 @@ request_groups:
         category: load
         sub_category: mhk vl_load
         aggregation_level: ISO
+      extract_filter:
+        value_column: MHK VL
     - unique_id: electricity_millwd_load_ISO_NYISO_5min
       metadata:
         name: NYISO-NYISO-MILLWD-Load-5min
@@ -542,6 +606,8 @@ request_groups:
         category: load
         sub_category: millwd_load
         aggregation_level: ISO
+      extract_filter:
+        value_column: MILLWD
     - unique_id: electricity_n.y.c._load_ISO_NYISO_5min
       metadata:
         name: NYISO-NYISO-N.Y.C.-Load-5min
@@ -552,6 +618,8 @@ request_groups:
         category: load
         sub_category: n.y.c._load
         aggregation_level: ISO
+      extract_filter:
+        value_column: N.Y.C.
     - unique_id: electricity_net_consumption_ISO_NYISO_5min
       metadata:
         name: NYISO-NYISO-Load-5min
@@ -562,6 +630,8 @@ request_groups:
         category: load
         sub_category: net_consumption
         aggregation_level: ISO
+      extract_filter:
+        value_column: Load
     - unique_id: electricity_north_load_ISO_NYISO_5min
       metadata:
         name: NYISO-NYISO-NORTH-Load-5min
@@ -572,6 +642,8 @@ request_groups:
         category: load
         sub_category: north_load
         aggregation_level: ISO
+      extract_filter:
+        value_column: NORTH
     - unique_id: electricity_west_load_ISO_NYISO_5min
       metadata:
         name: NYISO-NYISO-WEST-Load-5min
@@ -582,10 +654,12 @@ request_groups:
         category: load
         sub_category: west_load
         aggregation_level: ISO
+      extract_filter:
+        value_column: WEST
   gridstatus-nyiso-zone-prices:
     module: src.plugins.data_sources.gridstatus_plugin
     class: GridStatusMultiSeriesPlugin
-    schedule: 5 minutes
+    schedule: 60 seconds
     request_params:
       iso: NYISO
       dataset: lmp
@@ -601,6 +675,10 @@ request_groups:
         category: price
         sub_category: lmp_congestion
         aggregation_level: Zone
+      extract_filter:
+        value_column: Congestion
+        filter_column: Location
+        filter_value: CAPITL
     - unique_id: electricity_lmp_congestion_Zone_CENTRL_5min
       metadata:
         name: NYISO-CENTRL-LMP-Congestion-5min
@@ -611,6 +689,10 @@ request_groups:
         category: price
         sub_category: lmp_congestion
         aggregation_level: Zone
+      extract_filter:
+        value_column: Congestion
+        filter_column: Location
+        filter_value: CENTRL
     - unique_id: electricity_lmp_congestion_Zone_DUNWOD_5min
       metadata:
         name: NYISO-DUNWOD-LMP-Congestion-5min
@@ -621,6 +703,10 @@ request_groups:
         category: price
         sub_category: lmp_congestion
         aggregation_level: Zone
+      extract_filter:
+        value_column: Congestion
+        filter_column: Location
+        filter_value: DUNWOD
     - unique_id: electricity_lmp_congestion_Zone_GENESE_5min
       metadata:
         name: NYISO-GENESE-LMP-Congestion-5min
@@ -631,6 +717,10 @@ request_groups:
         category: price
         sub_category: lmp_congestion
         aggregation_level: Zone
+      extract_filter:
+        value_column: Congestion
+        filter_column: Location
+        filter_value: GENESE
     - unique_id: electricity_lmp_congestion_Zone_H Q_5min
       metadata:
         name: NYISO-H Q-LMP-Congestion-5min
@@ -641,6 +731,10 @@ request_groups:
         category: price
         sub_category: lmp_congestion
         aggregation_level: Zone
+      extract_filter:
+        value_column: Congestion
+        filter_column: Location
+        filter_value: H Q
     - unique_id: electricity_lmp_congestion_Zone_HUD VL_5min
       metadata:
         name: NYISO-HUD VL-LMP-Congestion-5min
@@ -651,6 +745,10 @@ request_groups:
         category: price
         sub_category: lmp_congestion
         aggregation_level: Zone
+      extract_filter:
+        value_column: Congestion
+        filter_column: Location
+        filter_value: HUD VL
     - unique_id: electricity_lmp_congestion_Zone_LONGIL_5min
       metadata:
         name: NYISO-LONGIL-LMP-Congestion-5min
@@ -661,6 +759,10 @@ request_groups:
         category: price
         sub_category: lmp_congestion
         aggregation_level: Zone
+      extract_filter:
+        value_column: Congestion
+        filter_column: Location
+        filter_value: LONGIL
     - unique_id: electricity_lmp_congestion_Zone_MHK VL_5min
       metadata:
         name: NYISO-MHK VL-LMP-Congestion-5min
@@ -671,6 +773,10 @@ request_groups:
         category: price
         sub_category: lmp_congestion
         aggregation_level: Zone
+      extract_filter:
+        value_column: Congestion
+        filter_column: Location
+        filter_value: MHK VL
     - unique_id: electricity_lmp_congestion_Zone_MILLWD_5min
       metadata:
         name: NYISO-MILLWD-LMP-Congestion-5min
@@ -681,6 +787,10 @@ request_groups:
         category: price
         sub_category: lmp_congestion
         aggregation_level: Zone
+      extract_filter:
+        value_column: Congestion
+        filter_column: Location
+        filter_value: MILLWD
     - unique_id: electricity_lmp_congestion_Zone_N.Y.C._5min
       metadata:
         name: NYISO-N.Y.C.-LMP-Congestion-5min
@@ -691,6 +801,10 @@ request_groups:
         category: price
         sub_category: lmp_congestion
         aggregation_level: Zone
+      extract_filter:
+        value_column: Congestion
+        filter_column: Location
+        filter_value: N.Y.C.
     - unique_id: electricity_lmp_congestion_Zone_NORTH_5min
       metadata:
         name: NYISO-NORTH-LMP-Congestion-5min
@@ -701,6 +815,10 @@ request_groups:
         category: price
         sub_category: lmp_congestion
         aggregation_level: Zone
+      extract_filter:
+        value_column: Congestion
+        filter_column: Location
+        filter_value: NORTH
     - unique_id: electricity_lmp_congestion_Zone_NPX_5min
       metadata:
         name: NYISO-NPX-LMP-Congestion-5min
@@ -711,6 +829,10 @@ request_groups:
         category: price
         sub_category: lmp_congestion
         aggregation_level: Zone
+      extract_filter:
+        value_column: Congestion
+        filter_column: Location
+        filter_value: NPX
     - unique_id: electricity_lmp_congestion_Zone_O H_5min
       metadata:
         name: NYISO-O H-LMP-Congestion-5min
@@ -721,6 +843,10 @@ request_groups:
         category: price
         sub_category: lmp_congestion
         aggregation_level: Zone
+      extract_filter:
+        value_column: Congestion
+        filter_column: Location
+        filter_value: O H
     - unique_id: electricity_lmp_congestion_Zone_PJM_5min
       metadata:
         name: NYISO-PJM-LMP-Congestion-5min
@@ -731,6 +857,10 @@ request_groups:
         category: price
         sub_category: lmp_congestion
         aggregation_level: Zone
+      extract_filter:
+        value_column: Congestion
+        filter_column: Location
+        filter_value: PJM
     - unique_id: electricity_lmp_congestion_Zone_WEST_5min
       metadata:
         name: NYISO-WEST-LMP-Congestion-5min
@@ -741,6 +871,10 @@ request_groups:
         category: price
         sub_category: lmp_congestion
         aggregation_level: Zone
+      extract_filter:
+        value_column: Congestion
+        filter_column: Location
+        filter_value: WEST
     - unique_id: electricity_lmp_energy_Zone_CAPITL_5min
       metadata:
         name: NYISO-CAPITL-LMP-Energy-5min
@@ -751,6 +885,10 @@ request_groups:
         category: price
         sub_category: lmp_energy
         aggregation_level: Zone
+      extract_filter:
+        value_column: Energy
+        filter_column: Location
+        filter_value: CAPITL
     - unique_id: electricity_lmp_energy_Zone_CENTRL_5min
       metadata:
         name: NYISO-CENTRL-LMP-Energy-5min
@@ -761,6 +899,10 @@ request_groups:
         category: price
         sub_category: lmp_energy
         aggregation_level: Zone
+      extract_filter:
+        value_column: Energy
+        filter_column: Location
+        filter_value: CENTRL
     - unique_id: electricity_lmp_energy_Zone_DUNWOD_5min
       metadata:
         name: NYISO-DUNWOD-LMP-Energy-5min
@@ -771,6 +913,10 @@ request_groups:
         category: price
         sub_category: lmp_energy
         aggregation_level: Zone
+      extract_filter:
+        value_column: Energy
+        filter_column: Location
+        filter_value: DUNWOD
     - unique_id: electricity_lmp_energy_Zone_GENESE_5min
       metadata:
         name: NYISO-GENESE-LMP-Energy-5min
@@ -781,6 +927,10 @@ request_groups:
         category: price
         sub_category: lmp_energy
         aggregation_level: Zone
+      extract_filter:
+        value_column: Energy
+        filter_column: Location
+        filter_value: GENESE
     - unique_id: electricity_lmp_energy_Zone_H Q_5min
       metadata:
         name: NYISO-H Q-LMP-Energy-5min
@@ -791,6 +941,10 @@ request_groups:
         category: price
         sub_category: lmp_energy
         aggregation_level: Zone
+      extract_filter:
+        value_column: Energy
+        filter_column: Location
+        filter_value: H Q
     - unique_id: electricity_lmp_energy_Zone_HUD VL_5min
       metadata:
         name: NYISO-HUD VL-LMP-Energy-5min
@@ -801,6 +955,10 @@ request_groups:
         category: price
         sub_category: lmp_energy
         aggregation_level: Zone
+      extract_filter:
+        value_column: Energy
+        filter_column: Location
+        filter_value: HUD VL
     - unique_id: electricity_lmp_energy_Zone_LONGIL_5min
       metadata:
         name: NYISO-LONGIL-LMP-Energy-5min
@@ -811,6 +969,10 @@ request_groups:
         category: price
         sub_category: lmp_energy
         aggregation_level: Zone
+      extract_filter:
+        value_column: Energy
+        filter_column: Location
+        filter_value: LONGIL
     - unique_id: electricity_lmp_energy_Zone_MHK VL_5min
       metadata:
         name: NYISO-MHK VL-LMP-Energy-5min
@@ -821,6 +983,10 @@ request_groups:
         category: price
         sub_category: lmp_energy
         aggregation_level: Zone
+      extract_filter:
+        value_column: Energy
+        filter_column: Location
+        filter_value: MHK VL
     - unique_id: electricity_lmp_energy_Zone_MILLWD_5min
       metadata:
         name: NYISO-MILLWD-LMP-Energy-5min
@@ -831,6 +997,10 @@ request_groups:
         category: price
         sub_category: lmp_energy
         aggregation_level: Zone
+      extract_filter:
+        value_column: Energy
+        filter_column: Location
+        filter_value: MILLWD
     - unique_id: electricity_lmp_energy_Zone_N.Y.C._5min
       metadata:
         name: NYISO-N.Y.C.-LMP-Energy-5min
@@ -841,6 +1011,10 @@ request_groups:
         category: price
         sub_category: lmp_energy
         aggregation_level: Zone
+      extract_filter:
+        value_column: Energy
+        filter_column: Location
+        filter_value: N.Y.C.
     - unique_id: electricity_lmp_energy_Zone_NORTH_5min
       metadata:
         name: NYISO-NORTH-LMP-Energy-5min
@@ -851,6 +1025,10 @@ request_groups:
         category: price
         sub_category: lmp_energy
         aggregation_level: Zone
+      extract_filter:
+        value_column: Energy
+        filter_column: Location
+        filter_value: NORTH
     - unique_id: electricity_lmp_energy_Zone_NPX_5min
       metadata:
         name: NYISO-NPX-LMP-Energy-5min
@@ -861,6 +1039,10 @@ request_groups:
         category: price
         sub_category: lmp_energy
         aggregation_level: Zone
+      extract_filter:
+        value_column: Energy
+        filter_column: Location
+        filter_value: NPX
     - unique_id: electricity_lmp_energy_Zone_O H_5min
       metadata:
         name: NYISO-O H-LMP-Energy-5min
@@ -871,6 +1053,10 @@ request_groups:
         category: price
         sub_category: lmp_energy
         aggregation_level: Zone
+      extract_filter:
+        value_column: Energy
+        filter_column: Location
+        filter_value: O H
     - unique_id: electricity_lmp_energy_Zone_PJM_5min
       metadata:
         name: NYISO-PJM-LMP-Energy-5min
@@ -881,6 +1067,10 @@ request_groups:
         category: price
         sub_category: lmp_energy
         aggregation_level: Zone
+      extract_filter:
+        value_column: Energy
+        filter_column: Location
+        filter_value: PJM
     - unique_id: electricity_lmp_energy_Zone_WEST_5min
       metadata:
         name: NYISO-WEST-LMP-Energy-5min
@@ -891,6 +1081,10 @@ request_groups:
         category: price
         sub_category: lmp_energy
         aggregation_level: Zone
+      extract_filter:
+        value_column: Energy
+        filter_column: Location
+        filter_value: WEST
     - unique_id: electricity_lmp_loss_Zone_CAPITL_5min
       metadata:
         name: NYISO-CAPITL-LMP-Loss-5min
@@ -901,6 +1095,10 @@ request_groups:
         category: price
         sub_category: lmp_loss
         aggregation_level: Zone
+      extract_filter:
+        value_column: Loss
+        filter_column: Location
+        filter_value: CAPITL
     - unique_id: electricity_lmp_loss_Zone_CENTRL_5min
       metadata:
         name: NYISO-CENTRL-LMP-Loss-5min
@@ -911,6 +1109,10 @@ request_groups:
         category: price
         sub_category: lmp_loss
         aggregation_level: Zone
+      extract_filter:
+        value_column: Loss
+        filter_column: Location
+        filter_value: CENTRL
     - unique_id: electricity_lmp_loss_Zone_DUNWOD_5min
       metadata:
         name: NYISO-DUNWOD-LMP-Loss-5min
@@ -921,6 +1123,10 @@ request_groups:
         category: price
         sub_category: lmp_loss
         aggregation_level: Zone
+      extract_filter:
+        value_column: Loss
+        filter_column: Location
+        filter_value: DUNWOD
     - unique_id: electricity_lmp_loss_Zone_GENESE_5min
       metadata:
         name: NYISO-GENESE-LMP-Loss-5min
@@ -931,6 +1137,10 @@ request_groups:
         category: price
         sub_category: lmp_loss
         aggregation_level: Zone
+      extract_filter:
+        value_column: Loss
+        filter_column: Location
+        filter_value: GENESE
     - unique_id: electricity_lmp_loss_Zone_H Q_5min
       metadata:
         name: NYISO-H Q-LMP-Loss-5min
@@ -941,6 +1151,10 @@ request_groups:
         category: price
         sub_category: lmp_loss
         aggregation_level: Zone
+      extract_filter:
+        value_column: Loss
+        filter_column: Location
+        filter_value: H Q
     - unique_id: electricity_lmp_loss_Zone_HUD VL_5min
       metadata:
         name: NYISO-HUD VL-LMP-Loss-5min
@@ -951,6 +1165,10 @@ request_groups:
         category: price
         sub_category: lmp_loss
         aggregation_level: Zone
+      extract_filter:
+        value_column: Loss
+        filter_column: Location
+        filter_value: HUD VL
     - unique_id: electricity_lmp_loss_Zone_LONGIL_5min
       metadata:
         name: NYISO-LONGIL-LMP-Loss-5min
@@ -961,6 +1179,10 @@ request_groups:
         category: price
         sub_category: lmp_loss
         aggregation_level: Zone
+      extract_filter:
+        value_column: Loss
+        filter_column: Location
+        filter_value: LONGIL
     - unique_id: electricity_lmp_loss_Zone_MHK VL_5min
       metadata:
         name: NYISO-MHK VL-LMP-Loss-5min
@@ -971,6 +1193,10 @@ request_groups:
         category: price
         sub_category: lmp_loss
         aggregation_level: Zone
+      extract_filter:
+        value_column: Loss
+        filter_column: Location
+        filter_value: MHK VL
     - unique_id: electricity_lmp_loss_Zone_MILLWD_5min
       metadata:
         name: NYISO-MILLWD-LMP-Loss-5min
@@ -981,6 +1207,10 @@ request_groups:
         category: price
         sub_category: lmp_loss
         aggregation_level: Zone
+      extract_filter:
+        value_column: Loss
+        filter_column: Location
+        filter_value: MILLWD
     - unique_id: electricity_lmp_loss_Zone_N.Y.C._5min
       metadata:
         name: NYISO-N.Y.C.-LMP-Loss-5min
@@ -991,6 +1221,10 @@ request_groups:
         category: price
         sub_category: lmp_loss
         aggregation_level: Zone
+      extract_filter:
+        value_column: Loss
+        filter_column: Location
+        filter_value: N.Y.C.
     - unique_id: electricity_lmp_loss_Zone_NORTH_5min
       metadata:
         name: NYISO-NORTH-LMP-Loss-5min
@@ -1001,6 +1235,10 @@ request_groups:
         category: price
         sub_category: lmp_loss
         aggregation_level: Zone
+      extract_filter:
+        value_column: Loss
+        filter_column: Location
+        filter_value: NORTH
     - unique_id: electricity_lmp_loss_Zone_NPX_5min
       metadata:
         name: NYISO-NPX-LMP-Loss-5min
@@ -1011,6 +1249,10 @@ request_groups:
         category: price
         sub_category: lmp_loss
         aggregation_level: Zone
+      extract_filter:
+        value_column: Loss
+        filter_column: Location
+        filter_value: NPX
     - unique_id: electricity_lmp_loss_Zone_O H_5min
       metadata:
         name: NYISO-O H-LMP-Loss-5min
@@ -1021,6 +1263,10 @@ request_groups:
         category: price
         sub_category: lmp_loss
         aggregation_level: Zone
+      extract_filter:
+        value_column: Loss
+        filter_column: Location
+        filter_value: O H
     - unique_id: electricity_lmp_loss_Zone_PJM_5min
       metadata:
         name: NYISO-PJM-LMP-Loss-5min
@@ -1031,6 +1277,10 @@ request_groups:
         category: price
         sub_category: lmp_loss
         aggregation_level: Zone
+      extract_filter:
+        value_column: Loss
+        filter_column: Location
+        filter_value: PJM
     - unique_id: electricity_lmp_loss_Zone_WEST_5min
       metadata:
         name: NYISO-WEST-LMP-Loss-5min
@@ -1041,6 +1291,10 @@ request_groups:
         category: price
         sub_category: lmp_loss
         aggregation_level: Zone
+      extract_filter:
+        value_column: Loss
+        filter_column: Location
+        filter_value: WEST
     - unique_id: electricity_market_price_Zone_CAPITL_5min
       metadata:
         name: NYISO-CAPITL-MarketPrice-5min
@@ -1051,6 +1305,10 @@ request_groups:
         category: price
         sub_category: market_price
         aggregation_level: Zone
+      extract_filter:
+        value_column: LMP
+        filter_column: Location
+        filter_value: CAPITL
     - unique_id: electricity_market_price_Zone_CENTRL_5min
       metadata:
         name: NYISO-CENTRL-MarketPrice-5min
@@ -1061,6 +1319,10 @@ request_groups:
         category: price
         sub_category: market_price
         aggregation_level: Zone
+      extract_filter:
+        value_column: LMP
+        filter_column: Location
+        filter_value: CENTRL
     - unique_id: electricity_market_price_Zone_DUNWOD_5min
       metadata:
         name: NYISO-DUNWOD-MarketPrice-5min
@@ -1071,6 +1333,10 @@ request_groups:
         category: price
         sub_category: market_price
         aggregation_level: Zone
+      extract_filter:
+        value_column: LMP
+        filter_column: Location
+        filter_value: DUNWOD
     - unique_id: electricity_market_price_Zone_GENESE_5min
       metadata:
         name: NYISO-GENESE-MarketPrice-5min
@@ -1081,6 +1347,10 @@ request_groups:
         category: price
         sub_category: market_price
         aggregation_level: Zone
+      extract_filter:
+        value_column: LMP
+        filter_column: Location
+        filter_value: GENESE
     - unique_id: electricity_market_price_Zone_H Q_5min
       metadata:
         name: NYISO-H Q-MarketPrice-5min
@@ -1091,6 +1361,10 @@ request_groups:
         category: price
         sub_category: market_price
         aggregation_level: Zone
+      extract_filter:
+        value_column: LMP
+        filter_column: Location
+        filter_value: H Q
     - unique_id: electricity_market_price_Zone_HUD VL_5min
       metadata:
         name: NYISO-HUD VL-MarketPrice-5min
@@ -1101,6 +1375,10 @@ request_groups:
         category: price
         sub_category: market_price
         aggregation_level: Zone
+      extract_filter:
+        value_column: LMP
+        filter_column: Location
+        filter_value: HUD VL
     - unique_id: electricity_market_price_Zone_LONGIL_5min
       metadata:
         name: NYISO-LONGIL-MarketPrice-5min
@@ -1111,6 +1389,10 @@ request_groups:
         category: price
         sub_category: market_price
         aggregation_level: Zone
+      extract_filter:
+        value_column: LMP
+        filter_column: Location
+        filter_value: LONGIL
     - unique_id: electricity_market_price_Zone_MHK VL_5min
       metadata:
         name: NYISO-MHK VL-MarketPrice-5min
@@ -1121,6 +1403,10 @@ request_groups:
         category: price
         sub_category: market_price
         aggregation_level: Zone
+      extract_filter:
+        value_column: LMP
+        filter_column: Location
+        filter_value: MHK VL
     - unique_id: electricity_market_price_Zone_MILLWD_5min
       metadata:
         name: NYISO-MILLWD-MarketPrice-5min
@@ -1131,6 +1417,10 @@ request_groups:
         category: price
         sub_category: market_price
         aggregation_level: Zone
+      extract_filter:
+        value_column: LMP
+        filter_column: Location
+        filter_value: MILLWD
     - unique_id: electricity_market_price_Zone_N.Y.C._5min
       metadata:
         name: NYISO-N.Y.C.-MarketPrice-5min
@@ -1141,6 +1431,10 @@ request_groups:
         category: price
         sub_category: market_price
         aggregation_level: Zone
+      extract_filter:
+        value_column: LMP
+        filter_column: Location
+        filter_value: N.Y.C.
     - unique_id: electricity_market_price_Zone_NORTH_5min
       metadata:
         name: NYISO-NORTH-MarketPrice-5min
@@ -1151,6 +1445,10 @@ request_groups:
         category: price
         sub_category: market_price
         aggregation_level: Zone
+      extract_filter:
+        value_column: LMP
+        filter_column: Location
+        filter_value: NORTH
     - unique_id: electricity_market_price_Zone_NPX_5min
       metadata:
         name: NYISO-NPX-MarketPrice-5min
@@ -1161,6 +1459,10 @@ request_groups:
         category: price
         sub_category: market_price
         aggregation_level: Zone
+      extract_filter:
+        value_column: LMP
+        filter_column: Location
+        filter_value: NPX
     - unique_id: electricity_market_price_Zone_O H_5min
       metadata:
         name: NYISO-O H-MarketPrice-5min
@@ -1171,6 +1473,10 @@ request_groups:
         category: price
         sub_category: market_price
         aggregation_level: Zone
+      extract_filter:
+        value_column: LMP
+        filter_column: Location
+        filter_value: O H
     - unique_id: electricity_market_price_Zone_PJM_5min
       metadata:
         name: NYISO-PJM-MarketPrice-5min
@@ -1181,6 +1487,10 @@ request_groups:
         category: price
         sub_category: market_price
         aggregation_level: Zone
+      extract_filter:
+        value_column: LMP
+        filter_column: Location
+        filter_value: PJM
     - unique_id: electricity_market_price_Zone_WEST_5min
       metadata:
         name: NYISO-WEST-MarketPrice-5min
@@ -1191,6 +1501,10 @@ request_groups:
         category: price
         sub_category: market_price
         aggregation_level: Zone
+      extract_filter:
+        value_column: LMP
+        filter_column: Location
+        filter_value: WEST
 
 
 timeseries:
@@ -1209,7 +1523,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: AT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4066
       region: AT
@@ -1229,7 +1543,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: DE-LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4066
       region: DE-LU
@@ -1249,7 +1563,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: DE
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4066
       region: DE
@@ -1269,7 +1583,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4066
       region: LU
@@ -1289,7 +1603,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: 50Hertz
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4066
       region: 50Hertz
@@ -1309,7 +1623,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: APG
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4066
       region: APG
@@ -1329,7 +1643,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Amprion
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4066
       region: Amprion
@@ -1349,7 +1663,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Creos
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4066
       region: Creos
@@ -1369,7 +1683,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TenneT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4066
       region: TenneT
@@ -1390,7 +1704,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TransnetBW
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4066
       region: TransnetBW
@@ -1410,7 +1724,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: DE-LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1223
       region: DE-LU
@@ -1430,7 +1744,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: DE
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1223
       region: DE
@@ -1450,7 +1764,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: 50Hertz
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1223
       region: 50Hertz
@@ -1470,7 +1784,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Amprion
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1223
       region: Amprion
@@ -1490,7 +1804,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TenneT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1223
       region: TenneT
@@ -1510,7 +1824,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: AT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4069
       region: AT
@@ -1530,7 +1844,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: DE-LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4069
       region: DE-LU
@@ -1551,7 +1865,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: DE
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4069
       region: DE
@@ -1572,7 +1886,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: 50Hertz
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4069
       region: 50Hertz
@@ -1592,7 +1906,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: APG
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4069
       region: APG
@@ -1613,7 +1927,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Amprion
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4069
       region: Amprion
@@ -1634,7 +1948,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TenneT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4069
       region: TenneT
@@ -1655,7 +1969,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TransnetBW
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4069
       region: TransnetBW
@@ -1675,7 +1989,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: AT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1226
       region: AT
@@ -1695,7 +2009,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: DE-LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1226
       region: DE-LU
@@ -1716,7 +2030,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: DE
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1226
       region: DE
@@ -1737,7 +2051,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1226
       region: LU
@@ -1758,7 +2072,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: 50Hertz
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1226
       region: 50Hertz
@@ -1778,7 +2092,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: APG
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1226
       region: APG
@@ -1799,7 +2113,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Amprion
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1226
       region: Amprion
@@ -1820,7 +2134,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Creos
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1226
       region: Creos
@@ -1841,7 +2155,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TenneT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1226
       region: TenneT
@@ -1862,7 +2176,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TransnetBW
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1226
       region: TransnetBW
@@ -1882,7 +2196,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: AT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4170
       region: AT
@@ -1902,7 +2216,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: BE
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4996
       region: BE
@@ -1922,7 +2236,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: CH
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 259
       region: CH
@@ -1943,7 +2257,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: CZ
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 261
       region: CZ
@@ -1964,7 +2278,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: DE-LU_neighbors
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 5078
       region: DE-LU_neighbors
@@ -1985,7 +2299,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: DE-LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4169
       region: DE-LU
@@ -2005,7 +2319,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: DK1
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 252
       region: DK1
@@ -2025,7 +2339,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: DK2
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 253
       region: DK2
@@ -2045,7 +2359,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: FR
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 254
       region: FR
@@ -2065,7 +2379,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: HU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 262
       region: HU
@@ -2086,7 +2400,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: IT-NORTH
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 255
       region: IT-NORTH
@@ -2106,7 +2420,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: NL
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 256
       region: NL
@@ -2126,7 +2440,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: NO2
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4997
       region: NO2
@@ -2146,7 +2460,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: PL
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 257
       region: PL
@@ -2166,7 +2480,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: PL
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 258
       region: PL
@@ -2186,7 +2500,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: SI
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 260
       region: SI
@@ -2206,7 +2520,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: AT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4071
       region: AT
@@ -2227,7 +2541,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: DE-LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4071
       region: DE-LU
@@ -2248,7 +2562,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: DE
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4071
       region: DE
@@ -2269,7 +2583,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4071
       region: LU
@@ -2290,7 +2604,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: 50Hertz
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4071
       region: 50Hertz
@@ -2310,7 +2624,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: APG
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4071
       region: APG
@@ -2331,7 +2645,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Amprion
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4071
       region: Amprion
@@ -2352,7 +2666,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Creos
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4071
       region: Creos
@@ -2373,7 +2687,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TenneT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4071
       region: TenneT
@@ -2394,7 +2708,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TransnetBW
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4071
       region: TransnetBW
@@ -2415,7 +2729,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: AT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 410
       region: AT
@@ -2436,7 +2750,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: DE-LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 410
       region: DE-LU
@@ -2457,7 +2771,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: DE
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 410
       region: DE
@@ -2478,7 +2792,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 410
       region: LU
@@ -2499,7 +2813,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: 50Hertz
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 410
       region: 50Hertz
@@ -2520,7 +2834,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: APG
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 410
       region: APG
@@ -2541,7 +2855,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Amprion
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 410
       region: Amprion
@@ -2562,7 +2876,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Creos
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 410
       region: Creos
@@ -2583,7 +2897,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TenneT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 410
       region: TenneT
@@ -2604,7 +2918,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TransnetBW
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 410
       region: TransnetBW
@@ -2625,7 +2939,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: AT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1227
       region: AT
@@ -2646,7 +2960,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: DE-LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1227
       region: DE-LU
@@ -2667,7 +2981,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: DE
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1227
       region: DE
@@ -2688,7 +3002,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1227
       region: LU
@@ -2709,7 +3023,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: 50Hertz
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1227
       region: 50Hertz
@@ -2730,7 +3044,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: APG
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1227
       region: APG
@@ -2751,7 +3065,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Amprion
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1227
       region: Amprion
@@ -2772,7 +3086,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Creos
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1227
       region: Creos
@@ -2793,7 +3107,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TenneT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1227
       region: TenneT
@@ -2814,7 +3128,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TransnetBW
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1227
       region: TransnetBW
@@ -2835,7 +3149,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: AT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1228
       region: AT
@@ -2856,7 +3170,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: DE-LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1228
       region: DE-LU
@@ -2877,7 +3191,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: DE
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1228
       region: DE
@@ -2898,7 +3212,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: 50Hertz
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1228
       region: 50Hertz
@@ -2919,7 +3233,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: APG
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1228
       region: APG
@@ -2940,7 +3254,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Amprion
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1228
       region: Amprion
@@ -2961,7 +3275,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TenneT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1228
       region: TenneT
@@ -2982,7 +3296,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TransnetBW
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1228
       region: TransnetBW
@@ -3002,7 +3316,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: AT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4068
       region: AT
@@ -3023,7 +3337,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: DE-LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4068
       region: DE-LU
@@ -3044,7 +3358,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: DE
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4068
       region: DE
@@ -3065,7 +3379,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4068
       region: LU
@@ -3086,7 +3400,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: 50Hertz
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4068
       region: 50Hertz
@@ -3107,7 +3421,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: APG
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4068
       region: APG
@@ -3128,7 +3442,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Amprion
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4068
       region: Amprion
@@ -3149,7 +3463,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Creos
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4068
       region: Creos
@@ -3170,7 +3484,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TenneT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4068
       region: TenneT
@@ -3191,7 +3505,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TransnetBW
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4068
       region: TransnetBW
@@ -3212,7 +3526,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: AT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4387
       region: AT
@@ -3233,7 +3547,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: DE-LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4387
       region: DE-LU
@@ -3254,7 +3568,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: DE
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4387
       region: DE
@@ -3275,7 +3589,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: 50Hertz
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4387
       region: 50Hertz
@@ -3296,7 +3610,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: APG
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4387
       region: APG
@@ -3317,7 +3631,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Amprion
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4387
       region: Amprion
@@ -3338,7 +3652,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TenneT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4387
       region: TenneT
@@ -3359,7 +3673,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TransnetBW
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4387
       region: TransnetBW
@@ -3380,7 +3694,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: AT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4070
       region: AT
@@ -3401,7 +3715,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: DE-LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4070
       region: DE-LU
@@ -3422,7 +3736,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: DE
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4070
       region: DE
@@ -3443,7 +3757,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: 50Hertz
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4070
       region: 50Hertz
@@ -3464,7 +3778,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: APG
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4070
       region: APG
@@ -3485,7 +3799,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Amprion
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4070
       region: Amprion
@@ -3506,7 +3820,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TenneT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4070
       region: TenneT
@@ -3527,7 +3841,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TransnetBW
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4070
       region: TransnetBW
@@ -3548,7 +3862,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: AT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4359
       region: AT
@@ -3569,7 +3883,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: DE-LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4359
       region: DE-LU
@@ -3590,7 +3904,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: DE
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4359
       region: DE
@@ -3611,7 +3925,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4359
       region: LU
@@ -3632,7 +3946,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: 50Hertz
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4359
       region: 50Hertz
@@ -3653,7 +3967,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: APG
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4359
       region: APG
@@ -3674,7 +3988,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Amprion
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4359
       region: Amprion
@@ -3695,7 +4009,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Creos
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4359
       region: Creos
@@ -3716,7 +4030,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TenneT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4359
       region: TenneT
@@ -3737,7 +4051,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TransnetBW
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4359
       region: TransnetBW
@@ -3758,7 +4072,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: DE-LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1225
       region: DE-LU
@@ -3779,7 +4093,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: DE
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1225
       region: DE
@@ -3800,7 +4114,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: 50Hertz
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1225
       region: 50Hertz
@@ -3821,7 +4135,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TenneT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 1225
       region: TenneT
@@ -3841,7 +4155,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: AT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4067
       region: AT
@@ -3862,7 +4176,7 @@ timeseries:
       aggregation_level: BZ
       aggregation_level_name: DE-LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4067
       region: DE-LU
@@ -3883,7 +4197,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: DE
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4067
       region: DE
@@ -3904,7 +4218,7 @@ timeseries:
       aggregation_level: Country
       aggregation_level_name: LU
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4067
       region: LU
@@ -3925,7 +4239,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: 50Hertz
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4067
       region: 50Hertz
@@ -3946,7 +4260,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: APG
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4067
       region: APG
@@ -3967,7 +4281,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Amprion
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4067
       region: Amprion
@@ -3988,7 +4302,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: Creos
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4067
       region: Creos
@@ -4009,7 +4323,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TenneT
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4067
       region: TenneT
@@ -4030,7 +4344,7 @@ timeseries:
       aggregation_level: TSO
       aggregation_level_name: TransnetBW
       ts_timezone: Europe/Berlin
-      update_frequency: 3 minutes
+      update_frequency: 7 minutes
     default_params:
       filter: 4067
       region: TransnetBW
