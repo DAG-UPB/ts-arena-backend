@@ -49,6 +49,22 @@ from typing import Dict, Any, List, Optional
 import pandas as pd
 import gridstatus
 
+# Monkey-patch to force HTTPS for CAISO OASIS API
+# CAISO migrated to HTTPS-only in 2025, but gridstatus still uses HTTP.
+# On some servers (e.g., Hetzner), outbound port 80 is blocked, causing failures.
+import urllib.request
+_original_urlopen = urllib.request.urlopen
+
+def _https_urlopen(url, *args, **kwargs):
+    """Force HTTPS for oasis.caiso.com requests"""
+    if isinstance(url, str) and 'oasis.caiso.com' in url and url.startswith('http://'):
+        url = url.replace('http://', 'https://', 1)
+    elif hasattr(url, 'full_url') and 'oasis.caiso.com' in url.full_url and url.full_url.startswith('http://'):
+        url.full_url = url.full_url.replace('http://', 'https://', 1)
+    return _original_urlopen(url, *args, **kwargs)
+
+urllib.request.urlopen = _https_urlopen
+
 from src.plugins.base_plugin import MultiSeriesPlugin, TimeSeriesDefinition
 
 logger = logging.getLogger(__name__)
