@@ -75,7 +75,11 @@ services:
 
 volumes:
   dbarena:
-
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /mnt/volume-nbg1-1/storage/ts-arena-db
 
 networks:
   default:

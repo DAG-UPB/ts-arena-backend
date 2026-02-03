@@ -12,11 +12,3 @@ services:
     container_name: cloudbeaver
     ports:
       - "8979:8978"
-
-volumes:
-  dbarena:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /mnt/volume-nbg1-1/storage/ts-arena-db
