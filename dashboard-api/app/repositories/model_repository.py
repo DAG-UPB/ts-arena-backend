@@ -144,6 +144,7 @@ class ModelRepository:
         frequencies: Optional[List[str]] = None,
         horizons: Optional[List[str]] = None,
         definition_names: Optional[List[str]] = None,
+        definition_ids: Optional[List[int]] = None,
         min_rounds: int = 1,
         limit: int = 100
     ) -> List[Dict[str, Any]]:
@@ -158,6 +159,7 @@ class ModelRepository:
             frequencies: List of frequencies as ISO 8601 (e.g. ["PT1H", "P1D"])
             horizons: List of horizons as ISO 8601 (e.g. ["PT6H", "P1D"])
             definition_names: List of challenge definition names to filter by
+            definition_ids: List of challenge definition IDs to filter by
             min_rounds: Minimum number of participated rounds
             limit: Max. number of results
         
@@ -252,11 +254,17 @@ class ModelRepository:
             if interval_conditions:
                 query += " AND (" + " OR ".join(interval_conditions) + ")"
         
-        # Definition ID filter
+        # Definition name filter
         if definition_names:
             placeholders = ','.join(['%s'] * len(definition_names))
             query += f" AND cd.name IN ({placeholders})"
             params.extend(definition_names)
+        
+        # Definition ID filter
+        if definition_ids:
+            placeholders = ','.join(['%s'] * len(definition_ids))
+            query += f" AND cd.id IN ({placeholders})"
+            params.extend(definition_ids)
         
         # Group and aggregate
         query += """
@@ -399,6 +407,15 @@ class ModelRepository:
             """)
             definition_names = [row['name'] for row in cur.fetchall()]
             
+            # Get unique challenge definition IDs with names
+            cur.execute("""
+                SELECT id, name
+                FROM challenges.definitions
+                WHERE id IS NOT NULL
+                ORDER BY name
+            """)
+            definition_ids = [{'id': row['id'], 'name': row['name']} for row in cur.fetchall()]
+            
             return {
                 "domains": domains,
                 "categories": categories,
@@ -406,7 +423,8 @@ class ModelRepository:
                 "frequencies": frequencies,
                 "horizons": horizons,
                 "time_ranges": ["7d", "30d", "90d", "365d"],
-                "definition_names": definition_names
+                "definition_names": definition_names,
+                "definition_ids": definition_ids
             }
     
     def get_model_rankings_by_definition(
@@ -451,10 +469,10 @@ class ModelRepository:
             cur.execute(
                 """
                 SELECT DISTINCT cd.id, cd.name
-                FROM forecasts.scores s
-                JOIN challenges.rounds r ON r.id = s.round_id
+                FROM forecasts.v_ranking_base fv
+                JOIN challenges.rounds r ON r.id = fv.round_id
                 JOIN challenges.definitions cd ON cd.id = r.definition_id
-                WHERE s.model_id = %s
+                WHERE fv.model_id = %s
                 ORDER BY cd.name
                 """,
                 (model_id,)
@@ -479,26 +497,24 @@ class ModelRepository:
                 # Calculate rankings for each time range
                 for range_key, since_date in time_ranges.items():
                     # Get model's ranking in this definition for this time range
-                    # TODO: Check if None mase handling is correct
                     cur.execute(
                         """
                         WITH model_scores AS (
                             SELECT
-                                s.model_id,
-                                mi.name as model_name,
-                                COUNT(DISTINCT s.round_id) as rounds_participated,
-                                AVG(s.mase) as avg_mase,
-                                STDDEV(s.mase) as stddev_mase,
-                                MIN(s.mase) as min_mase,
-                                MAX(s.mase) as max_mase
-                            FROM forecasts.scores s
-                            JOIN models.model_info mi ON mi.id = s.model_id
-                            JOIN challenges.rounds r ON r.id = s.round_id
+                                fv.model_id,
+                                fv.model_name,
+                                COUNT(DISTINCT fv.round_id) as rounds_participated,
+                                AVG(fv.mase) as avg_mase,
+                                STDDEV(fv.mase) as stddev_mase,
+                                MIN(fv.mase) as min_mase,
+                                MAX(fv.mase) as max_mase
+                            FROM forecasts.v_ranking_base fv
+                            JOIN challenges.rounds r ON r.id = fv.round_id
                             WHERE r.definition_id = %s
-                                AND r.end_time >= %s
-                                AND s.mase IS NOT NULL
-                                AND s.mase NOT IN ('NaN', 'Infinity', '-Infinity')
-                            GROUP BY s.model_id, mi.name
+                                AND r.registration_start >= %s
+                                AND fv.mase IS NOT NULL
+                                AND fv.mase NOT IN ('NaN', 'Infinity', '-Infinity')
+                            GROUP BY fv.model_id, fv.model_name
                         ),
                         ranked_models AS (
                             SELECT

@@ -70,6 +70,11 @@ async def get_filtered_rankings(
         description="Comma-separated list of definition names (e.g., 'Day-Ahead Power,Week-Ahead Power')",
         example="Day-Ahead Power,Week-Ahead Power"
     ),
+    definition_ids: Optional[str] = Query(
+        None,
+        description="Comma-separated list of definition IDs (e.g., '1,2,3')",
+        example="1,2"
+    ),
     min_rounds: int = Query(
         1,
         ge=1,
@@ -96,7 +101,8 @@ async def get_filtered_rankings(
     - **Subcategory**: Filter by one or more subcategories (e.g., Load, Generation)
     - **Frequency**: Filter by data frequency in ISO 8601 format (e.g., PT1H for 1 hour)
     - **Horizon**: Filter by forecast horizon in ISO 8601 format (e.g., P1D for 1 day)
-    - **Definition**: Filter by challenge definition (e.g., Day-Ahead Power)
+    - **Definition Names**: Filter by challenge definition names (e.g., Day-Ahead Power)
+    - **Definition IDs**: Filter by challenge definition IDs (e.g., 1, 2, 3)
     - **Min Rounds**: Show only models that participated in at least N rounds
     
     **Filter Format:**
@@ -149,6 +155,7 @@ async def get_filtered_rankings(
     frequencies_list = [f.strip() for f in frequency.split(',')] if frequency else None
     horizons_list = [h.strip() for h in horizon.split(',')] if horizon else None
     definition_names_list = [d.strip() for d in definition_names.split(',')] if definition_names else None
+    definition_ids_list = [int(d.strip()) for d in definition_ids.split(',')] if definition_ids else None
     
     # Get filtered rankings
     repo = ModelRepository(conn)
@@ -160,6 +167,7 @@ async def get_filtered_rankings(
         frequencies=frequencies_list,
         horizons=horizons_list,
         definition_names=definition_names_list,
+        definition_ids=definition_ids_list,
         min_rounds=min_rounds,
         limit=limit
     )
@@ -180,6 +188,8 @@ async def get_filtered_rankings(
         filters_applied['horizon'] = horizons_list
     if definition_names:
         filters_applied['definition_names'] = definition_names
+    if definition_ids_list:
+        filters_applied['definition_ids'] = definition_ids_list
     if min_rounds > 1:
         filters_applied['min_rounds'] = min_rounds
     if limit != 100:
@@ -211,7 +221,8 @@ async def get_ranking_filters(
       "frequencies": ["PT15M", "PT1H", "P1D"],
       "horizons": ["PT1H", "PT6H", "P1D", "P7D"],
       "time_ranges": ["7d", "30d", "90d", "365d"],
-      "definition_names": ["Day-Ahead Power", "Week-Ahead Power"]
+      "definition_names": ["Day-Ahead Power", "Week-Ahead Power"],
+      "definition_ids": [{"id": 1, "name": "Day-Ahead Power"}, {"id": 2, "name": "Week-Ahead Power"}]
     }
     ```
     
