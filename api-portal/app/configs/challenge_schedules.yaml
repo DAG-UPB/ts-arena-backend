@@ -441,3 +441,62 @@ schedules:
     forecast_horizon: 3 days
     registration_duration: 1 hour
     evaluation_delay: 0 hours
+
+- id: fingrid_load_challenge_24h_15min
+  cron: 45 4 * * *
+  run_on_startup: false
+  params:
+    description: 'Fingrid Load Challenge: 24h horizon, 15-min frequency'
+    domains:
+    - energy
+    subdomains: []
+    categories: []
+    subcategories: []
+    required_time_series:
+    - electricity_cogeneration_district_heating_power_plant_generation_TSO_Fingrid_3min_201
+    - electricity_electric_boiler_consumption_TSO_Fingrid_1min_371
+    - electricity_electricity_production_TSO_Fingrid_3min_192
+    - electricity_emission_factor_consumed_electricity_TSO_Fingrid_15min_396
+    - electricity_hydropower_power_plant_generation_TSO_Fingrid_3min_191
+    - electricity_industrial_cogeneration_power_plant_generation_TSO_Fingrid_3min_202
+    - electricity_mfrr_direct_activation_price_down_TSO_Fingrid_15min_402
+    - electricity_mfrr_direct_activation_price_up_TSO_Fingrid_15min_401
+    - electricity_net_consumption_TSO_Fingrid_3min_193
+    - electricity_non_fossil_generation_share_TSO_Fingrid_15min_395
+    - electricity_nuclear_power_plant_generation_TSO_Fingrid_3min_188
+    - electricity_wind_onshore_power_plant_generation_TSO_Fingrid_3min_181
+    n_time_series: 12
+    frequency: 15 minutes
+    context_length: 1000
+    forecast_horizon: 1 day
+    registration_duration: 15 minutes
+    evaluation_delay: 0 hours
+- id: fingrid_load_challenge_72h_1h
+  cron: 0 6 * * *
+  run_on_startup: false
+  params:
+    description: 'Fingrid Load Challenge: 72h horizon, 1h frequency'
+    domains:
+    - energy
+    subdomains: []
+    categories: []
+    subcategories: []
+    required_time_series:
+    - electricity_cogeneration_district_heating_power_plant_generation_TSO_Fingrid_3min_201
+    - electricity_electric_boiler_consumption_TSO_Fingrid_1min_371
+    - electricity_electricity_production_TSO_Fingrid_3min_192
+    - electricity_emission_factor_consumed_electricity_TSO_Fingrid_15min_396
+    - electricity_hydropower_power_plant_generation_TSO_Fingrid_3min_191
+    - electricity_industrial_cogeneration_power_plant_generation_TSO_Fingrid_3min_202
+    - electricity_mfrr_direct_activation_price_down_TSO_Fingrid_15min_402
+    - electricity_mfrr_direct_activation_price_up_TSO_Fingrid_15min_401
+    - electricity_net_consumption_TSO_Fingrid_3min_193
+    - electricity_non_fossil_generation_share_TSO_Fingrid_15min_395
+    - electricity_nuclear_power_plant_generation_TSO_Fingrid_3min_188
+    - electricity_wind_onshore_power_plant_generation_TSO_Fingrid_3min_181
+    n_time_series: 12
+    frequency: 1 hour
+    context_length: 1000
+    forecast_horizon: 3 days
+    registration_duration: 1 hour
+    evaluation_delay: 0 hours
