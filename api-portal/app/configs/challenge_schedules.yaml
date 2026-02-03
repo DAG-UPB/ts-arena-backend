@@ -33,7 +33,7 @@ schedules:
     registration_duration: 1 hour
     evaluation_delay: 0 hours
 - id: smard_load_challenge_24h_15min
-  cron: 0 7 * * *
+  cron: 0 8 * * *
   run_on_startup: false
   params:
     description: 'Net Load Challenge: 24h horizon, 15-min frequency'
@@ -62,7 +62,7 @@ schedules:
     registration_duration: 15 minutes
     evaluation_delay: 0 hours
 - id: smard_generation_challenge_24h_15min
-  cron: 0 19 * * *
+  cron: 0 20 * * *
   run_on_startup: false
   params:
     description: 'Generation Challenge: All generation types, 24h horizon, 15-min
@@ -109,7 +109,7 @@ schedules:
     registration_duration: 15 minutes
     evaluation_delay: 0 hours
 - id: smard_dam_challenge_72h_1h
-  cron: 0 14 * * *
+  cron: 0 15 * * *
   run_on_startup: false
   params:
     description: 'Day-Ahead Market Price Challenge: 72h horizon, 1h frequency'
@@ -142,7 +142,7 @@ schedules:
     registration_duration: 1 hour
     evaluation_delay: 0 hours
 - id: smard_load_challenge_72h_1h
-  cron: 0 8 * * *
+  cron: 0 9 * * *
   run_on_startup: false
   params:
     description: 'Net Load Challenge: 72h horizon, 1h frequency'
@@ -171,7 +171,7 @@ schedules:
     registration_duration: 1 hour
     evaluation_delay: 0 hours
 - id: smard_generation_challenge_72h_1h
-  cron: 0 20 * * *
+  cron: 0 21 * * *
   run_on_startup: false
   params:
     description: 'Generation Challenge: All generation types, 72h horizon, 1h frequency'

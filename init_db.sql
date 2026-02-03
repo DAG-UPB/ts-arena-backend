@@ -59,7 +59,6 @@ CREATE TABLE data_portal.time_series (
   aggregation_level_name TEXT,
   unit TEXT,
   update_frequency TEXT,
-  update_frequency_timepoint TEXT,
   ts_timezone TEXT,
   imputation_policy TEXT,
   domain_category_id INTEGER REFERENCES data_portal.domain_category(id),
@@ -88,7 +87,7 @@ CREATE TABLE data_portal.time_series_data (
 SELECT create_hypertable('data_portal.time_series_data', 'ts', 'series_id', 4, 
                          chunk_time_interval => INTERVAL '1 day', if_not_exists => TRUE);
 
-SELECT add_retention_policy('data_portal.time_series_data', INTERVAL '200 days', if_not_exists => TRUE);
+SELECT add_retention_policy('data_portal.time_series_data', INTERVAL '5 years', if_not_exists => TRUE);
 
 CREATE TRIGGER trg_time_series_data_updated_at
 BEFORE UPDATE ON data_portal.time_series_data
