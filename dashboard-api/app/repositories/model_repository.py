@@ -166,22 +166,21 @@ class ModelRepository:
         """
         query = """
             SELECT
-                cs.model_id,
+                vr.model_id,
                 MAX(mi.name) AS model_name,
-                COUNT(DISTINCT cs.round_id) AS rounds_participated,
-                AVG(cs.mase) AS avg_mase,
-                STDDEV(cs.mase) AS stddev_mase,
-                MIN(cs.mase) AS min_mase,
-                MAX(cs.mase) AS max_mase,
+                COUNT(DISTINCT vr.round_id) AS rounds_participated,
+                AVG(vr.mase) AS avg_mase,
+                STDDEV(vr.mase) AS stddev_mase,
+                MIN(vr.mase) AS min_mase,
+                MAX(vr.mase) AS max_mase,
                 ARRAY_AGG(DISTINCT vr.domain ORDER BY vr.domain) FILTER (WHERE vr.domain IS NOT NULL) AS domains_covered,
                 ARRAY_AGG(DISTINCT vr.category ORDER BY vr.category) FILTER (WHERE vr.category IS NOT NULL) AS categories_covered,
                 ARRAY_AGG(DISTINCT vr.frequency::INTERVAL ORDER BY vr.frequency) FILTER (WHERE vr.frequency IS NOT NULL) AS frequencies_covered,
                 ARRAY_AGG(DISTINCT vr.horizon::INTERVAL ORDER BY vr.horizon) FILTER (WHERE vr.horizon IS NOT NULL) AS horizons_covered,
                 ARRAY_AGG(DISTINCT cd.name ORDER BY cd.name) FILTER (WHERE cd.name IS NOT NULL) AS challenge_definition_names
             FROM forecasts.v_ranking_base vr
-            JOIN forecasts.scores cs ON cs.round_id = vr.round_id AND cs.model_id = vr.model_id
-            JOIN models.model_info mi ON mi.id = cs.model_id
-            LEFT JOIN challenges.rounds r ON r.id = cs.round_id
+            JOIN models.model_info mi ON mi.id = vr.model_id
+            LEFT JOIN challenges.rounds r ON r.id = vr.round_id
             LEFT JOIN challenges.definitions cd ON cd.id = r.definition_id
             WHERE 1=1
         """
@@ -261,8 +260,8 @@ class ModelRepository:
         
         # Group and aggregate
         query += """
-            GROUP BY cs.model_id, model_name
-            HAVING COUNT(DISTINCT cs.round_id) >= %s
+            GROUP BY vr.model_id, model_name
+            HAVING COUNT(DISTINCT vr.round_id) >= %s
             ORDER BY avg_mase ASC NULLS LAST, rounds_participated DESC
             LIMIT %s;
         """
