@@ -451,10 +451,10 @@ class ModelRepository:
             cur.execute(
                 """
                 SELECT DISTINCT cd.id, cd.name
-                FROM forecasts.scores s
-                JOIN challenges.rounds r ON r.id = s.round_id
+                FROM forecasts.v_ranking_base fv
+                JOIN challenges.rounds r ON r.id = fv.round_id
                 JOIN challenges.definitions cd ON cd.id = r.definition_id
-                WHERE s.model_id = %s
+                WHERE fv.model_id = %s
                 ORDER BY cd.name
                 """,
                 (model_id,)
@@ -479,26 +479,24 @@ class ModelRepository:
                 # Calculate rankings for each time range
                 for range_key, since_date in time_ranges.items():
                     # Get model's ranking in this definition for this time range
-                    # TODO: Check if None mase handling is correct
                     cur.execute(
                         """
                         WITH model_scores AS (
                             SELECT
-                                s.model_id,
-                                mi.name as model_name,
-                                COUNT(DISTINCT s.round_id) as rounds_participated,
-                                AVG(s.mase) as avg_mase,
-                                STDDEV(s.mase) as stddev_mase,
-                                MIN(s.mase) as min_mase,
-                                MAX(s.mase) as max_mase
-                            FROM forecasts.scores s
-                            JOIN models.model_info mi ON mi.id = s.model_id
-                            JOIN challenges.rounds r ON r.id = s.round_id
+                                fv.model_id,
+                                fv.name as model_name,
+                                COUNT(DISTINCT fv.round_id) as rounds_participated,
+                                AVG(fv.mase) as avg_mase,
+                                STDDEV(fv.mase) as stddev_mase,
+                                MIN(fv.mase) as min_mase,
+                                MAX(fv.mase) as max_mase
+                            FROM forecasts.v_ranking_base fv
+                            JOIN challenges.rounds r ON r.id = fv.round_id
                             WHERE r.definition_id = %s
-                                AND r.end_time >= %s
-                                AND s.mase IS NOT NULL
-                                AND s.mase NOT IN ('NaN', 'Infinity', '-Infinity')
-                            GROUP BY s.model_id, mi.name
+                                AND r.registration_start >= %s
+                                AND fv.mase IS NOT NULL
+                                AND fv.mase NOT IN ('NaN', 'Infinity', '-Infinity')
+                            GROUP BY fv.model_id, fv.name
                         ),
                         ranked_models AS (
                             SELECT
