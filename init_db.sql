@@ -657,6 +657,9 @@ ON models.model_info(user_id);
 CREATE INDEX IF NOT EXISTS idx_series_pseudo_series
 ON challenges.series_pseudo(series_id);
 
+CREATE INDEX idx_forecasts_round_model 
+ON forecasts.forecasts(round_id, model_id);
+
 -- ==========================================================
 -- 10) Continuous Aggregates for Multi-Granularity Time Series
 -- ==========================================================
