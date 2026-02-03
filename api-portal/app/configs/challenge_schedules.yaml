@@ -233,7 +233,6 @@ schedules:
     forecast_horizon: 30 minutes
     registration_duration: 15 minutes
     evaluation_delay: 0 hours
-schedules:
 - id: gridstatus_hub_zone_challenge_24h_15min
   cron: 0 16 * * *
   run_on_startup: false
