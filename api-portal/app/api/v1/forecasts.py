@@ -127,3 +127,42 @@ async def get_forecasts(
         model_id=model_id,
         forecasts=forecasts
     )
+
+
+from app.api.dependencies import get_challenge_service
+from app.services.challenge_service import ChallengeService
+
+
+@router.get(
+    "/naive-template/{round_id}",
+    response_model=ForecastUploadRequest,
+    summary="Get a naive forecast template for easy upload",
+    description=(
+        "Returns a ready-to-upload naive forecast template matching the ForecastUploadRequest structure. "
+        "Uses persistence (last context value) as the prediction method. "
+        "Timestamps are correctly calculated based on round horizon and frequency. "
+        "The template includes model_name='Naive' and can be posted to /forecasts/upload if a corresponding model is registered."
+    )
+)
+async def get_naive_forecast_template(
+    round_id: int,
+    current_user: dict = Depends(require_auth),
+    challenge_service: ChallengeService = Depends(get_challenge_service)
+) -> ForecastUploadRequest:
+    """
+    Returns a naive forecast template ready for direct upload.
+    
+    The template uses the last known context value as the prediction 
+    for all forecast timestamps (persistence/naive method).
+    
+    Response structure matches ForecastUploadRequest exactly:
+    - round_id: The challenge round ID
+    - model_name: "Naive" (persistence baseline)
+    - forecasts: List of series with their forecast data points
+    """
+    try:
+        template = await challenge_service.generate_naive_forecast_template(round_id)
+        return ForecastUploadRequest(**template)
+    except ValueError as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=str(e))

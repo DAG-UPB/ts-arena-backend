@@ -258,12 +258,12 @@ class ChallengeRoundRepository:
         """
         Retrieves all context data for a given round, grouped by series_id.
         Returns a dictionary where keys are challenge_series_names and values are dicts containing
-        'frequency' and 'data' (list of timestamped data points).
+        'frequency' (from the challenge round) and 'data' (list of timestamped data points).
         """
         query = (
             select(
                 ChallengeSeriesPseudo.challenge_series_name,
-                TimeSeriesModel.frequency,
+                ChallengeRound.frequency,
                 ChallengeContextData.ts,
                 ChallengeContextData.value,
             )
@@ -273,8 +273,8 @@ class ChallengeRoundRepository:
                 & (ChallengeSeriesPseudo.series_id == ChallengeContextData.series_id)
             )
             .join(
-                TimeSeriesModel,
-                TimeSeriesModel.series_id == ChallengeContextData.series_id
+                ChallengeRound,
+                ChallengeRound.id == ChallengeContextData.round_id
             )
             .where(ChallengeContextData.round_id == round_id)
             .order_by(ChallengeSeriesPseudo.challenge_series_name, ChallengeContextData.ts)

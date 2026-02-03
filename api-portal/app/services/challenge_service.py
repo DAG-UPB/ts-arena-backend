@@ -456,12 +456,12 @@ class ChallengeService:
     async def generate_naive_forecast_template(
         self,
         round_id: int
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
         Generates a naive forecast template for a round.
         
         Uses persistence (last known value) as the prediction method.
-        Returns a structure ready for direct upload via /forecasts/upload.
+        Returns a structure matching ForecastUploadRequest for direct upload.
         """
         # Get round details
         round_obj = await self.round_repository.get_by_id(round_id)
@@ -490,7 +490,7 @@ class ChallengeService:
             current_ts += frequency
         
         # Build naive forecast for each series
-        result = []
+        forecasts_list = []
         for series_data in context_data:
             # Get last known value (naive persistence)
             if not series_data.data:
@@ -499,14 +499,19 @@ class ChallengeService:
             last_value = series_data.data[-1].value
             
             forecasts = [
-                {"ts": ts.isoformat(), "value": last_value}
+                {"ts": ts, "value": last_value}
                 for ts in forecast_timestamps
             ]
             
-            result.append({
+            forecasts_list.append({
                 "challenge_series_name": series_data.challenge_series_name,
                 "forecasts": forecasts
             })
         
-        return result
+        # Return structure matching ForecastUploadRequest
+        return {
+            "round_id": round_id,
+            "model_name": "Naive",
+            "forecasts": forecasts_list
+        }
 
