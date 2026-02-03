@@ -10,46 +10,175 @@ request_groups:
       # Common parameters for all series in this group
       page_size: 20000
     timeseries:
-      - unique_id: fingrid-multi-192
-        extract_filter:
+    - unique_id: electricity_battery_energy_storage_charge_power_TSO_Fingrid_3min_399
+      extract_filter:
+          dataset_id: 399
+      metadata:
+        name: Fingrid-Fingrid-battery_energy_storage_charge_power-3min
+        description: Battery energy storage systems charging power - real-time data
+        frequency: 3 minutes
+        unit: MW
+        domain: energy
+        category: storage
+        sub_category: battery_energy_storage_charge_power
+        aggregation_level: TSO
+    - unique_id: electricity_battery_energy_storage_discharge_power_TSO_Fingrid_3min_398
+      extract_filter:
+          dataset_id: 398
+      metadata:
+        name: Fingrid-Fingrid-battery_energy_storage_discharge_power-3min
+        description: Battery energy storage systems discharging power - real-time data
+        frequency: 3 minutes
+        unit: MW
+        domain: energy
+        category: storage
+        sub_category: battery_energy_storage_discharge_power
+        aggregation_level: TSO
+    - unique_id: electricity_cogeneration_district_heating_power_plant_generation_TSO_Fingrid_3min_201
+      extract_filter:
+          dataset_id: 201
+      metadata:
+        name: Fingrid-Fingrid-cogeneration_district_heating_power_plant_generation-3min
+        description: Cogeneration of district heating - real-time data
+        frequency: 3 minutes
+        unit: MW
+        domain: energy
+        category: generation
+        sub_category: cogeneration_district_heating_power_plant_generation
+        aggregation_level: TSO
+    - unique_id: electricity_electric_boiler_consumption_TSO_Fingrid_1min_371
+      extract_filter:
+          dataset_id: 371
+      metadata:
+        name: Fingrid-Fingrid-electric_boiler_consumption-1min
+        description: Electric boiler consumption sum - real-time data
+        frequency: 1 minute
+        unit: MW
+        domain: energy
+        category: load
+        sub_category: electric_boiler_consumption
+        aggregation_level: TSO
+    - unique_id: electricity_electricity_production_TSO_Fingrid_3min_192
+      extract_filter:
           dataset_id: 192
-        metadata:
-          name: FINGRID-MULTI-192-FI-3min
-          description: 'Electricity production in Finland based on the real-time measurements in Fingrid''s operation control system. The data is updated every 3 minutes.'
-          frequency: 3 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - unique_id: fingrid-multi-191
-        extract_filter:
+      metadata:
+        name: Fingrid-Fingrid-electricity_production-3min
+        description: Electricity production in Finland - real-time data
+        frequency: 3 minutes
+        unit: MW
+        domain: energy
+        category: generation
+        sub_category: electricity_production
+        aggregation_level: TSO
+    - unique_id: electricity_emission_factor_consumed_electricity_TSO_Fingrid_15min_396
+      extract_filter:
+          dataset_id: 396
+      metadata:
+        name: Fingrid-Fingrid-emission_factor_consumed_electricity-15min
+        description: Emission factor for electricity consumed in Finland - updated every 15 minutes
+        frequency: 15 minutes
+        unit: gCO2/kWh
+        domain: energy
+        category: emissions
+        sub_category: emission_factor_consumed_electricity
+        aggregation_level: TSO
+    - unique_id: electricity_hydropower_power_plant_generation_TSO_Fingrid_3min_191
+      extract_filter:
           dataset_id: 191
-        metadata:
-          name: FINGRID-MULTI-191-FI-3min
-          description: 'Hydro power production in Finland based on the real-time measurements in Fingrid''s operation control system. The data is updated every 3 minutes.'
-          frequency: 3 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - unique_id: fingrid-multi-181
-        extract_filter:
-          dataset_id: 181
-        metadata:
-          name: FINGRID-MULTI-181-FI-3min
-          description: 'Wind power production based on the real-time measurements in Fingrid''s operation control system. About two percent of the production capacity is estimated as measurements aren''t available. The data is updated every 3 minutes.'
-          frequency: 3 minutes
-          unit: MW
-          domain: energy
-          category: generation
-      - unique_id: fingrid-multi-188
-        extract_filter:
+      metadata:
+        name: Fingrid-Fingrid-hydropower_power_plant_generation-3min
+        description: Hydro power production - real-time data
+        frequency: 3 minutes
+        unit: MW
+        domain: energy
+        category: generation
+        sub_category: hydropower_power_plant_generation
+        aggregation_level: TSO
+    - unique_id: electricity_industrial_cogeneration_power_plant_generation_TSO_Fingrid_3min_202
+      extract_filter:
+          dataset_id: 202
+      metadata:
+        name: Fingrid-Fingrid-industrial_cogeneration_power_plant_generation-3min
+        description: Industrial cogeneration - real-time data
+        frequency: 3 minutes
+        unit: MW
+        domain: energy
+        category: generation
+        sub_category: industrial_cogeneration_power_plant_generation
+        aggregation_level: TSO
+    - unique_id: electricity_mfrr_direct_activation_price_down_TSO_Fingrid_15min_402
+      extract_filter:
+          dataset_id: 402
+      metadata:
+        name: Fingrid-Fingrid-mfrr_direct_activation_price_down-15min
+        description: mFRR direct activation price down - real-time
+        frequency: 15 minutes
+        unit: EUR/MWh
+        domain: energy
+        category: price
+        sub_category: mfrr_direct_activation_price_down
+        aggregation_level: TSO
+    - unique_id: electricity_mfrr_direct_activation_price_up_TSO_Fingrid_15min_401
+      extract_filter:
+          dataset_id: 401
+      metadata:
+        name: Fingrid-Fingrid-mfrr_direct_activation_price_up-15min
+        description: mFRR direct activation price up - real-time
+        frequency: 15 minutes
+        unit: EUR/MWh
+        domain: energy
+        category: price
+        sub_category: mfrr_direct_activation_price_up
+        aggregation_level: TSO
+    - unique_id: electricity_net_consumption_TSO_Fingrid_3min_193
+      extract_filter:
+          dataset_id: 193
+      metadata:
+        name: Fingrid-Fingrid-net_consumption-3min
+        description: Electricity consumption in Finland - real-time data
+        frequency: 3 minutes
+        unit: MW
+        domain: energy
+        category: load
+        sub_category: net_consumption
+        aggregation_level: TSO
+    - unique_id: electricity_non_fossil_generation_share_TSO_Fingrid_15min_395
+      extract_filter:
+          dataset_id: 395
+      metadata:
+        name: Fingrid-Fingrid-non_fossil_generation_share-15min
+        description: Share of non-fossil electricity generation in Finland - updated every 15 minutes
+        frequency: 15 minutes
+        unit: \%
+        domain: energy
+        category: generation
+        sub_category: non_fossil_generation_share
+        aggregation_level: TSO
+    - unique_id: electricity_nuclear_power_plant_generation_TSO_Fingrid_3min_188
+      extract_filter:
           dataset_id: 188
-        metadata:
-          name: FINGRID-MULTI-188-FI-3min
-          description: 'Nuclear power production in Finland based on the real-time measurements in Fingrid''s operation control system. The data is updated every 3 minutes.'
-          frequency: 3 minutes
-          unit: MW
-          domain: energy
-          category: generation
+      metadata:
+        name: Fingrid-Fingrid-nuclear_power_plant_generation-3min
+        description: Nuclear power production - real-time data
+        frequency: 3 minutes
+        unit: MW
+        domain: energy
+        category: generation
+        sub_category: nuclear_power_plant_generation
+        aggregation_level: TSO
+    - unique_id: electricity_wind_onshore_power_plant_generation_TSO_Fingrid_3min_181
+      extract_filter:
+          dataset_id: 181
+      metadata:
+        name: Fingrid-Fingrid-wind_onshore_power_plant_generation-3min
+        description: Wind power production - real-time data
+        frequency: 3 minutes
+        unit: MW
+        domain: energy
+        category: generation
+        sub_category: wind_onshore_power_plant_generation
+        aggregation_level: TSO
+
 
   gridstatus-caiso-generation:
     module: src.plugins.data_sources.gridstatus_plugin

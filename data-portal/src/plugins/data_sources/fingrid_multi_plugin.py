@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 from typing import Dict, Any, List, Optional
+from collections import defaultdict
 import requests
 from src.plugins.base_plugin import MultiSeriesPlugin, TimeSeriesDefinition
 
@@ -12,54 +13,53 @@ logger = logging.getLogger(__name__)
 
 class FingridMultiApiClient:
     """
-    Helper client for Fingrid API that can fetch multiple datasets efficiently.
-    Uses rate limiting to stay under API limits (10 calls/minute).
+    Helper client for Fingrid API that fetches multiple datasets in a single request.
+    Uses the /api/data endpoint which supports querying multiple datasets at once.
     """
-    BASE_URL = "https://data.fingrid.fi/api/datasets"
+    BASE_URL = "https://data.fingrid.fi/api/data"
     
-    # Global state to share across instances for rate limiting
-    last_call_time = 0.0
-    _lock = asyncio.Lock()
-
     def __init__(self, api_key: str, page_size: int = 20000):
         self.api_key = api_key
         self.page_size = page_size
         self.session = requests.Session()
         self.session.headers.update({"x-api-key": self.api_key})
 
-    async def _wait_for_rate_limit(self):
-        """Simple async rate limiter to stay under 10 calls/min."""
-        async with self._lock:
-            now = asyncio.get_event_loop().time()
-            wait_time = 6.5 - (now - FingridMultiApiClient.last_call_time)
-            if wait_time > 0:
-                logger.debug(f"Rate limiting: waiting {wait_time:.2f}s")
-                await asyncio.sleep(wait_time)
-            FingridMultiApiClient.last_call_time = asyncio.get_event_loop().time()
-
-    async def fetch_dataset(self, dataset_id: int, start_time: str, end_time: str) -> List[Dict]:
+    async def fetch_multiple_datasets(
+        self, 
+        dataset_ids: List[int], 
+        start_time: str, 
+        end_time: str
+    ) -> Dict[int, List[Dict]]:
         """
-        Fetch data for a single dataset with pagination.
+        Fetch data for multiple datasets in a single batched API call.
         
         Args:
-            dataset_id: Fingrid dataset ID
+            dataset_ids: List of Fingrid dataset IDs to fetch
             start_time: ISO format start time
             end_time: ISO format end time
             
         Returns:
-            List of data points with 'ts' and 'value' keys
+            Dict mapping dataset_id to list of data points with 'ts' and 'value' keys
         """
-        all_data = []
+        if not dataset_ids:
+            return {}
+        
+        # Initialize result dict for each dataset
+        result: Dict[int, List[Dict]] = defaultdict(list)
+        
+        # Build comma-separated datasets string
+        datasets_param = ",".join(str(d) for d in dataset_ids)
+        
         page = 1
+        total_fetched = 0
         
         while True:
-            await self._wait_for_rate_limit()
-            
             params = {
+                "datasets": datasets_param,
                 "startTime": start_time,
                 "endTime": end_time,
                 "format": "json",
-                "oneRowPerTimePeriod": "true",
+                "oneRowPerTimePeriod": "false",  # Get datasetId in each row
                 "page": page,
                 "pageSize": self.page_size,
                 "locale": "en",
@@ -67,17 +67,21 @@ class FingridMultiApiClient:
                 "sortOrder": "asc"
             }
             
-            url = f"{self.BASE_URL}/{dataset_id}/data"
-            logger.info(f"Fingrid Multi: Fetching page {page} for dataset {dataset_id}")
+            logger.info(
+                f"Fingrid Multi: Fetching page {page} for {len(dataset_ids)} datasets "
+                f"({datasets_param[:50]}{'...' if len(datasets_param) > 50 else ''})"
+            )
             
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None, 
-                lambda: self.session.get(url, params=params)
+                lambda: self.session.get(self.BASE_URL, params=params)
             )
             
             if response.status_code != 200:
-                logger.error(f"Fingrid API error {response.status_code} for dataset {dataset_id}: {response.text}")
+                logger.error(
+                    f"Fingrid API error {response.status_code}: {response.text[:500]}"
+                )
                 break
 
             data_json = response.json()
@@ -85,25 +89,29 @@ class FingridMultiApiClient:
             
             if not items:
                 break
-                
-            # Normalize data - find the value key dynamically
-            exclude_keys = {"startTime", "endTime"}
-            first_item = items[0]
-            value_key = next((k for k in first_item.keys() if k not in exclude_keys), None)
             
+            # Group items by datasetId
             for item in items:
-                value = item.get(value_key) if value_key else None
-                all_data.append({
-                    "ts": item.get("endTime"),
-                    "value": float(value) if value is not None else None
-                })
+                dataset_id = item.get("datasetId")
+                if dataset_id is not None:
+                    result[dataset_id].append({
+                        "ts": item.get("endTime"),
+                        "value": float(item["value"]) if item.get("value") is not None else None
+                    })
             
-            if len(items) < self.page_size:
+            total_fetched += len(items)
+            
+            # Check pagination
+            pagination = data_json.get("pagination", {})
+            if pagination.get("nextPage") is None:
                 break
             page += 1
 
-        logger.info(f"Fingrid Multi: Fetched {len(all_data)} points for dataset {dataset_id}")
-        return all_data
+        logger.info(
+            f"Fingrid Multi: Fetched {total_fetched} total data points "
+            f"across {len(result)} datasets"
+        )
+        return dict(result)
 
 
 class FingridMultiSeriesPlugin(MultiSeriesPlugin):
@@ -111,8 +119,8 @@ class FingridMultiSeriesPlugin(MultiSeriesPlugin):
     Multi-series plugin for Fingrid data.
     
     Fetches multiple Fingrid datasets efficiently by:
-    1. Respecting rate limits across all datasets
-    2. Sharing the same HTTP session
+    1. Batching all dataset IDs into a single API call
+    2. Using the /api/data endpoint with datasets parameter
     3. Processing all series in one scheduled job
     """
 
@@ -131,6 +139,13 @@ class FingridMultiSeriesPlugin(MultiSeriesPlugin):
         
         page_size = request_params.get("page_size", 20000)
         self.client = FingridMultiApiClient(self.api_key or "", page_size)
+        
+        # Build mapping from dataset_id to unique_id for quick lookup
+        self._dataset_to_unique_id: Dict[int, str] = {}
+        for series_def in self._series_definitions:
+            dataset_id = series_def.extract_filter.get("dataset_id")
+            if dataset_id is not None:
+                self._dataset_to_unique_id[int(dataset_id)] = series_def.unique_id
 
     def get_detected_timezone(self, unique_id: str) -> Optional[str]:
         return "Europe/Helsinki"
@@ -141,9 +156,7 @@ class FingridMultiSeriesPlugin(MultiSeriesPlugin):
         end_date: Optional[str] = None
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
-        Fetch historical data for all configured Fingrid datasets.
-        
-        Makes one API call per dataset but shares rate limiting and session.
+        Fetch historical data for all configured Fingrid datasets in a single API call.
         
         Args:
             start_date: Start date in ISO format
@@ -158,7 +171,6 @@ class FingridMultiSeriesPlugin(MultiSeriesPlugin):
         if end_date is None:
             end_date = (pd.Timestamp.now(tz='UTC') + pd.Timedelta(days=2)).isoformat()
         
-        # At this point end_date is guaranteed to be a string
         end_date_str: str = str(end_date)
         
         # Ensure proper ISO format with Z suffix
@@ -172,26 +184,30 @@ class FingridMultiSeriesPlugin(MultiSeriesPlugin):
             if not end_date_str.endswith('Z'):
                 end_date_str = end_date_str + 'Z'
         
-        result: Dict[str, List[Dict[str, Any]]] = {}
+        # Collect all dataset IDs
+        dataset_ids = list(self._dataset_to_unique_id.keys())
         
+        if not dataset_ids:
+            logger.warning("No dataset IDs configured for Fingrid Multi plugin")
+            return {series_def.unique_id: [] for series_def in self._series_definitions}
+        
+        # Fetch all datasets in one batched call
+        dataset_data = await self.client.fetch_multiple_datasets(
+            dataset_ids=dataset_ids,
+            start_time=start_date,
+            end_time=end_date_str
+        )
+        
+        # Map results back to unique_ids
+        result: Dict[str, List[Dict[str, Any]]] = {}
         for series_def in self._series_definitions:
             unique_id = series_def.unique_id
             dataset_id = series_def.extract_filter.get("dataset_id")
             
-            if not dataset_id:
+            if dataset_id is not None:
+                result[unique_id] = dataset_data.get(int(dataset_id), [])
+            else:
                 logger.warning(f"No dataset_id in extract_filter for {unique_id}")
-                result[unique_id] = []
-                continue
-            
-            try:
-                data = await self.client.fetch_dataset(
-                    dataset_id=int(dataset_id),
-                    start_time=start_date,
-                    end_time=end_date_str
-                )
-                result[unique_id] = data
-            except Exception as e:
-                logger.error(f"Failed to fetch dataset {dataset_id} for {unique_id}: {e}")
                 result[unique_id] = []
         
         total_points = sum(len(v) for v in result.values())
