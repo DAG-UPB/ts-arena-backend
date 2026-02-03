@@ -484,7 +484,7 @@ class ModelRepository:
                         WITH model_scores AS (
                             SELECT
                                 fv.model_id,
-                                fv.name as model_name,
+                                fv.model_name,
                                 COUNT(DISTINCT fv.round_id) as rounds_participated,
                                 AVG(fv.mase) as avg_mase,
                                 STDDEV(fv.mase) as stddev_mase,
@@ -496,7 +496,7 @@ class ModelRepository:
                                 AND r.registration_start >= %s
                                 AND fv.mase IS NOT NULL
                                 AND fv.mase NOT IN ('NaN', 'Infinity', '-Infinity')
-                            GROUP BY fv.model_id, fv.name
+                            GROUP BY fv.model_id, fv.model_name
                         ),
                         ranked_models AS (
                             SELECT
