@@ -144,6 +144,7 @@ class ModelRepository:
         frequencies: Optional[List[str]] = None,
         horizons: Optional[List[str]] = None,
         definition_names: Optional[List[str]] = None,
+        definition_ids: Optional[List[int]] = None,
         min_rounds: int = 1,
         limit: int = 100
     ) -> List[Dict[str, Any]]:
@@ -158,6 +159,7 @@ class ModelRepository:
             frequencies: List of frequencies as ISO 8601 (e.g. ["PT1H", "P1D"])
             horizons: List of horizons as ISO 8601 (e.g. ["PT6H", "P1D"])
             definition_names: List of challenge definition names to filter by
+            definition_ids: List of challenge definition IDs to filter by
             min_rounds: Minimum number of participated rounds
             limit: Max. number of results
         
@@ -252,11 +254,17 @@ class ModelRepository:
             if interval_conditions:
                 query += " AND (" + " OR ".join(interval_conditions) + ")"
         
-        # Definition ID filter
+        # Definition name filter
         if definition_names:
             placeholders = ','.join(['%s'] * len(definition_names))
             query += f" AND cd.name IN ({placeholders})"
             params.extend(definition_names)
+        
+        # Definition ID filter
+        if definition_ids:
+            placeholders = ','.join(['%s'] * len(definition_ids))
+            query += f" AND cd.id IN ({placeholders})"
+            params.extend(definition_ids)
         
         # Group and aggregate
         query += """
@@ -399,6 +407,15 @@ class ModelRepository:
             """)
             definition_names = [row['name'] for row in cur.fetchall()]
             
+            # Get unique challenge definition IDs with names
+            cur.execute("""
+                SELECT id, name
+                FROM challenges.definitions
+                WHERE id IS NOT NULL
+                ORDER BY name
+            """)
+            definition_ids = [{'id': row['id'], 'name': row['name']} for row in cur.fetchall()]
+            
             return {
                 "domains": domains,
                 "categories": categories,
@@ -406,7 +423,8 @@ class ModelRepository:
                 "frequencies": frequencies,
                 "horizons": horizons,
                 "time_ranges": ["7d", "30d", "90d", "365d"],
-                "definition_names": definition_names
+                "definition_names": definition_names,
+                "definition_ids": definition_ids
             }
     
     def get_model_rankings_by_definition(
