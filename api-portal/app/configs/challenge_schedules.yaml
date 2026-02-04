@@ -307,7 +307,6 @@ schedules:
     - electricity_batteries_ISO_CAISO_5min
     - electricity_biogas_power_plant_generation_ISO_CAISO_5min
     - electricity_biomass_power_plant_generation_ISO_CAISO_5min
-    - electricity_coal_power_plant_generation_ISO_CAISO_5min
     - electricity_dual_fuel_power_plant_generation_ISO_NYISO_5min
     - electricity_geothermal_power_plant_generation_ISO_CAISO_5min
     - electricity_hydropower_power_plant_generation_ISO_NYISO_5min
@@ -316,14 +315,13 @@ schedules:
     - electricity_natural_gas_power_plant_generation_ISO_NYISO_5min
     - electricity_nuclear_power_plant_generation_ISO_CAISO_5min
     - electricity_nuclear_power_plant_generation_ISO_NYISO_5min
-    - electricity_other_conventional_power_plant_generation_ISO_CAISO_5min
     - electricity_other_fossil_fuels_power_plant_generation_ISO_NYISO_5min
     - electricity_other_renewable_power_plant_generation_ISO_NYISO_5min
     - electricity_photovoltaic_power_plant_generation_ISO_CAISO_5min
     - electricity_small_hydropower_power_plant_generation_ISO_CAISO_5min
     - electricity_wind_onshore_power_plant_generation_ISO_CAISO_5min
     - electricity_wind_onshore_power_plant_generation_ISO_NYISO_5min
-    n_time_series: 19
+    n_time_series: 17
     frequency: 15 minutes
     context_length: 1000
     forecast_horizon: 1 day
@@ -411,7 +409,6 @@ schedules:
     - electricity_batteries_ISO_CAISO_5min
     - electricity_biogas_power_plant_generation_ISO_CAISO_5min
     - electricity_biomass_power_plant_generation_ISO_CAISO_5min
-    - electricity_coal_power_plant_generation_ISO_CAISO_5min
     - electricity_dual_fuel_power_plant_generation_ISO_NYISO_5min
     - electricity_geothermal_power_plant_generation_ISO_CAISO_5min
     - electricity_hydropower_power_plant_generation_ISO_NYISO_5min
@@ -420,14 +417,13 @@ schedules:
     - electricity_natural_gas_power_plant_generation_ISO_NYISO_5min
     - electricity_nuclear_power_plant_generation_ISO_CAISO_5min
     - electricity_nuclear_power_plant_generation_ISO_NYISO_5min
-    - electricity_other_conventional_power_plant_generation_ISO_CAISO_5min
     - electricity_other_fossil_fuels_power_plant_generation_ISO_NYISO_5min
     - electricity_other_renewable_power_plant_generation_ISO_NYISO_5min
     - electricity_photovoltaic_power_plant_generation_ISO_CAISO_5min
     - electricity_small_hydropower_power_plant_generation_ISO_CAISO_5min
     - electricity_wind_onshore_power_plant_generation_ISO_CAISO_5min
     - electricity_wind_onshore_power_plant_generation_ISO_NYISO_5min
-    n_time_series: 19
+    n_time_series: 17
     frequency: 1 hour
     context_length: 1000
     forecast_horizon: 3 days
