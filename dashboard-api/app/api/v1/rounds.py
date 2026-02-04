@@ -9,11 +9,11 @@ from app.repositories.challenge_repository import ChallengeRepository
 from app.repositories.round_repository import RoundRepository
 from app.schemas.challenge import (
     ChallengeRoundSchema,
-    ChallengeMetaSchema,
     ChallengeSeriesSchema,
     ChallengeMetadataSchema,
     TimeSeriesDataSchema
 )
+from app.schemas.round import RoundMetaSchema
 
 router = APIRouter(prefix="/api/v1/rounds", tags=["Rounds"])
 
@@ -108,7 +108,7 @@ async def list_rounds(
     return rounds
 
 
-@router.get("/{round_id}", response_model=ChallengeMetaSchema)
+@router.get("/{round_id}", response_model=RoundMetaSchema)
 async def get_round_meta(
     round_id: int,
     api_key: str = Depends(get_api_key),
