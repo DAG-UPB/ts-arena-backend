@@ -13,8 +13,6 @@ class ChallengeRepository:
     def __init__(self, conn):
         self.conn = conn
     
-
-
         
     def list_definitions(self) -> List[Dict[str, Any]]:
         """List all challenge definitions."""
@@ -202,29 +200,6 @@ class ChallengeRepository:
                 results.append(row_dict)
             return results
     
-    def get_challenge_meta(self, challenge_id: int) -> Optional[Dict[str, Any]]:
-        """Fetch metadata for a challenge."""
-        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(
-                """
-                SELECT
-                    c.id as challenge_id,
-                    c.name,
-                    c.description,
-                    c.status,
-                    c.context_length,
-                    c.horizon,
-                    c.start_time,
-                    c.end_time,
-                    c.registration_start,
-                    c.registration_end
-                FROM challenges.v_rounds_with_status c 
-                WHERE c.id = %s
-                """,
-                (challenge_id,),
-            )
-            row = cur.fetchone()
-            return dict(row) if row else None
     
     def get_challenge_series(self, challenge_id: int) -> List[Dict[str, Any]]:
         """Time series for a challenge with domain information."""
