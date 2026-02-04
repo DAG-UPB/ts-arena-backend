@@ -15,7 +15,8 @@ from app.schemas.challenge import (
 )
 from app.schemas.round import (
     RoundMetaSchema,
-    RoundModelListSchema
+    RoundModelListSchema,
+    ForecastsResponseSchema
 )
 
 router = APIRouter(prefix="/api/v1/rounds", tags=["Rounds"])
@@ -208,3 +209,34 @@ async def list_models_for_round(
     repo = RoundRepository(conn)
     models = repo.list_models_for_round(round_id)
     return models
+
+
+@router.get("/{round_id}/series/{series_id}/forecasts", response_model=ForecastsResponseSchema)
+async def get_series_forecasts(
+    round_id: int,
+    series_id: int,
+    api_key: str = Depends(get_api_key),
+    conn = Depends(get_db_connection)
+):
+    """
+    Forecasts for a series, grouped by model.
+    
+    **Returns:**
+    ```json
+    {
+      "forecasts": {
+        "model_name": [
+          {"ts": "2024-01-01T00:00:00Z", "y": 123.45, "ci": {...}},
+          ...
+        ]
+      }
+    }
+    ```
+    
+    **Headers:**
+    - X-API-Key: Valid API Key
+    """
+    repo = RoundRepository(conn)
+    forecasts = repo.get_series_forecasts(round_id, series_id)
+    
+    return {"forecasts": forecasts}

@@ -1,6 +1,6 @@
 from pydantic import BaseModel, field_serializer
 from datetime import datetime, timedelta
-from typing import Optional, Any
+from typing import Any, Dict, List, Optional
 
 from app.core.utils import serialize_timedelta_to_iso8601
 
@@ -34,3 +34,15 @@ class RoundModelListSchema(BaseModel):
     architecture: Optional[str] = None
     pretraining_data: Optional[str] = None
     publishing_date: Optional[datetime] = None
+
+
+class ForecastDataPoint(BaseModel):
+    """Single forecast data point."""
+    ts: datetime
+    y: float
+    ci: Optional[Dict[str, Any]] = None  # confidence intervals (JSONB)
+
+
+class ForecastsResponseSchema(BaseModel):
+    """All forecasts for a series."""
+    forecasts: Dict[str, Dict[str, List[ForecastDataPoint]|str|float|None]]  # key = readable_id of model
