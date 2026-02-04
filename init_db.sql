@@ -315,7 +315,7 @@ COMMENT ON COLUMN challenges.definition_series_scd2.is_required IS
 -- ==========================================================
 CREATE TABLE challenges.rounds (
     id SERIAL PRIMARY KEY,
-    definition_id INTEGER REFERENCES challenges.definitions(id),
+    definition_id INTEGER REFERENCES challenges.definitions(id) ON DELETE CASCADE,
     name TEXT UNIQUE NOT NULL,             -- Generated: "definition description - timestamp"
     description TEXT,
     context_length INTEGER NOT NULL,
@@ -659,6 +659,11 @@ ON challenges.series_pseudo(series_id);
 
 CREATE INDEX idx_forecasts_round_model 
 ON forecasts.forecasts(round_id, model_id);
+
+CREATE INDEX IF NOT EXISTS idx_forecasts_series_id ON forecasts.forecasts(series_id);
+CREATE INDEX IF NOT EXISTS idx_scores_series_id ON forecasts.scores(series_id);
+CREATE INDEX IF NOT EXISTS idx_context_data_series_id ON challenges.context_data(series_id);
+
 
 -- ==========================================================
 -- 10) Continuous Aggregates for Multi-Granularity Time Series
