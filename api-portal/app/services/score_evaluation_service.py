@@ -212,12 +212,13 @@ class ScoreEvaluationService:
             return False
             
         finally:
-            # Always release the lock
-            await self.db_session.execute(
-                select(func.pg_advisory_unlock(LOCK_KEY_1, LOCK_KEY_2))
-            )
-            # No need to commit here as pg_advisory_unlock is immediate, 
-            # and previous ops already committed.
+            # Only release the lock if it was actually acquired
+            if lock_acquired:
+                await self.db_session.execute(
+                    select(func.pg_advisory_unlock(LOCK_KEY_1, LOCK_KEY_2))
+                )
+                # No need to commit here as pg_advisory_unlock is immediate, 
+                # and previous ops already committed.
 
     async def _calculate_score_for_model_series(
         self,
