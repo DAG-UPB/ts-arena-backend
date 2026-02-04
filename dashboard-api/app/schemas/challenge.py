@@ -1,23 +1,10 @@
 from pydantic import BaseModel, field_serializer
 from datetime import datetime, timedelta
 from typing import Optional, List, Any
-import isodate
+
+from app.core.utils import serialize_timedelta_to_iso8601
 
 
-def serialize_timedelta_to_iso8601(value: Optional[timedelta]) -> Optional[str]:
-    """
-    Convert timedelta to ISO 8601 duration format (PostgreSQL interval format).
-    
-    Args:
-        value: timedelta object or None
-        
-    Returns:
-        ISO 8601 duration string like 'P1D' (1 day), 'PT1H' (1 hour), 'PT15M' (15 minutes), or None
-    """
-    if value is None:
-        return None
-    
-    return isodate.duration_isoformat(value)
 
 
 class ChallengeDefinitionSchema(BaseModel):
@@ -65,27 +52,6 @@ class ChallengeRoundSchema(BaseModel):
     subcategories: Optional[List[str]] = []
 
     @field_serializer('frequency', 'horizon')
-    def serialize_durations(self, value: Optional[timedelta], info) -> Optional[str]:
-        """Convert timedelta to ISO 8601 duration format for API responses."""
-        return serialize_timedelta_to_iso8601(value)
-
-
-
-
-class ChallengeMetaSchema(BaseModel):
-    """Challenge metadata."""
-    challenge_id: int
-    name: Optional[str] = None
-    description: Optional[str] = None
-    status: str
-    context_length: Optional[Any] = None
-    horizon: Optional[timedelta] = None
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    registration_start: Optional[datetime] = None
-    registration_end: Optional[datetime] = None
-
-    @field_serializer('horizon')
     def serialize_durations(self, value: Optional[timedelta], info) -> Optional[str]:
         """Convert timedelta to ISO 8601 duration format for API responses."""
         return serialize_timedelta_to_iso8601(value)
