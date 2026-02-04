@@ -1918,26 +1918,6 @@ timeseries:
       filter: 1223
       region: Amprion
       resolution: quarterhour
-  electricity_coal_power_plant_generation_TSO_TenneT_quarterhour_1223:
-    module: src.plugins.data_sources.smard_plugin
-    class: SmardDataSourcePlugin
-    metadata:
-      name: 'SMARD Generation: Lignite TenneT quarterhour'
-      description: 'SMARD - Generation: Lignite at aggregation level TSO:TenneT (quarterhour)'
-      frequency: 15 minutes
-      unit: MWh
-      domain: energy
-      category: generation
-      subdomain: electricity
-      subcategory: coal
-      aggregation_level: TSO
-      aggregation_level_name: TenneT
-      ts_timezone: Europe/Berlin
-      schedule: 7 minutes
-    default_params:
-      filter: 1223
-      region: TenneT
-      resolution: quarterhour
   electricity_hard_coal_power_plant_generation_BZ_AT_quarterhour_4069:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
@@ -2019,26 +1999,6 @@ timeseries:
     default_params:
       filter: 4069
       region: 50Hertz
-      resolution: quarterhour
-  electricity_hard_coal_power_plant_generation_TSO_APG_quarterhour_4069:
-    module: src.plugins.data_sources.smard_plugin
-    class: SmardDataSourcePlugin
-    metadata:
-      name: 'SMARD Generation: Hard Coal APG quarterhour'
-      description: 'SMARD - Generation: Hard Coal at aggregation level TSO:APG (quarterhour)'
-      frequency: 15 minutes
-      unit: MWh
-      domain: energy
-      category: generation
-      subdomain: electricity
-      subcategory: hard
-      aggregation_level: TSO
-      aggregation_level_name: APG
-      ts_timezone: Europe/Berlin
-      schedule: 7 minutes
-    default_params:
-      filter: 4069
-      region: APG
       resolution: quarterhour
   electricity_hard_coal_power_plant_generation_TSO_Amprion_quarterhour_4069:
     module: src.plugins.data_sources.smard_plugin
@@ -2738,26 +2698,6 @@ timeseries:
       filter: 4071
       region: 50Hertz
       resolution: quarterhour
-  electricity_natural_gas_power_plant_generation_TSO_APG_quarterhour_4071:
-    module: src.plugins.data_sources.smard_plugin
-    class: SmardDataSourcePlugin
-    metadata:
-      name: 'SMARD Generation: Natural Gas APG quarterhour'
-      description: 'SMARD - Generation: Natural Gas at aggregation level TSO:APG (quarterhour)'
-      frequency: 15 minutes
-      unit: MWh
-      domain: energy
-      category: generation
-      subdomain: electricity
-      subcategory: natural
-      aggregation_level: TSO
-      aggregation_level_name: APG
-      ts_timezone: Europe/Berlin
-      schedule: 7 minutes
-    default_params:
-      filter: 4071
-      region: APG
-      resolution: quarterhour
   electricity_natural_gas_power_plant_generation_TSO_Amprion_quarterhour_4071:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
@@ -2820,27 +2760,6 @@ timeseries:
     default_params:
       filter: 4071
       region: TenneT
-      resolution: quarterhour
-  electricity_natural_gas_power_plant_generation_TSO_TransnetBW_quarterhour_4071:
-    module: src.plugins.data_sources.smard_plugin
-    class: SmardDataSourcePlugin
-    metadata:
-      name: 'SMARD Generation: Natural Gas TransnetBW quarterhour'
-      description: 'SMARD - Generation: Natural Gas at aggregation level TSO:TransnetBW
-        (quarterhour)'
-      frequency: 15 minutes
-      unit: MWh
-      domain: energy
-      category: generation
-      subdomain: electricity
-      subcategory: natural
-      aggregation_level: TSO
-      aggregation_level_name: TransnetBW
-      ts_timezone: Europe/Berlin
-      schedule: 7 minutes
-    default_params:
-      filter: 4071
-      region: TransnetBW
       resolution: quarterhour
   electricity_net_consumption_BZ_AT_quarterhour_410:
     module: src.plugins.data_sources.smard_plugin
