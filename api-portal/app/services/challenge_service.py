@@ -263,14 +263,19 @@ class ChallengeService:
     ) -> None:
         """
         Selects time series and copies their context data to the round.
+        
+        Logic:
+        - If required_series_ids is provided and non-empty: use ONLY those series
+        - If required_series_ids is empty: select n_time_series random series
         """
         try:
-            selected_series_ids = list(required_series_ids)
-            
-            # Add random series if needed
-            remaining_needed = n_time_series - len(selected_series_ids)
-            
-            if remaining_needed > 0:
+            # Simple logic: use required series OR random series, never mix
+            if required_series_ids:
+                selected_series_ids = list(required_series_ids)
+                use_hashed_names = False  # Required series keep their real names
+                logger.info(f"Using {len(selected_series_ids)} required series for round {round_id}")
+            else:
+                # No required series defined - select random series
                 available_series_ids = await self.time_series_repository.filter_time_series_with_recent_data(
                     domains=domains,
                     subdomains=subdomains,
@@ -280,85 +285,84 @@ class ChallengeService:
                     only_with_recent_data=True
                 )
                 
-                available_series_ids = [
-                    sid for sid in available_series_ids 
-                    if sid not in selected_series_ids
-                ]
+                if len(available_series_ids) < n_time_series:
+                    logger.warning(f"Not enough series available. Needed: {n_time_series}, Available: {len(available_series_ids)}")
+                    selected_series_ids = available_series_ids
+                else:
+                    selected_series_ids = random.sample(available_series_ids, n_time_series)
                 
-                if len(available_series_ids) < remaining_needed:
-                    logger.warning(f"Not enough series available. Needed: {remaining_needed}, Available: {len(available_series_ids)}")
-                    remaining_needed = len(available_series_ids)
-                
-                if available_series_ids:
-                    additional_series = random.sample(available_series_ids, remaining_needed)
-                    logger.info(f"Randomly selected {len(additional_series)} additional series")
-                    selected_series_ids.extend(additional_series)
+                use_hashed_names = True  # Random series get hashed names
+                logger.info(f"Randomly selected {len(selected_series_ids)} series for round {round_id}")
             
-            logger.info(f"Total selected series for round {round_id}: {len(selected_series_ids)}")
-            
-            if selected_series_ids:
-                series_mapping = {}
-                pseudo_entries = []
-                
-                for series_id in selected_series_ids:
-                    ts_metadata = await self.time_series_repository.get_time_series_by_id(series_id)
-                    if ts_metadata:
-                        series_name = ts_metadata.unique_id or ts_metadata.name or f"series_{series_id}"
-                        
-                        # Required series keep their name, random series get hashed names
-                        if series_id in required_series_ids:
-                            challenge_series_name = series_name
-                        else:
-                            digest = hashlib.sha1(f"{round_id}:{series_id}".encode("utf-8")).hexdigest()[:12]
-                            challenge_series_name = f"series_{digest}"
-                        
-                        series_mapping[series_id] = series_name
-                        pseudo_entries.append({
-                            "round_id": round_id,
-                            "series_id": series_id,
-                            "challenge_series_name": challenge_series_name,
-                        })
-                    else:
-                        logger.warning(f"Time series {series_id} not found")
-                
-                resolution = self._frequency_to_resolution(frequency)
-                logger.info(f"Copying {context_length} context points for {len(series_mapping)} series (resolution: {resolution})")
-                
-                copy_result = await self.time_series_repository.copy_bulk_to_challenge_by_resolution(
-                    series_mapping=series_mapping,
-                    round_id=round_id,
-                    n=context_length,
-                    resolution=resolution,
-                    before_time=before_time
-                )
-                
-                total_copied = sum(copy_result.values())
-                logger.info(f"Copied {total_copied} total context points to round {round_id}")
-
-                # Calculate statistics
-                for entry in pseudo_entries:
-                    series_id = entry["series_id"]
-                    stats = await self.time_series_repository.calculate_context_data_stats(
-                        round_id=round_id,
-                        series_id=series_id
-                    )
-                    if stats:
-                        entry["min_ts"] = stats["min_ts"]
-                        entry["max_ts"] = stats["max_ts"]
-                        entry["value_avg"] = stats["value_avg"]
-                        entry["value_std"] = stats["value_std"]
-                    else:
-                        entry["min_ts"] = None
-                        entry["max_ts"] = None
-                        entry["value_avg"] = None
-                        entry["value_std"] = None
-
-                if pseudo_entries:
-                    await self.round_repository.upsert_series_pseudo(pseudo_entries)
-                
-                await self.db_session.commit()
-            else:
+            if not selected_series_ids:
                 logger.warning(f"No time series selected for round {round_id}")
+                return
+            
+            # Build series mapping and pseudo entries
+            series_mapping = {}
+            pseudo_entries = []
+            
+            for series_id in selected_series_ids:
+                ts_metadata = await self.time_series_repository.get_time_series_by_id(series_id)
+                if not ts_metadata:
+                    logger.warning(f"Time series {series_id} not found")
+                    continue
+                    
+                series_name = ts_metadata.unique_id or ts_metadata.name or f"series_{series_id}"
+                
+                if use_hashed_names:
+                    digest = hashlib.sha1(f"{round_id}:{series_id}".encode("utf-8")).hexdigest()[:12]
+                    challenge_series_name = f"series_{digest}"
+                else:
+                    challenge_series_name = series_name
+                
+                series_mapping[series_id] = series_name
+                pseudo_entries.append({
+                    "round_id": round_id,
+                    "series_id": series_id,
+                    "challenge_series_name": challenge_series_name,
+                })
+            
+            if not series_mapping:
+                logger.warning(f"No valid time series found for round {round_id}")
+                return
+            
+            resolution = self._frequency_to_resolution(frequency)
+            logger.info(f"Copying {context_length} context points for {len(series_mapping)} series (resolution: {resolution})")
+            
+            copy_result = await self.time_series_repository.copy_bulk_to_challenge_by_resolution(
+                series_mapping=series_mapping,
+                round_id=round_id,
+                n=context_length,
+                resolution=resolution,
+                before_time=before_time
+            )
+            
+            total_copied = sum(copy_result.values())
+            logger.info(f"Copied {total_copied} total context points to round {round_id}")
+
+            # Calculate statistics
+            for entry in pseudo_entries:
+                series_id = entry["series_id"]
+                stats = await self.time_series_repository.calculate_context_data_stats(
+                    round_id=round_id,
+                    series_id=series_id
+                )
+                if stats:
+                    entry["min_ts"] = stats["min_ts"]
+                    entry["max_ts"] = stats["max_ts"]
+                    entry["value_avg"] = stats["value_avg"]
+                    entry["value_std"] = stats["value_std"]
+                else:
+                    entry["min_ts"] = None
+                    entry["max_ts"] = None
+                    entry["value_avg"] = None
+                    entry["value_std"] = None
+
+            if pseudo_entries:
+                await self.round_repository.upsert_series_pseudo(pseudo_entries)
+            
+            await self.db_session.commit()
                 
         except Exception as e:
             logger.error(f"Error preparing context data: {e}")

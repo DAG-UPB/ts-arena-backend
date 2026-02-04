@@ -2554,26 +2554,6 @@ timeseries:
       filter: 257
       region: PL
       resolution: quarterhour
-  electricity_market_price_BZ_PL_quarterhour_258:
-    module: src.plugins.data_sources.smard_plugin
-    class: SmardDataSourcePlugin
-    metadata:
-      name: 'SMARD Market Price: Poland PL quarterhour'
-      description: 'SMARD - Market Price: Poland at aggregation level BZ:PL (quarterhour)'
-      frequency: 15 minutes
-      unit: Euro
-      domain: energy
-      category: price
-      subdomain: electricity
-      subcategory: market
-      aggregation_level: BZ
-      aggregation_level_name: PL
-      ts_timezone: Europe/Berlin
-      schedule: 7 minutes
-    default_params:
-      filter: 258
-      region: PL
-      resolution: quarterhour
   electricity_market_price_BZ_SI_quarterhour_260:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
