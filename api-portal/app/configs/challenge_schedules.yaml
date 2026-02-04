@@ -413,11 +413,11 @@ schedules:
     registration_duration: 1 hour
     evaluation_delay: 0 hours
 
-- id: fingrid_load_challenge_24h_15min
+- id: fingrid_challenge_24h_15min
   cron: 45 4 * * *
   run_on_startup: false
   params:
-    description: 'Fingrid Load Challenge: 24h horizon, 15-min frequency'
+    description: 'Fingrid Challenge: 24h horizon, 15-min frequency'
     domains:
     - energy
     subdomains: []
@@ -442,11 +442,11 @@ schedules:
     forecast_horizon: 1 day
     registration_duration: 15 minutes
     evaluation_delay: 0 hours
-- id: fingrid_load_challenge_72h_1h
+- id: fingrid_challenge_72h_1h
   cron: 0 6 * * *
   run_on_startup: false
   params:
-    description: 'Fingrid Load Challenge: 72h horizon, 1h frequency'
+    description: 'Fingrid Challenge: 72h horizon, 1h frequency'
     domains:
     - energy
     subdomains: []
