@@ -9,6 +9,7 @@ from datetime import datetime, timezone, timedelta
 import numpy as np
 from sklearn.metrics import mean_squared_error
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 
 from app.database.challenges.challenge_repository import ChallengeRoundRepository
 from app.database.data_portal.time_series_repository import TimeSeriesRepository
@@ -108,90 +109,115 @@ class ScoreEvaluationService:
         
         Args:
             round_id: ID of the round to evaluate
-            
+
         Returns:
             True if round was finalized (final_evaluation=True), False otherwise
         """
-        logger.info(f"Evaluating scores for round {round_id}")
+        # Lock key constant (using 42 as the "evaluation service" namespace)
+        LOCK_KEY_1 = 42
+        LOCK_KEY_2 = round_id
         
-        # Get round details
-        round_info = await self.round_repo.get_by_id(round_id)
-        if not round_info:
-            logger.warning(f"Round {round_id} not found")
+        # Try to acquire advisory lock for this round to prevent concurrent evaluation
+        # pg_advisory_lock persists across transaction commits, which is needed here
+        # since bulk_insert_scores and mark_scores_final perform internal commits.
+        result = await self.db_session.execute(
+            select(func.pg_try_advisory_lock(LOCK_KEY_1, LOCK_KEY_2))
+        )
+        lock_acquired = result.scalar()
+        
+        if not lock_acquired:
+            logger.info(f"Round {round_id} is currently locked by another process. Skipping evaluation.")
             return False
-        
-        # Get all participants (models that submitted forecasts)
-        participant_model_ids = await self.forecast_repo.get_round_participants(round_id)
-        if not participant_model_ids:
-            logger.info(f"No participants found for round {round_id}")
-            return False
-        
-        # Get all series for this round
-        series_ids = await self.forecast_repo.get_round_series_ids(round_id)
-        if not series_ids:
-            logger.info(f"No series found for round {round_id}")
-            return False
-        
-        logger.info(f"Round {round_id}: {len(participant_model_ids)} participants, {len(series_ids)} series")
-        
-        # Determine resolution from frequency
-        resolution = timedelta_to_resolution(round_info.frequency)
-        logger.info(f"Round {round_id}: using resolution '{resolution}' (frequency: {round_info.frequency})")
-        
-        # Calculate scores for each model/series combination
-        all_scores = []
-        
-        for model_id in participant_model_ids:
-            for series_id in series_ids:
-                try:
-                    score_data = await self._calculate_score_for_model_series(
-                        round_id=round_id,
-                        model_id=model_id,
-                        series_id=series_id,
-                        resolution=resolution
-                    )
-                    
-                    if score_data:
-                        # Skip "no_forecasts" status
-                        if score_data.get("evaluation_status") == "no_forecasts":
-                            continue
-                        all_scores.append(score_data)
+            
+        try:
+            logger.info(f"Evaluating scores for round {round_id}")
+            
+            # Get round details
+            round_info = await self.round_repo.get_by_id(round_id)
+            if not round_info:
+                logger.warning(f"Round {round_id} not found")
+                return False
+            
+            # Get all participants (models that submitted forecasts)
+            participant_model_ids = await self.forecast_repo.get_round_participants(round_id)
+            if not participant_model_ids:
+                logger.info(f"No participants found for round {round_id}")
+                return False
+            
+            # Get all series for this round
+            series_ids = await self.forecast_repo.get_round_series_ids(round_id)
+            if not series_ids:
+                logger.info(f"No series found for round {round_id}")
+                return False
+            
+            logger.info(f"Round {round_id}: {len(participant_model_ids)} participants, {len(series_ids)} series")
+            
+            # Determine resolution from frequency
+            resolution = timedelta_to_resolution(round_info.frequency)
+            logger.info(f"Round {round_id}: using resolution '{resolution}' (frequency: {round_info.frequency})")
+            
+            # Calculate scores for each model/series combination
+            all_scores = []
+            
+            for model_id in participant_model_ids:
+                for series_id in series_ids:
+                    try:
+                        score_data = await self._calculate_score_for_model_series(
+                            round_id=round_id,
+                            model_id=model_id,
+                            series_id=series_id,
+                            resolution=resolution
+                        )
                         
-                except Exception as e:
-                    logger.exception(
-                        f"Error calculating score for round {round_id}, "
-                        f"model {model_id}, series {series_id}: {e}"
-                    )
-                    # Add an error entry
-                    all_scores.append({
-                        "round_id": round_id,
-                        "model_id": model_id,
-                        "series_id": series_id,
-                        "mase": None,
-                        "rmse": None,
-                        "forecast_count": 0,
-                        "actual_count": 0,
-                        "evaluated_count": 0,
-                        "data_coverage": 0.0,
-                        "final_evaluation": False,
-                        "evaluation_status": "error",
-                        "error_message": str(e)[:500],
-                    })
-        
-        # Bulk insert/update scores
-        if all_scores:
-            rows_affected = await self.forecast_repo.bulk_insert_scores(all_scores)
-            logger.info(f"Updated {rows_affected} scores for round {round_id}")
-        
-        # Check if we should finalize this round
-        should_finalize = await self._should_finalize_round(round_info)
-        
-        if should_finalize:
-            await self.forecast_repo.mark_scores_final(round_id)
-            logger.info(f"Round {round_id} scores marked as final")
-            return True
-        
-        return False
+                        if score_data:
+                            # Skip "no_forecasts" status
+                            if score_data.get("evaluation_status") == "no_forecasts":
+                                continue
+                            all_scores.append(score_data)
+                            
+                    except Exception as e:
+                        logger.exception(
+                            f"Error calculating score for round {round_id}, "
+                            f"model {model_id}, series {series_id}: {e}"
+                        )
+                        # Add an error entry
+                        all_scores.append({
+                            "round_id": round_id,
+                            "model_id": model_id,
+                            "series_id": series_id,
+                            "mase": None,
+                            "rmse": None,
+                            "forecast_count": 0,
+                            "actual_count": 0,
+                            "evaluated_count": 0,
+                            "data_coverage": 0.0,
+                            "final_evaluation": False,
+                            "evaluation_status": "error",
+                            "error_message": str(e)[:500],
+                        })
+            
+            # Bulk insert/update scores
+            if all_scores:
+                rows_affected = await self.forecast_repo.bulk_insert_scores(all_scores)
+                logger.info(f"Updated {rows_affected} scores for round {round_id}")
+            
+            # Check if we should finalize this round
+            should_finalize = await self._should_finalize_round(round_info)
+            
+            if should_finalize:
+                await self.forecast_repo.mark_scores_final(round_id)
+                logger.info(f"Round {round_id} scores marked as final")
+                return True
+            
+            return False
+            
+        finally:
+            # Always release the lock
+            await self.db_session.execute(
+                select(func.pg_advisory_unlock(LOCK_KEY_1, LOCK_KEY_2))
+            )
+            # No need to commit here as pg_advisory_unlock is immediate, 
+            # and previous ops already committed.
 
     async def _calculate_score_for_model_series(
         self,
