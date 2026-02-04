@@ -193,7 +193,7 @@ async def get_series_data(
     
     return {"data": data}
 
-@router.get("/rounds/{round_id}/models", response_model=List[RoundModelListSchema])
+@router.get("/{round_id}/models", response_model=List[RoundModelListSchema])
 async def list_models_for_round(
     round_id: int,
     api_key: str = Depends(get_api_key),
