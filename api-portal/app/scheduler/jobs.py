@@ -5,6 +5,7 @@ from typing import Any, Dict, Callable, Awaitable
 from app.database.connection import SessionLocal
 from app.services.challenge_service import ChallengeService
 from app.services.score_evaluation_service import ScoreEvaluationService
+from app.services.elo_ranking_service import EloRankingService
 from app.scheduler.dependencies import get_scheduler
 
 
@@ -133,4 +134,96 @@ async def periodic_challenge_scores_evaluation_job() -> None:
     
     except Exception as e:
         logger.exception(f"Failed to run periodic challenge scores evaluation: {e}")
+        raise  # Re-raise to let decorator handle it
+
+
+@job_error_handler
+async def periodic_elo_ranking_calculation_job() -> None:
+    """
+    Periodic job that calculates bootstrapped ELO ratings for all models.
+    
+    This job runs 4x daily (every 6 hours) and:
+    1. Calculates global ELO rating across all challenges
+    2. Calculates per-definition ELO ratings
+    3. Stores results in forecasts.elo_ratings table
+    4. Logs timing metrics for performance monitoring
+    """
+    logger = logging.getLogger("challenge-scheduler")
+    logger.info("Starting periodic ELO ranking calculation job")
+    
+    try:
+        async with SessionLocal() as session:
+            elo_service = EloRankingService(session)
+            
+            # Calculate and store all ELO ratings
+            results = await elo_service.calculate_and_store_all_ratings(
+                n_bootstraps=100
+            )
+            
+            # Log results
+            if results.get("global"):
+                logger.info(
+                    f"Global ELO: {results['global']['n_models']} models rated "
+                    f"in {results['global']['duration_ms']}ms"
+                )
+            
+            for def_result in results.get("per_definition", []):
+                logger.info(
+                    f"Definition {def_result['definition_id']} ELO: "
+                    f"{def_result['n_models']} models in {def_result['duration_ms']}ms"
+                )
+            
+            logger.info(
+                f"ELO calculation complete. Total time: {results['total_duration_ms']}ms"
+            )
+    
+    except Exception as e:
+        logger.exception(f"Failed to run periodic ELO ranking calculation: {e}")
+        raise  # Re-raise to let decorator handle it
+
+
+@job_error_handler
+async def startup_elo_check_job() -> None:
+    """
+    Startup job that checks if ELO ratings have been calculated today.
+    If not, triggers a calculation immediately.
+    """
+    logger = logging.getLogger("challenge-scheduler")
+    logger.info("Checking if ELO ratings have been calculated today...")
+    
+    try:
+        async with SessionLocal() as session:
+            elo_service = EloRankingService(session)
+            
+            # Check if already calculated today
+            if await elo_service.has_calculated_today():
+                logger.info("ELO ratings already calculated today. Skipping startup calculation.")
+                return
+            
+            logger.info("No ELO ratings for today. Starting calculation...")
+            
+            # Run the calculation
+            results = await elo_service.calculate_and_store_all_ratings(
+                n_bootstraps=100
+            )
+            
+            # Handle case where no data is available
+            if not results:
+                logger.info("Startup ELO calculation: No data available for ranking.")
+                return
+            
+            global_info = results.get('global') or {}
+            n_models = global_info.get('n_models', 0)
+            n_definitions = len(results.get('per_definition') or [])
+            total_time = results.get('total_duration_ms', 0)
+            
+            logger.info(
+                f"Startup ELO calculation complete. "
+                f"Global: {n_models} models, "
+                f"Definitions: {n_definitions}, "
+                f"Total time: {total_time}ms"
+            )
+    
+    except Exception as e:
+        logger.exception(f"Failed to run startup ELO check: {e}")
         raise  # Re-raise to let decorator handle it

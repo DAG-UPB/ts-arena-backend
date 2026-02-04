@@ -774,6 +774,105 @@ COMMENT ON MATERIALIZED VIEW data_portal.time_series_1d IS
 'Continuous aggregate for daily data. Aggregates all time series with frequency <= 1 day.';
 
 -- ==========================================================
+-- 11) ELO Rating System (Bootstrapped)
+-- ==========================================================
+
+-- ELO Ratings Table
+-- Stores bootstrapped ELO ratings per model, optionally scoped to definition
+CREATE TABLE IF NOT EXISTS forecasts.elo_ratings (
+    id SERIAL PRIMARY KEY,
+    model_id INTEGER NOT NULL REFERENCES models.model_info(id) ON DELETE CASCADE,
+    definition_id INTEGER REFERENCES challenges.definitions(id) ON DELETE CASCADE,
+    -- NULL = Global ELO across all challenges
+    -- NOT NULL = Definition-specific ELO
+    
+    -- ELO Scores (Median + Confidence Interval from 100 bootstraps)
+    elo_score DOUBLE PRECISION NOT NULL,
+    elo_ci_lower DOUBLE PRECISION,  -- 2.5% Quantile
+    elo_ci_upper DOUBLE PRECISION,  -- 97.5% Quantile
+    
+    -- Metadata
+    n_matches INTEGER DEFAULT 0,        -- Number of series/matches included
+    n_bootstraps INTEGER DEFAULT 100,   -- Number of bootstrap iterations
+    
+    -- Performance tracking
+    calculation_duration_ms INTEGER,    -- Duration of calculation in ms
+    calculated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Unique constraint: one row per model per scope (NULL = global, otherwise per-definition)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_elo_unique_model_scope 
+ON forecasts.elo_ratings(model_id, COALESCE(definition_id, -1));
+
+-- Indexes for fast lookups
+CREATE INDEX IF NOT EXISTS idx_elo_model ON forecasts.elo_ratings(model_id);
+CREATE INDEX IF NOT EXISTS idx_elo_definition ON forecasts.elo_ratings(definition_id) WHERE definition_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_elo_score_desc ON forecasts.elo_ratings(elo_score DESC);
+CREATE INDEX IF NOT EXISTS idx_elo_calculated_at ON forecasts.elo_ratings(calculated_at);
+
+
+-- Performance index for ELO calculation queries
+CREATE INDEX IF NOT EXISTS idx_scores_elo_lookup 
+ON forecasts.scores(series_id, model_id, mase) 
+WHERE mase IS NOT NULL AND final_evaluation = TRUE;
+
+COMMENT ON TABLE forecasts.elo_ratings IS 
+'Bootstrapped ELO ratings for models. Each row represents a model''s ELO score, either global (definition_id IS NULL) or for a specific challenge definition. 
+Calculated via 100 bootstrap iterations where each time series is a "match" comparing models by MASE.';
+
+COMMENT ON COLUMN forecasts.elo_ratings.elo_score IS 
+'Median ELO rating from N bootstrap iterations. Higher is better. Base rating is 1000.';
+
+COMMENT ON COLUMN forecasts.elo_ratings.elo_ci_lower IS 
+'2.5% quantile of ELO ratings from bootstraps (lower bound of 95% CI).';
+
+COMMENT ON COLUMN forecasts.elo_ratings.elo_ci_upper IS 
+'97.5% quantile of ELO ratings from bootstraps (upper bound of 95% CI).';
+
+COMMENT ON COLUMN forecasts.elo_ratings.calculation_duration_ms IS 
+'Time taken to calculate this ELO rating in milliseconds. Used for performance monitoring.';
+
+-- View: ELO Leaderboard with model and definition info
+CREATE OR REPLACE VIEW forecasts.v_elo_leaderboard AS
+SELECT 
+    er.id as elo_id,
+    er.elo_score,
+    er.elo_ci_lower,
+    er.elo_ci_upper,
+    er.n_matches,
+    er.n_bootstraps,
+    er.calculation_duration_ms,
+    er.calculated_at,
+    -- Model info
+    mi.id as model_id,
+    mi.name as model_name,
+    mi.readable_id,
+    mi.model_family,
+    mi.model_type,
+    -- User info
+    u.username,
+    o.name as organization_name,
+    -- Definition info (NULL for global ELO)
+    er.definition_id,
+    cd.name as definition_name,
+    cd.schedule_id as definition_schedule_id,
+    -- Rank within scope
+    ROW_NUMBER() OVER (
+        PARTITION BY er.definition_id 
+        ORDER BY er.elo_score DESC
+    ) as rank
+FROM forecasts.elo_ratings er
+JOIN models.model_info mi ON er.model_id = mi.id
+JOIN auth.users u ON mi.user_id = u.id
+LEFT JOIN auth.organizations o ON mi.organization_id = o.id
+LEFT JOIN challenges.definitions cd ON er.definition_id = cd.id
+ORDER BY er.definition_id NULLS FIRST, er.elo_score DESC;
+
+COMMENT ON VIEW forecasts.v_elo_leaderboard IS 
+'Leaderboard view combining ELO ratings with model and definition metadata. 
+Includes rank within each scope (global or per-definition).';
+
+-- ==========================================================
 -- Final message
 -- ==========================================================
 DO $$

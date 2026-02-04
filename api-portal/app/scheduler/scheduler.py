@@ -12,7 +12,9 @@ from apscheduler.triggers.cron import CronTrigger
 from app.scheduler.jobs import (
     create_round_from_definition_job,
     prepare_round_context_data_job,
-    periodic_challenge_scores_evaluation_job
+    periodic_challenge_scores_evaluation_job,
+    periodic_elo_ranking_calculation_job,
+    startup_elo_check_job
 )
 import yaml
 from pathlib import Path
@@ -72,6 +74,12 @@ class ChallengeScheduler:
                 # Schedule the periodic challenge scores evaluation job (every 10 minutes)
                 # Called after _started is set to True to avoid recursion
                 await self.schedule_periodic_scores_evaluation()
+                
+                # Schedule the ELO ranking calculation job (4x daily)
+                await self.schedule_periodic_elo_calculation()
+                
+                # Run startup ELO check (calculates if not already done today)
+                await startup_elo_check_job()
                 
                 # Start the monitoring task for auto-recovery
                 if self._monitor_task is None or self._monitor_task.done():
@@ -281,6 +289,33 @@ class ChallengeScheduler:
             self.logger.exception(f"Failed to schedule periodic scores evaluation job: {e}")
             raise
 
+    async def schedule_periodic_elo_calculation(self) -> None:
+        """
+        Schedules the periodic ELO ranking calculation job.
+        Runs 4x daily at 00:00, 06:00, 12:00, 18:00 UTC to calculate
+        bootstrapped ELO ratings for all models.
+        """
+        # Note: _ensure_started() is not called here to avoid recursion
+        # This method is only called from start() after the scheduler is already started
+        
+        try:
+            # Run 4x daily at fixed hours: 00:00, 06:00, 12:00, 18:00 UTC
+            await self.scheduler.add_schedule(
+                func_or_task_id=periodic_elo_ranking_calculation_job,
+                trigger=CronTrigger(hour="0,6,12,18", minute="0"),
+                id="periodic_elo_ranking_calculation",
+                coalesce=CoalescePolicy.latest,
+                misfire_grace_time=3600,  # 1 hour grace period
+                max_running_jobs=1,  # Only one ELO calculation at a time
+            )
+            self.logger.info(
+                "Scheduled periodic ELO ranking calculation job "
+                "(runs at 00:00, 06:00, 12:00, 18:00 UTC)"
+            )
+        except Exception as e:
+            self.logger.exception(f"Failed to schedule periodic ELO calculation job: {e}")
+            raise
+
     async def _ensure_started(self) -> None:
         if not self._started:
             await self.start()
@@ -395,6 +430,9 @@ class ChallengeScheduler:
             
             # Reschedule periodic evaluation
             await self.schedule_periodic_scores_evaluation()
+            
+            # Reschedule ELO calculation
+            await self.schedule_periodic_elo_calculation()
             
             # Reload config if available
             if self._config_path:
