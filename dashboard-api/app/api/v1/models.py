@@ -16,21 +16,6 @@ from app.schemas.forecast import ModelSeriesForecastsAcrossRoundsSchema
 router = APIRouter(prefix="/api/v1", tags=["Models"])
 
 
-@router.get("/challenges/{challenge_id}/models", response_model=List[ModelSchema])
-async def list_models_for_challenge(
-    challenge_id: int,
-    api_key: str = Depends(get_api_key),
-    conn = Depends(get_db_connection)
-):
-    """
-    List of all models for a challenge.
-    
-    **Headers:**
-    - X-API-Key: Valid API Key
-    """
-    repo = ModelRepository(conn)
-    models = repo.list_models_for_challenge(challenge_id)
-    return models
 
 
 @router.get("/models/rankings")

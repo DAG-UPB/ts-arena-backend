@@ -22,3 +22,15 @@ class RoundMetaSchema(BaseModel):
     def serialize_durations(self, value: Optional[timedelta], info) -> Optional[str]:
         """Convert timedelta to ISO 8601 duration format for API responses."""
         return serialize_timedelta_to_iso8601(value)
+    
+
+class RoundModelListSchema(BaseModel):
+    """Round schema with metadata."""
+    readable_id: str
+    name: str
+    model_family: Optional[str] = None
+    model_size: Optional[int] = None
+    hosting: Optional[str] = None
+    architecture: Optional[str] = None
+    pretraining_data: Optional[str] = None
+    publishing_date: Optional[datetime] = None

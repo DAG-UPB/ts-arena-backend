@@ -33,3 +33,28 @@ class RoundRepository:
             )
             row = cur.fetchone()
             return dict(row) if row else None
+        
+    def list_models_for_round(self, round_id: int) -> List[Dict[str, Any]]:
+        """List of all models for a round."""
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT
+                    mi.readable_id,
+                    COALESCE(mi.name, 'model') AS name,
+                    mi.model_family,
+                    mi.model_size,
+                    mi.hosting,
+                    mi.architecture,
+                    mi.pretraining_data,
+                    mi.publishing_date
+                FROM forecasts.forecasts f
+                JOIN models.model_info mi ON mi.id = f.model_id
+                JOIN auth.users u ON u.id = mi.user_id
+                WHERE f.round_id = %s
+                ORDER BY 1;
+                """,
+                (round_id,),
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+            return rows

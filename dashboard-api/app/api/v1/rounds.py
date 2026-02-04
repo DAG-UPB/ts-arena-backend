@@ -13,7 +13,10 @@ from app.schemas.challenge import (
     ChallengeMetadataSchema,
     TimeSeriesDataSchema
 )
-from app.schemas.round import RoundMetaSchema
+from app.schemas.round import (
+    RoundMetaSchema,
+    RoundModelListSchema
+)
 
 router = APIRouter(prefix="/api/v1/rounds", tags=["Rounds"])
 
@@ -189,3 +192,19 @@ async def get_series_data(
     data = repo.get_challenge_data_for_series(round_id, series_id, start_time, end_time)
     
     return {"data": data}
+
+@router.get("/rounds/{round_id}/models", response_model=List[RoundModelListSchema])
+async def list_models_for_round(
+    round_id: int,
+    api_key: str = Depends(get_api_key),
+    conn = Depends(get_db_connection)
+):
+    """
+    List of all models for a round.
+    
+    **Headers:**
+    - X-API-Key: Valid API Key
+    """
+    repo = RoundRepository(conn)
+    models = repo.list_models_for_round(round_id)
+    return models
