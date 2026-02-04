@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.api.v1 import forecasts, models, health, definitions, rounds
+from app.api.v1 import models, health, definitions, rounds
 
 app = FastAPI(
     title=settings.API_TITLE,
@@ -23,7 +23,6 @@ app.include_router(health.router)
 app.include_router(definitions.router)
 app.include_router(rounds.router)
 
-app.include_router(forecasts.router)
 app.include_router(models.router)
 
 
