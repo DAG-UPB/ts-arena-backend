@@ -138,7 +138,15 @@ async def get_round_series(
 ):
     """
     Time series for a challenge round.
+    Returns empty list if round is in registration status.
     """
+    round_repo = RoundRepository(conn)
+    
+    # Check if round is in registration status - no data should be returned
+    status = round_repo.get_round_status(round_id)
+    if status == "registration":
+        return []
+    
     repo = ChallengeRepository(conn)
     series = repo.get_challenge_series(round_id)
     return series
@@ -152,8 +160,15 @@ async def get_round_leaderboard(
 ):
     """
     Get leaderboard (rankings) for a specific round.
+    Returns empty list if round is in registration status.
     """
     repo = RoundRepository(conn)
+    
+    # Check if round is in registration status - no data should be returned
+    status = repo.get_round_status(round_id)
+    if status == "registration":
+        return []
+    
     leaderboard = repo.get_round_leaderboard(round_id)
     return leaderboard
 
@@ -188,7 +203,15 @@ async def get_series_data(
 ):
     """
     Time series data for a series in a round.
+    Returns empty data if round is in registration status.
     """
+    round_repo = RoundRepository(conn)
+    
+    # Check if round is in registration status - no data should be returned
+    status = round_repo.get_round_status(round_id)
+    if status == "registration":
+        return {"data": []}
+    
     repo = ChallengeRepository(conn)
     data = repo.get_challenge_data_for_series(round_id, series_id, start_time, end_time)
     
@@ -220,6 +243,7 @@ async def get_series_forecasts(
 ):
     """
     Forecasts for a series, grouped by model.
+    Returns empty forecasts if round is in registration status.
     
     **Returns:**
     ```json
@@ -237,6 +261,12 @@ async def get_series_forecasts(
     - X-API-Key: Valid API Key
     """
     repo = RoundRepository(conn)
+    
+    # Check if round is in registration status - no data should be returned
+    status = repo.get_round_status(round_id)
+    if status == "registration":
+        return {"forecasts": {}}
+    
     forecasts = repo.get_series_forecasts(round_id, series_id)
     
     return {"forecasts": forecasts}
