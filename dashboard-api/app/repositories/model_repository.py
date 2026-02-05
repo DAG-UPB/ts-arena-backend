@@ -169,7 +169,7 @@ class ModelRepository:
                 ARRAY_AGG(DISTINCT vr.category ORDER BY vr.category) FILTER (WHERE vr.category IS NOT NULL) AS categories_covered,
                 ARRAY_AGG(DISTINCT vr.frequency::INTERVAL ORDER BY vr.frequency) FILTER (WHERE vr.frequency IS NOT NULL) AS frequencies_covered,
                 ARRAY_AGG(DISTINCT vr.horizon::INTERVAL ORDER BY vr.horizon) FILTER (WHERE vr.horizon IS NOT NULL) AS horizons_covered,
-                ARRAY_AGG(DISTINCT cd.name ORDER BY cd.name) FILTER (WHERE cd.name IS NOT NULL) AS challenge_definition_names
+                ARRAY_AGG(DISTINCT ARRAY[cd.id::TEXT, cd.name] ORDER BY cd.name) FILTER (WHERE cd.id IS NOT NULL) AS challenge_definitions
             FROM forecasts.v_ranking_base vr
             JOIN models.model_info mi ON mi.id = vr.model_id
             LEFT JOIN challenges.rounds r ON r.id = vr.round_id
@@ -276,6 +276,12 @@ class ModelRepository:
                     if key in ('frequencies_covered', 'horizons_covered') and value:
                         # Convert PostgreSQL INTERVAL strings to ISO 8601
                         row[key] = [self._interval_to_iso8601(iv) for iv in value]
+                    elif key == 'challenge_definitions' and value:
+                        # Convert [[id, name], ...] to [{"id": id, "name": name}, ...]
+                        row[key] = [
+                            {"id": int(item[0]), "name": item[1]} 
+                            for item in value if item and len(item) >= 2
+                        ]
                     else:
                         row[key] = sanitize_float(value)
             
@@ -389,23 +395,14 @@ class ModelRepository:
                     iso_horizon = isodate.duration_isoformat(horizon_interval)
                     horizons.append(iso_horizon)
             
-            # Get unique challenge definition names
-            cur.execute("""
-                SELECT DISTINCT name
-                FROM challenges.definitions
-                WHERE name IS NOT NULL
-                ORDER BY name
-            """)
-            definition_names = [row['name'] for row in cur.fetchall()]
-            
-            # Get unique challenge definition IDs with names
+            # Get unique challenge definitions with IDs and names
             cur.execute("""
                 SELECT id, name
                 FROM challenges.definitions
                 WHERE id IS NOT NULL
                 ORDER BY name
             """)
-            definition_ids = [{'id': row['id'], 'name': row['name']} for row in cur.fetchall()]
+            definitions = [{'id': row['id'], 'name': row['name']} for row in cur.fetchall()]
             
             return {
                 "domains": domains,
@@ -414,8 +411,7 @@ class ModelRepository:
                 "frequencies": frequencies,
                 "horizons": horizons,
                 "time_ranges": ["7d", "30d", "90d", "365d"],
-                "definition_names": definition_names,
-                "definition_ids": definition_ids
+                "definitions": definitions
             }
     
     def get_model_rankings_by_definition(

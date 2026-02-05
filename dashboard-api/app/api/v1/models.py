@@ -209,8 +209,7 @@ async def get_ranking_filters(
       "frequencies": ["PT15M", "PT1H", "P1D"],
       "horizons": ["PT1H", "PT6H", "P1D", "P7D"],
       "time_ranges": ["7d", "30d", "90d", "365d"],
-      "definition_names": ["Day-Ahead Power", "Week-Ahead Power"],
-      "definition_ids": [{"id": 1, "name": "Day-Ahead Power"}, {"id": 2, "name": "Week-Ahead Power"}]
+      "definitions": [{"id": 1, "name": "Day-Ahead Power"}, {"id": 2, "name": "Week-Ahead Power"}]
     }
     ```
     
