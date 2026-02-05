@@ -145,23 +145,24 @@ class EloRankingService:
         start_time = time.time()
         scope_label = f"def={definition_id}, period={time_period_days}d" if time_period_days else f"def={definition_id}, all-time"
         
-        # Get scores matrix
-        mase_matrix, series_ids, model_ids = await self._get_scores_matrix(
+        # Get scores matrix - match_ids are (round_id, series_id) tuples
+        mase_matrix, match_ids, model_ids = await self._get_scores_matrix(
             definition_id=definition_id,
             time_period_days=time_period_days
         )
         
         if mase_matrix.size == 0 or len(model_ids) < 2:
             logger.debug(f"Not enough data for ELO ({scope_label}): "
-                        f"{len(series_ids)} series, {len(model_ids)} models")
+                        f"{len(match_ids)} matches, {len(model_ids)} models")
             return []
         
-        n_series, n_models = mase_matrix.shape
-        logger.debug(f"ELO calculation: {n_series} series, {n_models} models, "
+        n_matches_total, n_models = mase_matrix.shape
+        logger.debug(f"ELO calculation: {n_matches_total} matches, {n_models} models, "
                    f"{n_bootstraps} bootstraps ({scope_label})")
         
         # Run bootstrapped ELO
         all_final_ratings = np.zeros((n_bootstraps, n_models))
+
         
         for b in range(n_bootstraps):
             final_ratings = self._run_single_bootstrap(
@@ -207,21 +208,24 @@ class EloRankingService:
         self,
         definition_id: Optional[int] = None,
         time_period_days: Optional[int] = None
-    ) -> Tuple[np.ndarray, List[int], List[int]]:
+    ) -> Tuple[np.ndarray, List[Tuple[int, int]], List[int]]:
         """
-        Build pivot matrix: rows=series_id, cols=model_id, values=MASE.
+        Build pivot matrix: rows=(round_id, series_id) matches, cols=model_id, values=MASE.
+        
+        Each unique combination of (round_id, series_id) is a "match" where models compete.
         
         Args:
             definition_id: Filter to this definition (None = all)
             time_period_days: Filter to rounds ending in last N days (None = all-time)
         
         Returns:
-            tuple: (mase_matrix, series_ids, model_ids)
+            tuple: (mase_matrix, match_ids, model_ids)
+                   where match_ids are (round_id, series_id) tuples
         """
         # Build dynamic query with optional filters
-        # Always join to challenges.rounds for time filtering
+        # Include round_id to properly identify each match
         base_query = """
-            SELECT fs.series_id, fs.model_id, fs.mase
+            SELECT fs.round_id, fs.series_id, fs.model_id, fs.mase
             FROM forecasts.scores fs
             JOIN challenges.rounds cr ON fs.round_id = cr.id
             WHERE fs.final_evaluation = TRUE
@@ -244,7 +248,7 @@ class EloRankingService:
             # Note: interval syntax requires direct substitution for safety
             base_query = base_query.replace(":days", str(int(time_period_days)))
         
-        base_query += " ORDER BY fs.series_id, fs.model_id"
+        base_query += " ORDER BY fs.round_id, fs.series_id, fs.model_id"
         
         result = await self.session.execute(text(base_query), params)
         rows = result.fetchall()
@@ -253,31 +257,34 @@ class EloRankingService:
             return np.array([]), [], []
         
         # Build pivot matrix
-        series_set = set()
+        # Key: (round_id, series_id) = one match
+        match_set = set()
         model_set = set()
         data_dict = {}
         
         for row in rows:
-            series_id, model_id, mase = row
-            series_set.add(series_id)
+            round_id, series_id, model_id, mase = row
+            match_key = (round_id, series_id)
+            match_set.add(match_key)
             model_set.add(model_id)
-            data_dict[(series_id, model_id)] = mase
+            data_dict[(match_key, model_id)] = mase
         
-        series_ids = sorted(series_set)
+        match_ids = sorted(match_set)
         model_ids = sorted(model_set)
         
-        series_idx = {s: i for i, s in enumerate(series_ids)}
+        match_idx = {m: i for i, m in enumerate(match_ids)}
         model_idx = {m: i for i, m in enumerate(model_ids)}
         
         # Create matrix with NaN for missing values
-        matrix = np.full((len(series_ids), len(model_ids)), np.nan)
+        matrix = np.full((len(match_ids), len(model_ids)), np.nan)
         
-        for (series_id, model_id), mase in data_dict.items():
-            i = series_idx[series_id]
+        for (match_key, model_id), mase in data_dict.items():
+            i = match_idx[match_key]
             j = model_idx[model_id]
             matrix[i, j] = mase
         
-        return matrix, series_ids, model_ids
+        return matrix, match_ids, model_ids
+
 
     
     def _run_single_bootstrap(
