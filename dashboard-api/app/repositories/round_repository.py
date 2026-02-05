@@ -452,15 +452,26 @@ class RoundRepository:
                 x['model_name'] or ''
             ))
             
-            # Add rank per series
-            current_series_id = None
-            current_rank = 0
-            for item in leaderboard:
-                if item['series_id'] != current_series_id:
-                    current_series_id = item['series_id']
-                    current_rank = 1
-                else:
-                    current_rank += 1
-                item['rank'] = current_rank
+            # Group by series_id and filter out series with all invalid MASE values
+            from itertools import groupby
+            filtered_leaderboard = []
             
-            return leaderboard
+            for series_id, series_group in groupby(leaderboard, key=lambda x: x['series_id']):
+                series_items = list(series_group)
+                
+                # Check if all MASE values are None or infinity
+                valid_mase_exists = any(
+                    item['mase'] is not None and not math.isinf(item['mase'])
+                    for item in series_items
+                )
+                
+                if not valid_mase_exists:
+                    print(f"WARNING: Series {series_id} has no valid MASE values (all None or Infinity). Skipping series in leaderboard.", file=sys.stderr)
+                    continue
+                
+                # Add rank per series
+                for rank, item in enumerate(series_items, start=1):
+                    item['rank'] = rank
+                    filtered_leaderboard.append(item)
+            
+            return filtered_leaderboard
