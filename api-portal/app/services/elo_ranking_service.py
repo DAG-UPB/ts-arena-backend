@@ -36,7 +36,7 @@ class EloRankingService:
     
     DEFAULT_K_FACTOR = 4.0
     DEFAULT_BASE_RATING = 1000.0
-    DEFAULT_N_BOOTSTRAPS = 100
+    DEFAULT_N_BOOTSTRAPS = 500
     
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
