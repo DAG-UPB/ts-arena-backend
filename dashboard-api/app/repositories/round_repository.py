@@ -132,11 +132,19 @@ class RoundRepository:
                     f.ts,
                     f.predicted_value as value,
                     f.probabilistic_values as confidence_intervals,
-                    ccd.latest_value as latest_observed_value,
+                    -- Flattened subquery to extract the latest observed value
+                    (
+                        SELECT tsd_v.value
+                        FROM {table_name} tsd_v
+                        INNER JOIN challenges.series_pseudo sp ON sp.series_id = tsd_v.series_id
+                        WHERE sp.round_id = f.round_id
+                            AND sp.series_id = f.series_id
+                            AND tsd_v.ts = sp.max_ts
+                        LIMIT 1
+                    ) as latest_observed_value,
                     tsd.value::FLOAT as current_value
                 FROM forecasts.forecasts f
                 JOIN models.model_info mi ON mi.id = f.model_id
-                JOIN challenges.v_context_data_range as ccd ON ccd.round_id = f.round_id AND ccd.series_id = f.series_id
                 LEFT JOIN {table_name} tsd ON tsd.series_id = f.series_id AND tsd.ts = f.ts
                 WHERE f.round_id = %s AND f.series_id = %s
                 ORDER BY f.created_at ASC, f.ts ASC;
