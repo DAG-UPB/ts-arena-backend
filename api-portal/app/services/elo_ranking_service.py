@@ -327,9 +327,12 @@ class EloRankingService:
         definition_id: Optional[int] = None,
         time_period_days: Optional[int] = None,
         calculation_year: Optional[int] = None
-    ) -> Tuple[np.ndarray, List[Tuple[int, int]], List[int]]:
+    ) -> Tuple[np.ndarray, List[int], List[int]]:
         """
-        Build pivot matrix: rows=(round_id, series_id) matches, cols=model_id, values=MASE.
+        Build pivot matrix: rows=round_id matches, cols=model_id, values=AVG(MASE).
+        
+        Aggregates MASE values per round (averaging across all series in a round)
+        to reduce the number of pairwise comparisons.
         
         Args:
             definition_id: Filter to this definition (None = all)
@@ -337,10 +340,11 @@ class EloRankingService:
             calculation_year: Filter to rounds ending in a specific year
         
         Returns:
-            tuple: (mase_matrix, match_ids, model_ids)
+            tuple: (mase_matrix, round_ids, model_ids)
         """
+        # Aggregate MASE per round and model (average across all series in a round)
         base_query = """
-            SELECT fs.round_id, fs.series_id, fs.model_id, fs.mase
+            SELECT fs.round_id, fs.model_id, AVG(fs.mase) as avg_mase
             FROM forecasts.scores fs
             JOIN challenges.rounds cr ON fs.round_id = cr.id
             WHERE fs.final_evaluation = TRUE
@@ -364,7 +368,8 @@ class EloRankingService:
             base_query += " AND EXTRACT(YEAR FROM cr.end_time) = :year"
             params["year"] = calculation_year
         
-        base_query += " ORDER BY fs.round_id, fs.series_id, fs.model_id"
+        base_query += " GROUP BY fs.round_id, fs.model_id"
+        base_query += " ORDER BY fs.round_id, fs.model_id"
         
         result = await self.session.execute(text(base_query), params)
         rows = result.fetchall()
@@ -380,44 +385,43 @@ class EloRankingService:
     def _build_matrix_from_rows(
         self,
         rows: List[Tuple]
-    ) -> Tuple[np.ndarray, List[Tuple[int, int]], List[int]]:
+    ) -> Tuple[np.ndarray, List[int], List[int]]:
         """
         Build pivot matrix from query rows. Runs in thread pool.
         
         Args:
-            rows: List of (round_id, series_id, model_id, mase) tuples
+            rows: List of (round_id, model_id, avg_mase) tuples
             
         Returns:
-            tuple: (mase_matrix, match_ids, model_ids)
+            tuple: (mase_matrix, round_ids, model_ids)
         """
         # Build pivot matrix
-        # Key: (round_id, series_id) = one match
-        match_set = set()
+        # Key: round_id = one match (aggregated across all series)
+        round_set = set()
         model_set = set()
         data_dict = {}
         
         for row in rows:
-            round_id, series_id, model_id, mase = row
-            match_key = (round_id, series_id)
-            match_set.add(match_key)
+            round_id, model_id, avg_mase = row
+            round_set.add(round_id)
             model_set.add(model_id)
-            data_dict[(match_key, model_id)] = mase
+            data_dict[(round_id, model_id)] = avg_mase
         
-        match_ids = sorted(match_set)
+        round_ids = sorted(round_set)
         model_ids = sorted(model_set)
         
-        match_idx = {m: i for i, m in enumerate(match_ids)}
+        round_idx = {r: i for i, r in enumerate(round_ids)}
         model_idx = {m: i for i, m in enumerate(model_ids)}
         
         # Create matrix with NaN for missing values
-        matrix = np.full((len(match_ids), len(model_ids)), np.nan)
+        matrix = np.full((len(round_ids), len(model_ids)), np.nan)
         
-        for (match_key, model_id), mase in data_dict.items():
-            i = match_idx[match_key]
+        for (round_id, model_id), avg_mase in data_dict.items():
+            i = round_idx[round_id]
             j = model_idx[model_id]
-            matrix[i, j] = mase
+            matrix[i, j] = avg_mase
         
-        return matrix, match_ids, model_ids
+        return matrix, round_ids, model_ids
 
 
     

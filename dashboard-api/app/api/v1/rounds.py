@@ -153,7 +153,7 @@ async def get_round_leaderboard(
     """
     Get leaderboard (rankings) for a specific round.
     """
-    repo = ChallengeRepository(conn)
+    repo = RoundRepository(conn)
     leaderboard = repo.get_round_leaderboard(round_id)
     return leaderboard
 
