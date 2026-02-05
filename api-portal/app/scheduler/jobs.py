@@ -157,8 +157,9 @@ async def periodic_elo_ranking_calculation_job() -> None:
             
             # Calculate and store all ELO ratings
             results = await elo_service.calculate_and_store_all_ratings(
-                n_bootstraps=100
+                n_bootstraps=500
             )
+
             
             # Log results
             if results.get("global"):
@@ -204,8 +205,9 @@ async def startup_elo_check_job() -> None:
             
             # Run the calculation
             results = await elo_service.calculate_and_store_all_ratings(
-                n_bootstraps=100
+                n_bootstraps=500
             )
+
             
             # Handle case where no data is available
             if not results:

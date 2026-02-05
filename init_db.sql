@@ -795,8 +795,12 @@ CREATE TABLE IF NOT EXISTS forecasts.elo_ratings (
     -- NOT NULL = Definition-specific ELO
     
     time_period_days INTEGER,
-    -- NULL = All-time (no time filter)
+    -- NULL = All-time (no time filter) or Yearly
     -- 7, 30, 90, 365 = Last N days based on challenges.rounds.end_time
+    
+    calculation_year INTEGER,
+    -- NULL = Relative time-period or All-time
+    -- 2024, 2025, etc.
     
     -- ELO Scores (Median + Confidence Interval from 500 bootstraps)
     elo_score DOUBLE PRECISION NOT NULL,
@@ -812,17 +816,24 @@ CREATE TABLE IF NOT EXISTS forecasts.elo_ratings (
     calculated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Unique constraint: one row per model per scope (definition + time period)
--- COALESCE handles NULL values: definition_id=-1 means global, time_period_days=0 means all-time
+-- Unique constraint: one row per model per scope (definition + time period + year)
+-- COALESCE handles NULL values: definition_id=-1, time_period_days=0, calculation_year=0
 CREATE UNIQUE INDEX IF NOT EXISTS idx_elo_unique_model_scope 
-ON forecasts.elo_ratings(model_id, COALESCE(definition_id, -1), COALESCE(time_period_days, 0));
+ON forecasts.elo_ratings(
+    model_id, 
+    COALESCE(definition_id, -1), 
+    COALESCE(time_period_days, 0),
+    COALESCE(calculation_year, 0)
+);
 
 -- Indexes for fast lookups
 CREATE INDEX IF NOT EXISTS idx_elo_model ON forecasts.elo_ratings(model_id);
 CREATE INDEX IF NOT EXISTS idx_elo_definition ON forecasts.elo_ratings(definition_id) WHERE definition_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_elo_time_period ON forecasts.elo_ratings(time_period_days) WHERE time_period_days IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_elo_year ON forecasts.elo_ratings(calculation_year) WHERE calculation_year IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_elo_score_desc ON forecasts.elo_ratings(elo_score DESC);
 CREATE INDEX IF NOT EXISTS idx_elo_calculated_at ON forecasts.elo_ratings(calculated_at);
+
 
 
 

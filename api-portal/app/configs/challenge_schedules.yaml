@@ -3,7 +3,7 @@ schedules:
   cron: 0 14 * * *
   run_on_startup: false
   params:
-    description: 'Day-Ahead Market Price Challenge: 24h horizon, 15-min frequency'
+    description: 'SMARD Day-Ahead Market Price Challenge: 24h horizon, 15-min frequency'
     domains:
     - energy
     subdomains:
@@ -36,7 +36,7 @@ schedules:
   cron: 0 8 * * *
   run_on_startup: false
   params:
-    description: 'Net Load Challenge: 24h horizon, 15-min frequency'
+    description: 'SMARD Net Load Challenge: 24h horizon, 15-min frequency'
     domains:
     - energy
     subdomains:
@@ -65,7 +65,7 @@ schedules:
   cron: 0 20 * * *
   run_on_startup: false
   params:
-    description: 'Generation Challenge: All generation types, 24h horizon, 15-min
+    description: 'SMARDGeneration Challenge: All generation types, 24h horizon, 15-min
       frequency'
     domains:
     - energy
@@ -108,7 +108,7 @@ schedules:
   cron: 0 15 * * *
   run_on_startup: false
   params:
-    description: 'Day-Ahead Market Price Challenge: 72h horizon, 1h frequency'
+    description: 'SMARDDay-Ahead Market Price Challenge: 72h horizon, 1h frequency'
     domains:
     - energy
     subdomains:
@@ -141,7 +141,7 @@ schedules:
   cron: 0 9 * * *
   run_on_startup: false
   params:
-    description: 'Net Load Challenge: 72h horizon, 1h frequency'
+    description: 'SMARD Net Load Challenge: 72h horizon, 1h frequency'
     domains:
     - energy
     subdomains:
@@ -170,7 +170,7 @@ schedules:
   cron: 0 21 * * *
   run_on_startup: false
   params:
-    description: 'Generation Challenge: All generation types, 72h horizon, 1h frequency'
+    description: 'SMARD Generation Challenge: All generation types, 72h horizon, 1h frequency'
     domains:
     - energy
     subdomains:
@@ -212,7 +212,7 @@ schedules:
   cron: 0 16 * * *
   run_on_startup: false
   params:
-    description: 'Hub Zone Market Price Challenge: 24h horizon, 15-min frequency'
+    description: 'Gridstatus Hub Zone Market Price Challenge: 24h horizon, 15-min frequency'
     domains:
     - energy
     subdomains:
@@ -248,7 +248,7 @@ schedules:
   cron: 0 9 * * *
   run_on_startup: false
   params:
-    description: 'Load Challenge: 24h horizon, 15-min frequency'
+    description: 'Gridstatus Load Challenge: 24h horizon, 15-min frequency'
     domains:
     - energy
     subdomains:
@@ -278,7 +278,7 @@ schedules:
   cron: 0 20 * * *
   run_on_startup: false
   params:
-    description: 'Generation Challenge: All generation types ISO, 24h horizon, 15-min
+    description: 'GridstatusGeneration Challenge: All generation types ISO, 24h horizon, 15-min
       frequency'
     domains:
     - energy
@@ -314,7 +314,7 @@ schedules:
   cron: 0 17 * * *
   run_on_startup: false
   params:
-    description: 'Hub Zone Market Price Challenge: 72h horizon, 1h frequency'
+    description: 'Gridstatus Hub Zone Market Price Challenge: 72h horizon, 1h frequency'
     domains:
     - energy
     subdomains:
@@ -350,7 +350,7 @@ schedules:
   cron: 0 10 * * *
   run_on_startup: false
   params:
-    description: 'Load Challenge: 72h horizon, 1h frequency'
+    description: 'Gridstatus Load Challenge: 72h horizon, 1h frequency'
     domains:
     - energy
     subdomains:
@@ -380,7 +380,7 @@ schedules:
   cron: 0 21 * * *
   run_on_startup: false
   params:
-    description: 'Generation Challenge: All generation types ISO, 72h horizon, 1h
+    description: 'GridstatusGeneration Challenge: All generation types ISO, 72h horizon, 1h
       frequency'
     domains:
     - energy
@@ -417,7 +417,7 @@ schedules:
   cron: 45 4 * * *
   run_on_startup: false
   params:
-    description: 'Fingrid Challenge: 24h horizon, 15-min frequency'
+    description: 'FINGRID Challenge: 24h horizon, 15-min frequency'
     domains:
     - energy
     subdomains: []
@@ -446,7 +446,7 @@ schedules:
   cron: 0 6 * * *
   run_on_startup: false
   params:
-    description: 'Fingrid Challenge: 72h horizon, 1h frequency'
+    description: 'FINGRID Challenge: 72h horizon, 1h frequency'
     domains:
     - energy
     subdomains: []

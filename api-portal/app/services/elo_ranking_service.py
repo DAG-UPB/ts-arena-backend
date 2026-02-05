@@ -16,6 +16,7 @@ class EloRating:
     model_id: int
     definition_id: Optional[int]
     time_period_days: Optional[int]  # None = all-time, 7/30/90/365 = last N days
+    calculation_year: Optional[int]  # None = relative period, 2024/2025 = specific year
     elo_score: float
     elo_ci_lower: float
     elo_ci_upper: float
@@ -42,6 +43,9 @@ class EloRankingService:
     # Time periods to calculate: None = all-time, then 7, 30, 90, 365 days
     TIME_PERIODS = [None, 7, 30, 90, 365]
     
+    # Calendar years to calculate
+    TIME_YEARS = [2024, 2025]
+    
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
     
@@ -51,8 +55,8 @@ class EloRankingService:
     ) -> Dict[str, Any]:
         """
         Calculate and store ELO ratings for:
-        1. Global rankings (all-time + each time period)
-        2. Per-definition rankings (all-time + each time period)
+        1. Global rankings (all-time + each time period + each year)
+        2. Per-definition rankings (all-time + each time period + each year)
         
         Returns:
             Summary dict with calculation results and timing
@@ -65,52 +69,77 @@ class EloRankingService:
             "calculated_at": datetime.now(timezone.utc)
         }
         
-        # 1. Calculate global ELO for all time periods
-        logger.info("Calculating global ELO ratings for all time periods...")
+        # 1. Global ELO calculations
+        logger.info("Calculating global ELO ratings...")
+        
+        # 1a. Relative time periods
         for period in self.TIME_PERIODS:
             period_label = f"{period}d" if period else "all-time"
-            try:
-                ratings = await self.calculate_elo_ratings(
-                    definition_id=None,
-                    time_period_days=period,
-                    n_bootstraps=n_bootstraps
-                )
-                if ratings:
-                    await self._store_ratings(ratings)
-                    results["global"].append({
-                        "time_period_days": period,
-                        "n_models": len(ratings),
-                        "duration_ms": ratings[0].calculation_duration_ms if ratings else 0
-                    })
-                    logger.info(f"Global ELO ({period_label}): {len(ratings)} models rated")
-            except Exception as e:
-                logger.exception(f"Failed global ELO for {period_label}: {e}")
+            ratings = await self.calculate_elo_ratings(
+                definition_id=None,
+                time_period_days=period,
+                n_bootstraps=n_bootstraps
+            )
+            if ratings:
+                await self._store_ratings(ratings)
+                results["global"].append({
+                    "time_period_days": period,
+                    "calculation_year": None,
+                    "n_models": len(ratings)
+                })
+        
+        # 1b. Calendar years
+        for year in self.TIME_YEARS:
+            ratings = await self.calculate_elo_ratings(
+                definition_id=None,
+                calculation_year=year,
+                n_bootstraps=n_bootstraps
+            )
+            if ratings:
+                await self._store_ratings(ratings)
+                results["global"].append({
+                    "time_period_days": None,
+                    "calculation_year": year,
+                    "n_models": len(ratings)
+                })
         
         # 2. Get all definition_ids with finalized scores
         definition_ids = await self._get_definitions_with_scores()
         logger.info(f"Found {len(definition_ids)} definitions with scores")
         
-        # 3. Calculate per-definition ELO for all time periods
+        # 3. Per-definition ELO calculations
         for def_id in definition_ids:
+            # 3a. Relative time periods
             for period in self.TIME_PERIODS:
-                period_label = f"{period}d" if period else "all-time"
-                try:
-                    ratings = await self.calculate_elo_ratings(
-                        definition_id=def_id,
-                        time_period_days=period,
-                        n_bootstraps=n_bootstraps
-                    )
-                    if ratings:
-                        await self._store_ratings(ratings)
-                        results["per_definition"].append({
-                            "definition_id": def_id,
-                            "time_period_days": period,
-                            "n_models": len(ratings),
-                            "duration_ms": ratings[0].calculation_duration_ms if ratings else 0
-                        })
-                        logger.debug(f"Definition {def_id} ELO ({period_label}): {len(ratings)} models")
-                except Exception as e:
-                    logger.exception(f"Failed ELO for def {def_id} ({period_label}): {e}")
+                ratings = await self.calculate_elo_ratings(
+                    definition_id=def_id,
+                    time_period_days=period,
+                    n_bootstraps=n_bootstraps
+                )
+                if ratings:
+                    await self._store_ratings(ratings)
+                    results["per_definition"].append({
+                        "definition_id": def_id,
+                        "time_period_days": period,
+                        "calculation_year": None,
+                        "n_models": len(ratings)
+                    })
+            
+            # 3b. Calendar years
+            for year in self.TIME_YEARS:
+                ratings = await self.calculate_elo_ratings(
+                    definition_id=def_id,
+                    calculation_year=year,
+                    n_bootstraps=n_bootstraps
+                )
+                if ratings:
+                    await self._store_ratings(ratings)
+                    results["per_definition"].append({
+                        "definition_id": def_id,
+                        "time_period_days": None,
+                        "calculation_year": year,
+                        "n_models": len(ratings)
+                    })
         
         total_duration = int((time.time() - total_start) * 1000)
         results["total_duration_ms"] = total_duration
@@ -118,11 +147,13 @@ class EloRankingService:
         
         return results
 
+
     
     async def calculate_elo_ratings(
         self,
         definition_id: Optional[int] = None,
         time_period_days: Optional[int] = None,
+        calculation_year: Optional[int] = None,
         n_bootstraps: int = DEFAULT_N_BOOTSTRAPS,
         k_factor: float = DEFAULT_K_FACTOR,
         base_rating: float = DEFAULT_BASE_RATING
@@ -135,6 +166,7 @@ class EloRankingService:
                           If None, calculate global ELO across all challenges.
             time_period_days: If provided, only include matches from the last N days.
                              If None, include all-time data.
+            calculation_year: If provided, only include matches from this year.
             n_bootstraps: Number of bootstrap iterations (default 500)
             k_factor: ELO K-factor for rating updates
             base_rating: Starting ELO rating (default 1000)
@@ -143,12 +175,20 @@ class EloRankingService:
             List of EloRating objects, sorted by elo_score descending
         """
         start_time = time.time()
-        scope_label = f"def={definition_id}, period={time_period_days}d" if time_period_days else f"def={definition_id}, all-time"
         
-        # Get scores matrix - match_ids are (round_id, series_id) tuples
+        # Build scope label for logging
+        if calculation_year:
+            scope_label = f"def={definition_id}, year={calculation_year}"
+        elif time_period_days:
+            scope_label = f"def={definition_id}, period={time_period_days}d"
+        else:
+            scope_label = f"def={definition_id}, all-time"
+        
+        # Get scores matrix
         mase_matrix, match_ids, model_ids = await self._get_scores_matrix(
             definition_id=definition_id,
-            time_period_days=time_period_days
+            time_period_days=time_period_days,
+            calculation_year=calculation_year
         )
         
         if mase_matrix.size == 0 or len(model_ids) < 2:
@@ -162,7 +202,6 @@ class EloRankingService:
         
         # Run bootstrapped ELO
         all_final_ratings = np.zeros((n_bootstraps, n_models))
-
         
         for b in range(n_bootstraps):
             final_ratings = self._run_single_bootstrap(
@@ -189,6 +228,7 @@ class EloRankingService:
                 model_id=model_id,
                 definition_id=definition_id,
                 time_period_days=time_period_days,
+                calculation_year=calculation_year,
                 elo_score=float(median_ratings[i]),
                 elo_ci_lower=float(ci_lower[i]),
                 elo_ci_upper=float(ci_upper[i]),
@@ -203,27 +243,25 @@ class EloRankingService:
         logger.debug(f"ELO done in {duration_ms}ms ({scope_label})")
         return results
 
+
     
     async def _get_scores_matrix(
         self,
         definition_id: Optional[int] = None,
-        time_period_days: Optional[int] = None
+        time_period_days: Optional[int] = None,
+        calculation_year: Optional[int] = None
     ) -> Tuple[np.ndarray, List[Tuple[int, int]], List[int]]:
         """
         Build pivot matrix: rows=(round_id, series_id) matches, cols=model_id, values=MASE.
         
-        Each unique combination of (round_id, series_id) is a "match" where models compete.
-        
         Args:
             definition_id: Filter to this definition (None = all)
             time_period_days: Filter to rounds ending in last N days (None = all-time)
+            calculation_year: Filter to rounds ending in a specific year
         
         Returns:
             tuple: (mase_matrix, match_ids, model_ids)
-                   where match_ids are (round_id, series_id) tuples
         """
-        # Build dynamic query with optional filters
-        # Include round_id to properly identify each match
         base_query = """
             SELECT fs.round_id, fs.series_id, fs.model_id, fs.mase
             FROM forecasts.scores fs
@@ -237,21 +275,23 @@ class EloRankingService:
         
         params = {}
         
-        # Add definition filter
         if definition_id is not None:
             base_query += " AND cr.definition_id = :definition_id"
             params["definition_id"] = definition_id
         
-        # Add time period filter
         if time_period_days is not None:
             base_query += " AND cr.end_time >= NOW() - INTERVAL ':days days'"
-            # Note: interval syntax requires direct substitution for safety
             base_query = base_query.replace(":days", str(int(time_period_days)))
+            
+        if calculation_year is not None:
+            base_query += " AND EXTRACT(YEAR FROM cr.end_time) = :year"
+            params["year"] = calculation_year
         
         base_query += " ORDER BY fs.round_id, fs.series_id, fs.model_id"
         
         result = await self.session.execute(text(base_query), params)
         rows = result.fetchall()
+
         
         if not rows:
             return np.array([]), [], []
@@ -387,15 +427,17 @@ class EloRankingService:
             return 0
         
         # Use raw SQL for UPSERT with COALESCE for NULL handling
-        # The unique index is on (model_id, COALESCE(definition_id, -1), COALESCE(time_period_days, 0))
+        # Unique key: (model_id, definition_id, time_period_days, calculation_year)
         query = text("""
             INSERT INTO forecasts.elo_ratings 
-                (model_id, definition_id, time_period_days, elo_score, elo_ci_lower, elo_ci_upper, 
+                (model_id, definition_id, time_period_days, calculation_year, 
+                 elo_score, elo_ci_lower, elo_ci_upper, 
                  n_matches, n_bootstraps, calculation_duration_ms, calculated_at)
             VALUES 
-                (:model_id, :definition_id, :time_period_days, :elo_score, :elo_ci_lower, :elo_ci_upper,
+                (:model_id, :definition_id, :time_period_days, :calculation_year,
+                 :elo_score, :elo_ci_lower, :elo_ci_upper,
                  :n_matches, :n_bootstraps, :calculation_duration_ms, NOW())
-            ON CONFLICT (model_id, COALESCE(definition_id, -1), COALESCE(time_period_days, 0))
+            ON CONFLICT (model_id, COALESCE(definition_id, -1), COALESCE(time_period_days, 0), COALESCE(calculation_year, 0))
             DO UPDATE SET
                 elo_score = EXCLUDED.elo_score,
                 elo_ci_lower = EXCLUDED.elo_ci_lower,
@@ -411,6 +453,7 @@ class EloRankingService:
                 "model_id": rating.model_id,
                 "definition_id": rating.definition_id,
                 "time_period_days": rating.time_period_days,
+                "calculation_year": rating.calculation_year,
                 "elo_score": rating.elo_score,
                 "elo_ci_lower": rating.elo_ci_lower,
                 "elo_ci_upper": rating.elo_ci_upper,
@@ -421,6 +464,7 @@ class EloRankingService:
         
         await self.session.commit()
         return len(ratings)
+
 
     
     async def has_calculated_today(self) -> bool:
