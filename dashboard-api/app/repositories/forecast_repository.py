@@ -32,16 +32,6 @@ class ForecastRepository:
                 return self.FREQUENCY_RESOLUTION_MAP.get(total_seconds, "raw")
             return "raw"
     
-        
-    def _format_model_readable_id(self, row: Dict[str, Any]) -> str:
-        """Format: 'readable_id' (without org for now)."""
-        readable_id = row.get("readable_id") or "model_id"
-        return f"{readable_id}"
-    
-    def _format_model_label(self, row: Dict[str, Any]) -> str:
-        """Format: 'name' (without org for now)."""
-        name = row.get("model_name") or row.get("readable_id") or "model"
-        return f"{name}"
 
     def get_model_series_long_term_forecasts(
         self,
