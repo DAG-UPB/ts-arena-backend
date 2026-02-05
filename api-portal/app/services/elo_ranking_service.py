@@ -363,6 +363,23 @@ class EloRankingService:
         if not rows:
             return np.array([]), [], []
         
+        # Build pivot matrix in thread pool to avoid blocking event loop
+        # This can be CPU-intensive with large datasets
+        return await asyncio.to_thread(self._build_matrix_from_rows, rows)
+    
+    def _build_matrix_from_rows(
+        self,
+        rows: List[Tuple]
+    ) -> Tuple[np.ndarray, List[Tuple[int, int]], List[int]]:
+        """
+        Build pivot matrix from query rows. Runs in thread pool.
+        
+        Args:
+            rows: List of (round_id, series_id, model_id, mase) tuples
+            
+        Returns:
+            tuple: (mase_matrix, match_ids, model_ids)
+        """
         # Build pivot matrix
         # Key: (round_id, series_id) = one match
         match_set = set()

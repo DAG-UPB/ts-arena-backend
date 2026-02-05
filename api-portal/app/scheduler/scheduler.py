@@ -78,8 +78,12 @@ class ChallengeScheduler:
                 # Schedule the ELO ranking calculation job (4x daily)
                 await self.schedule_periodic_elo_calculation()
                 
-                # Run startup ELO check (calculates if not already done today)
-                await startup_elo_check_job()
+                # Run startup ELO check in background (don't block startup!)
+                # This allows the application to become healthy before calculation starts
+                asyncio.create_task(
+                    self._delayed_startup_elo_check(),
+                    name="startup-elo-check"
+                )
                 
                 # Start the monitoring task for auto-recovery
                 if self._monitor_task is None or self._monitor_task.done():
@@ -100,6 +104,22 @@ class ChallengeScheduler:
         except Exception as e:
             self.logger.error(f"Scheduler run_until_stopped crashed: {e}", exc_info=True)
             raise  # Re-raise so the task shows as failed
+
+    async def _delayed_startup_elo_check(self) -> None:
+        """
+        Run startup ELO check with a delay to avoid blocking application startup.
+        
+        This runs in a background task so the application can become healthy
+        and respond to requests while ELO calculations run.
+        """
+        try:
+            # Small delay to let the application fully start
+            await asyncio.sleep(5)
+            self.logger.info("Starting background ELO check...")
+            await startup_elo_check_job()
+        except Exception as e:
+            self.logger.error(f"Background ELO check failed: {e}", exc_info=True)
+            # Don't re-raise - this is a background task
 
     async def shutdown(self) -> None:
         """Gracefully shutdown the scheduler and monitoring task."""
