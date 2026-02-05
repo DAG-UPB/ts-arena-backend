@@ -50,15 +50,15 @@ async def get_filtered_rankings(
         description="Comma-separated list of horizons in ISO 8601 format (e.g., 'PT6H,P1D')",
         example="PT6H,P1D"
     ),
-    definition_names: Optional[str] = Query(
+    definition_name: Optional[str] = Query(
         None,
-        description="Comma-separated list of definition names (e.g., 'Day-Ahead Power,Week-Ahead Power')",
-        example="Day-Ahead Power,Week-Ahead Power"
+        description="Challenge definition name to filter by",
+        example="Day-Ahead Power"
     ),
-    definition_ids: Optional[str] = Query(
+    definition_id: Optional[int] = Query(
         None,
-        description="Comma-separated list of definition IDs (e.g., '1,2,3')",
-        example="1,2"
+        description="Challenge definition ID to filter by",
+        example=1
     ),
     min_rounds: int = Query(
         1,
@@ -86,8 +86,8 @@ async def get_filtered_rankings(
     - **Subcategory**: Filter by one or more subcategories (e.g., Load, Generation)
     - **Frequency**: Filter by data frequency in ISO 8601 format (e.g., PT1H for 1 hour)
     - **Horizon**: Filter by forecast horizon in ISO 8601 format (e.g., P1D for 1 day)
-    - **Definition Names**: Filter by challenge definition names (e.g., Day-Ahead Power)
-    - **Definition IDs**: Filter by challenge definition IDs (e.g., 1, 2, 3)
+    - **Definition Name**: Filter by challenge definition name (e.g., Day-Ahead Power)
+    - **Definition ID**: Filter by challenge definition ID (e.g., 1)
     - **Min Rounds**: Show only models that participated in at least N rounds
     
     **Filter Format:**
@@ -98,6 +98,10 @@ async def get_filtered_rankings(
       - `PT6H` = 6 hours
       - `P1D` = 1 day
       - `P7D` = 7 days
+    
+    **ELO Score:**
+    - When filtering by definition, the ELO score is specific to that definition
+    - When no definition filter is applied, the global ELO score is returned
     
     **Response:**
     ```json
@@ -110,6 +114,7 @@ async def get_filtered_rankings(
           "stddev_mase": 0.12,
           "min_mase": 0.65,
           "max_mase": 1.05,
+          "elo_score": 1337.5,
           "domains_covered": ["Energy", "Finance"],
           "categories_covered": ["Electricity"],
           "subcategories_covered": ["Load"],
@@ -139,8 +144,6 @@ async def get_filtered_rankings(
     subcategories_list = [s.strip() for s in subcategory.split(',')] if subcategory else None
     frequencies_list = [f.strip() for f in frequency.split(',')] if frequency else None
     horizons_list = [h.strip() for h in horizon.split(',')] if horizon else None
-    definition_names_list = [d.strip() for d in definition_names.split(',')] if definition_names else None
-    definition_ids_list = [int(d.strip()) for d in definition_ids.split(',')] if definition_ids else None
     
     # Get filtered rankings
     repo = ModelRepository(conn)
@@ -151,8 +154,8 @@ async def get_filtered_rankings(
         subcategories=subcategories_list,
         frequencies=frequencies_list,
         horizons=horizons_list,
-        definition_names=definition_names_list,
-        definition_ids=definition_ids_list,
+        definition_name=definition_name,
+        definition_id=definition_id,
         min_rounds=min_rounds,
         limit=limit
     )
@@ -171,10 +174,10 @@ async def get_filtered_rankings(
         filters_applied['frequency'] = frequencies_list
     if horizons_list:
         filters_applied['horizon'] = horizons_list
-    if definition_names:
-        filters_applied['definition_names'] = definition_names
-    if definition_ids_list:
-        filters_applied['definition_ids'] = definition_ids_list
+    if definition_name:
+        filters_applied['definition_name'] = definition_name
+    if definition_id:
+        filters_applied['definition_id'] = definition_id
     if min_rounds > 1:
         filters_applied['min_rounds'] = min_rounds
     if limit != 100:

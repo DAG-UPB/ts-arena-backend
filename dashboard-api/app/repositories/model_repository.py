@@ -119,8 +119,8 @@ class ModelRepository:
         subcategories: Optional[List[str]] = None,
         frequencies: Optional[List[str]] = None,
         horizons: Optional[List[str]] = None,
-        definition_names: Optional[List[str]] = None,
-        definition_ids: Optional[List[int]] = None,
+        definition_name: Optional[str] = None,
+        definition_id: Optional[int] = None,
         min_rounds: int = 1,
         limit: int = 100
     ) -> List[Dict[str, Any]]:
@@ -134,15 +134,28 @@ class ModelRepository:
             subcategories: List of subcategories (e.g. ["Load", "Generation"])
             frequencies: List of frequencies as ISO 8601 (e.g. ["PT1H", "P1D"])
             horizons: List of horizons as ISO 8601 (e.g. ["PT6H", "P1D"])
-            definition_names: List of challenge definition names to filter by
-            definition_ids: List of challenge definition IDs to filter by
+            definition_name: Challenge definition name to filter by
+            definition_id: Challenge definition ID to filter by
             min_rounds: Minimum number of participated rounds
             limit: Max. number of results
         
         Returns:
             List of dicts with ranking information
         """
-        query = """
+        # Determine ELO join condition based on definition filter
+        # If filtering by definition, join to definition-specific ELO; otherwise use global ELO
+        if definition_id is not None:
+            elo_join_condition = "er.model_id = vr.model_id AND er.definition_id = %s"
+            elo_join_param = definition_id
+        elif definition_name is not None:
+            # Need to resolve definition_id from name for ELO join
+            elo_join_condition = "er.model_id = vr.model_id AND er.definition_id = (SELECT id FROM challenges.definitions WHERE name = %s LIMIT 1)"
+            elo_join_param = definition_name
+        else:
+            elo_join_condition = "er.model_id = vr.model_id AND er.definition_id IS NULL"
+            elo_join_param = None
+        
+        query = f"""
             SELECT
                 vr.model_id,
                 MAX(mi.name) AS model_name,
@@ -151,6 +164,7 @@ class ModelRepository:
                 STDDEV(vr.mase) AS stddev_mase,
                 MIN(vr.mase) AS min_mase,
                 MAX(vr.mase) AS max_mase,
+                MAX(er.elo_score) AS elo_score,
                 ARRAY_AGG(DISTINCT vr.domain ORDER BY vr.domain) FILTER (WHERE vr.domain IS NOT NULL) AS domains_covered,
                 ARRAY_AGG(DISTINCT vr.category ORDER BY vr.category) FILTER (WHERE vr.category IS NOT NULL) AS categories_covered,
                 ARRAY_AGG(DISTINCT vr.frequency::INTERVAL ORDER BY vr.frequency) FILTER (WHERE vr.frequency IS NOT NULL) AS frequencies_covered,
@@ -160,10 +174,13 @@ class ModelRepository:
             JOIN models.model_info mi ON mi.id = vr.model_id
             LEFT JOIN challenges.rounds r ON r.id = vr.round_id
             LEFT JOIN challenges.definitions cd ON cd.id = r.definition_id
+            LEFT JOIN forecasts.elo_ratings er ON {elo_join_condition}
             WHERE 1=1
         """
         
         params = []
+        if elo_join_param is not None:
+            params.append(elo_join_param)
         
         # Time range filter
         if time_range:
@@ -231,16 +248,14 @@ class ModelRepository:
                 query += " AND (" + " OR ".join(interval_conditions) + ")"
         
         # Definition name filter
-        if definition_names:
-            placeholders = ','.join(['%s'] * len(definition_names))
-            query += f" AND cd.name IN ({placeholders})"
-            params.extend(definition_names)
+        if definition_name:
+            query += " AND cd.name = %s"
+            params.append(definition_name)
         
         # Definition ID filter
-        if definition_ids:
-            placeholders = ','.join(['%s'] * len(definition_ids))
-            query += f" AND cd.id IN ({placeholders})"
-            params.extend(definition_ids)
+        if definition_id:
+            query += " AND cd.id = %s"
+            params.append(definition_id)
         
         # Group and aggregate
         query += """
