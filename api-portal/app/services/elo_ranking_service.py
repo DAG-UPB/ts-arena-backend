@@ -546,7 +546,7 @@ class EloRankingService:
         that have finalized scores.
         """
         query = text("""
-            SELECT DISTINCT cd.frequency::text, cd.horizon::text
+            SELECT DISTINCT cd.frequency::text AS freq, cd.horizon::text AS hor
             FROM challenges.definitions cd
             JOIN challenges.rounds cr ON cr.definition_id = cd.id
             JOIN forecasts.scores fs ON fs.round_id = cr.id
@@ -554,7 +554,7 @@ class EloRankingService:
               AND fs.mase IS NOT NULL
               AND cd.frequency IS NOT NULL
               AND cd.horizon IS NOT NULL
-            ORDER BY cd.frequency, cd.horizon
+            ORDER BY freq, hor
         """)
         result = await self.session.execute(query)
         return [(row[0], row[1]) for row in result.fetchall()]
