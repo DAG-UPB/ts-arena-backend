@@ -1,6 +1,5 @@
 import sys
 import math
-import statistics
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import psycopg2.extras
@@ -315,11 +314,13 @@ class RoundRepository:
             if has_final_evaluation:
                 return self._get_leaderboard_from_scores(round_id)
             else:
+                print(f"Round not yet completely evaluated: {round_id}. Calculating mase for leaderboard on-the-fly from forecasts.")
                 return self._calculate_leaderboard_on_the_fly(round_id)
 
     def _get_leaderboard_from_scores(self, round_id: int) -> List[Dict[str, Any]]:
         """
         Get leaderboard from pre-calculated scores in forecasts.scores table.
+        Returns one row per model-series combination.
         """
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
@@ -328,20 +329,16 @@ class RoundRepository:
                     mi.id as model_id,
                     mi.readable_id,
                     mi.name as model_name,
-                    COUNT(DISTINCT cs.series_id) as series_count,
-                    SUM(cs.forecast_count) as total_forecasts,
-                    AVG(cs.mase) as avg_mase,
-                    STDDEV(cs.mase) as stddev_mase,
-                    MIN(cs.mase) as min_mase,
-                    MAX(cs.mase) as max_mase,
-                    AVG(cs.rmse) as avg_rmse
+                    cs.series_id,
+                    cs.forecast_count,
+                    cs.mase,
+                    cs.rmse
                 FROM forecasts.scores cs
                 JOIN models.model_info mi ON mi.id = cs.model_id
                 WHERE cs.round_id = %s
                     AND cs.final_evaluation = TRUE
                     AND cs.mase IS NOT NULL
-                GROUP BY mi.id, mi.readable_id, mi.name
-                ORDER BY avg_mase ASC NULLS LAST, series_count DESC
+                ORDER BY cs.mase ASC NULLS LAST, mi.name ASC, cs.series_id ASC
                 """,
                 (round_id,)
             )
@@ -352,7 +349,7 @@ class RoundRepository:
                 row['rank'] = idx
                 row['is_final'] = True
                 # Sanitize float values
-                for key in ['avg_mase', 'stddev_mase', 'min_mase', 'max_mase', 'avg_rmse']:
+                for key in ['mase', 'rmse']:
                     if row.get(key) is not None:
                         if math.isinf(row[key]) or math.isnan(row[key]):
                             row[key] = None
@@ -363,6 +360,7 @@ class RoundRepository:
         """
         Calculate leaderboard on-the-fly from forecasts when final_evaluation is not available.
         Uses the same MASE calculation logic as get_series_forecasts.
+        Returns one row per model-series combination.
         """
         resolution = self._get_round_resolution(round_id)
         table_name = self._get_table_name_for_resolution(resolution, "_calculate_leaderboard_on_the_fly")
@@ -400,77 +398,59 @@ class RoundRepository:
             if not rows:
                 return []
             
-            # Aggregate by model and series to calculate MASE per series, then average
-            model_series_data: Dict[int, Dict[str, Any]] = {}
+            # Aggregate by model and series to calculate MASE per model-series
+            model_series_data: Dict[tuple, Dict[str, Any]] = {}
             
             for r in rows:
                 model_id = r['model_id']
                 series_id = r['series_id']
+                key = (model_id, series_id)
                 
-                if model_id not in model_series_data:
-                    model_series_data[model_id] = {
+                if key not in model_series_data:
+                    model_series_data[key] = {
+                        'model_id': model_id,
                         'readable_id': r['readable_id'],
                         'model_name': r['model_name'],
-                        'series': {}
-                    }
-                
-                if series_id not in model_series_data[model_id]['series']:
-                    model_series_data[model_id]['series'][series_id] = {
+                        'series_id': series_id,
                         'mae_model_sum': 0.0,
                         'mae_naive_sum': 0.0,
                         'count': 0
                     }
                 
                 self._accumulate_mae_values(
-                    model_series_data[model_id]['series'][series_id],
+                    model_series_data[key],
                     predicted=r['predicted_value'],
                     actual=r['actual_value'],
                     naive=r['latest_observed_value']
                 )
             
-            # Calculate MASE per series and then average across series for each model
+            # Calculate MASE for each model-series combination
             leaderboard = []
-            for model_id, model_data in model_series_data.items():
-                series_mases = []
-                total_forecasts = 0
-                
-                for series_id, series_stats in model_data['series'].items():
-                    total_forecasts += series_stats['count']
-                    mase = self._calculate_mase(
-                        series_stats['mae_model_sum'],
-                        series_stats['mae_naive_sum'],
-                        series_stats['count']
-                    )
-                    if mase is not None:
-                        series_mases.append(mase)
-                
-                if series_mases:
-                    avg_mase = statistics.mean(series_mases)
-                    stddev_mase = statistics.stdev(series_mases) if len(series_mases) > 1 else None
-                    min_mase = min(series_mases)
-                    max_mase = max(series_mases)
-                else:
-                    avg_mase = None
-                    stddev_mase = None
-                    min_mase = None
-                    max_mase = None
+            for key, data in model_series_data.items():
+                mase = self._calculate_mase(
+                    data['mae_model_sum'],
+                    data['mae_naive_sum'],
+                    data['count']
+                )
                 
                 leaderboard.append({
-                    'model_id': model_id,
-                    'readable_id': model_data['readable_id'],
-                    'model_name': model_data['model_name'],
-                    'series_count': len(model_data['series']),
-                    'total_forecasts': total_forecasts,
-                    'avg_mase': avg_mase,
-                    'stddev_mase': stddev_mase,
-                    'min_mase': min_mase,
-                    'max_mase': max_mase,
-                    'avg_rmse': None,  # Not calculated on-the-fly
+                    'model_id': data['model_id'],
+                    'readable_id': data['readable_id'],
+                    'model_name': data['model_name'],
+                    'series_id': data['series_id'],
+                    'forecast_count': data['count'],
+                    'mase': mase,
+                    'rmse': None,  # Not calculated on-the-fly
                     'is_final': False
                 })
             
-            # Sort by avg_mase ascending (None values last)
-            leaderboard.sort(key=lambda x: (x['avg_mase'] is None, x['avg_mase'] or float('inf')))
+            # Sort by mase ascending (None values last), then by model_name, then by series_id
+            leaderboard.sort(key=lambda x: (
+                x['mase'] is None, 
+                x['mase'] or float('inf'),
+                x['model_name'] or '',
+                x['series_id'] or 0
+            ))
             
             # Add rank
             for idx, item in enumerate(leaderboard, start=1):
