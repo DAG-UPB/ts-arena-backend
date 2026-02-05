@@ -330,12 +330,14 @@ class RoundRepository:
                     mi.readable_id,
                     mi.name as model_name,
                     cs.series_id,
+                    ts.name as series_name,
                     cs.forecast_count,
                     cs.mase,
                     cs.rmse,
                     RANK() OVER (PARTITION BY cs.series_id ORDER BY cs.mase ASC NULLS LAST) as rank
                 FROM forecasts.scores cs
                 JOIN models.model_info mi ON mi.id = cs.model_id
+                LEFT JOIN data_portal.time_series ts ON ts.series_id = cs.series_id
                 WHERE cs.round_id = %s
                     AND cs.final_evaluation = TRUE
                     AND cs.mase IS NOT NULL
@@ -382,11 +384,13 @@ class RoundRepository:
                     mi.readable_id,
                     mi.name as model_name,
                     f.series_id,
+                    ts.name as series_name,
                     f.predicted_value,
                     tsd.value as actual_value,
                     sl.latest_observed_value
                 FROM forecasts.forecasts f
                 JOIN models.model_info mi ON mi.id = f.model_id
+                LEFT JOIN data_portal.time_series ts ON ts.series_id = f.series_id
                 LEFT JOIN {table_name} tsd ON tsd.series_id = f.series_id AND tsd.ts = f.ts
                 LEFT JOIN series_latest sl ON sl.series_id = f.series_id
                 WHERE f.round_id = %s
@@ -412,6 +416,7 @@ class RoundRepository:
                         'readable_id': r['readable_id'],
                         'model_name': r['model_name'],
                         'series_id': series_id,
+                        'series_name': r['series_name'],
                         'mae_model_sum': 0.0,
                         'mae_naive_sum': 0.0,
                         'count': 0
@@ -438,6 +443,7 @@ class RoundRepository:
                     'readable_id': data['readable_id'],
                     'model_name': data['model_name'],
                     'series_id': data['series_id'],
+                    'series_name': data['series_name'],
                     'forecast_count': data['count'],
                     'mase': mase,
                     'rmse': None,  # Not calculated on-the-fly
