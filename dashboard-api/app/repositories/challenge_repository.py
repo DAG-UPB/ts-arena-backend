@@ -217,17 +217,14 @@ class ChallengeRepository:
                     c.end_time as end_time,
                     c.registration_start as registration_start,
                     c.registration_end as registration_end,
-                    cdr.min_ts as context_start_time,
-                    cdr.max_ts as context_end_time,
+                    csp.min_ts as context_start_time,
+                    csp.max_ts as context_end_time,
                     dc.domain,
                     dc.category,
                     dc.subcategory
                 FROM challenges.series_pseudo csp
                 JOIN data_portal.time_series ts ON ts.series_id = csp.series_id
                 JOIN challenges.v_rounds_with_status c ON c.id = csp.round_id
-                JOIN challenges.v_context_data_range cdr 
-                    ON cdr.round_id = csp.round_id 
-                    AND cdr.series_id = csp.series_id
                 LEFT JOIN data_portal.domain_category dc ON ts.domain_category_id = dc.id
                 WHERE csp.round_id = %s
                 ORDER BY ts.name ASC;
