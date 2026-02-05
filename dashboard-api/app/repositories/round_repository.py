@@ -79,7 +79,7 @@ class RoundRepository:
             cur.execute(
                 """
                 SELECT frequency
-                FROM forecasts.scores
+                FROM challenges.rounds
                 WHERE id = %s
                 """,
                 (round_id,),
