@@ -1,6 +1,7 @@
 from __future__ import annotations
 import logging
 import functools
+import time
 from typing import Any, Dict, Callable, Awaitable
 from app.database.connection import SessionLocal
 from app.services.challenge_service import ChallengeService
@@ -151,6 +152,8 @@ async def periodic_elo_ranking_calculation_job() -> None:
     logger = logging.getLogger("challenge-scheduler")
     logger.info("Starting periodic ELO ranking calculation job")
     
+    start_time = time.time()
+    
     try:
         async with SessionLocal() as session:
             elo_service = EloRankingService(session)
@@ -161,18 +164,29 @@ async def periodic_elo_ranking_calculation_job() -> None:
             )
 
             
-            # Log results
-            n_definitions = len(results.get("per_definition", []))
+            duration_seconds = time.time() - start_time
             
+            # Extract metrics
+            n_global = len(results.get("global", []))
+            n_definitions = len(results.get("per_definition", []))
+            total_duration_ms = results.get("total_duration_ms", 0)
+            
+            # Log success with detailed metrics
             logger.info(
-                f"ELO calculation complete: {n_definitions} definitions processed. "
-                f"Total time: {results['total_duration_ms']}ms"
+                f"✅ ELO calculation SUCCESS in {duration_seconds:.1f}s. "
+                f"Global rankings: {n_global}, Per-definition rankings: {n_definitions}, "
+                f"Total calculation time: {total_duration_ms}ms"
             )
 
     
     except Exception as e:
-        logger.exception(f"Failed to run periodic ELO ranking calculation: {e}")
+        duration_seconds = time.time() - start_time
+        logger.error(
+            f"❌ ELO calculation FAILED after {duration_seconds:.1f}s: {e}",
+            exc_info=True
+        )
         raise  # Re-raise to let decorator handle it
+
 
 
 @job_error_handler
@@ -183,6 +197,8 @@ async def startup_elo_check_job() -> None:
     """
     logger = logging.getLogger("challenge-scheduler")
     logger.info("Checking if ELO ratings have been calculated today...")
+    
+    start_time = time.time()
     
     try:
         async with SessionLocal() as session:
@@ -201,20 +217,28 @@ async def startup_elo_check_job() -> None:
             )
 
             
+            duration_seconds = time.time() - start_time
+            
             # Handle case where no data is available
             if not results:
                 logger.info("Startup ELO calculation: No data available for ranking.")
                 return
             
-            n_definitions = len(results.get('per_definition') or [])
+            n_global = len(results.get('global', []))
+            n_definitions = len(results.get('per_definition', []))
             total_time = results.get('total_duration_ms', 0)
             
             logger.info(
-                f"Startup ELO calculation complete. "
-                f"Processed {n_definitions} definitions in {total_time}ms"
+                f"✅ Startup ELO calculation complete in {duration_seconds:.1f}s. "
+                f"Global: {n_global}, Definitions: {n_definitions}, "
+                f"Calculation time: {total_time}ms"
             )
 
     
     except Exception as e:
-        logger.exception(f"Failed to run startup ELO check: {e}")
+        duration_seconds = time.time() - start_time
+        logger.error(
+            f"❌ Startup ELO check FAILED after {duration_seconds:.1f}s: {e}",
+            exc_info=True
+        )
         raise  # Re-raise to let decorator handle it

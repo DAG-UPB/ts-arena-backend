@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from typing import List, Dict, Any, Optional, Tuple
@@ -52,7 +53,8 @@ class EloRankingService:
     
     async def calculate_and_store_all_ratings(
         self,
-        n_bootstraps: int = DEFAULT_N_BOOTSTRAPS
+        n_bootstraps: int = DEFAULT_N_BOOTSTRAPS,
+        max_concurrent: int = 2
     ) -> Dict[str, Any]:
         """
         Calculate and store ELO ratings for:
@@ -60,6 +62,10 @@ class EloRankingService:
         2. Per-definition rankings for each time period + each year
         
         Note: Cumulative 'All-time' rankings (both NULL) are not calculated.
+        
+        Args:
+            n_bootstraps: Number of bootstrap iterations per calculation
+            max_concurrent: Maximum number of parallel calculations (default: 2)
         
         Returns:
             Summary dict with calculation results and timing
@@ -72,38 +78,31 @@ class EloRankingService:
             "calculated_at": datetime.now(timezone.utc)
         }
         
-        # 1. Global ELO calculations (platform-wide, across all definitions)
-        logger.info("Calculating global ELO ratings...")
+        logger.info(f"Starting ELO calculations with max_concurrent={max_concurrent}")
         
+        # Gather all calculation tasks
+        tasks = []
+        
+        # 1. Global ELO calculations (platform-wide, across all definitions)
         # 1a. Relative time periods (7d, 30d, 90d, 365d)
         for period in self.TIME_PERIODS:
-            ratings = await self.calculate_elo_ratings(
+            tasks.append(self._calculate_and_store_single(
                 definition_id=None,
                 time_period_days=period,
-                n_bootstraps=n_bootstraps
-            )
-            if ratings:
-                await self._store_ratings(ratings)
-                results["global"].append({
-                    "time_period_days": period,
-                    "calculation_year": None,
-                    "n_models": len(ratings)
-                })
+                calculation_year=None,
+                n_bootstraps=n_bootstraps,
+                result_type="global"
+            ))
         
         # 1b. Calendar years (2024, 2025)
         for year in self.TIME_YEARS:
-            ratings = await self.calculate_elo_ratings(
+            tasks.append(self._calculate_and_store_single(
                 definition_id=None,
+                time_period_days=None,
                 calculation_year=year,
-                n_bootstraps=n_bootstraps
-            )
-            if ratings:
-                await self._store_ratings(ratings)
-                results["global"].append({
-                    "time_period_days": None,
-                    "calculation_year": year,
-                    "n_models": len(ratings)
-                })
+                n_bootstraps=n_bootstraps,
+                result_type="global"
+            ))
         
         # 2. Get all definition_ids with finalized scores
         definition_ids = await self._get_definitions_with_scores()
@@ -114,35 +113,46 @@ class EloRankingService:
         for def_id in definition_ids:
             # 3a. Relative time periods
             for period in self.TIME_PERIODS:
-                ratings = await self.calculate_elo_ratings(
+                tasks.append(self._calculate_and_store_single(
                     definition_id=def_id,
                     time_period_days=period,
-                    n_bootstraps=n_bootstraps
-                )
-                if ratings:
-                    await self._store_ratings(ratings)
-                    results["per_definition"].append({
-                        "definition_id": def_id,
-                        "time_period_days": period,
-                        "calculation_year": None,
-                        "n_models": len(ratings)
-                    })
+                    calculation_year=None,
+                    n_bootstraps=n_bootstraps,
+                    result_type="per_definition"
+                ))
             
             # 3b. Calendar years
             for year in self.TIME_YEARS:
-                ratings = await self.calculate_elo_ratings(
+                tasks.append(self._calculate_and_store_single(
                     definition_id=def_id,
+                    time_period_days=None,
                     calculation_year=year,
-                    n_bootstraps=n_bootstraps
-                )
-                if ratings:
-                    await self._store_ratings(ratings)
-                    results["per_definition"].append({
-                        "definition_id": def_id,
-                        "time_period_days": None,
-                        "calculation_year": year,
-                        "n_models": len(ratings)
-                    })
+                    n_bootstraps=n_bootstraps,
+                    result_type="per_definition"
+                ))
+        
+        # Execute tasks with controlled concurrency
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def bounded_task(task):
+            """Execute task with semaphore control"""
+            async with semaphore:
+                return await task
+        
+        logger.info(f"Executing {len(tasks)} ELO calculations with max {max_concurrent} concurrent")
+        
+        # Run all tasks with concurrency limit
+        task_results = await asyncio.gather(*[bounded_task(t) for t in tasks], return_exceptions=True)
+        
+        # Process results and collect metrics
+        for task_result in task_results:
+            if isinstance(task_result, Exception):
+                logger.error(f"Task failed: {task_result}", exc_info=task_result)
+                continue
+            
+            if task_result and "result_type" in task_result:
+                result_type = task_result.pop("result_type")
+                results[result_type].append(task_result)
         
         total_duration = int((time.time() - total_start) * 1000)
         results["total_duration_ms"] = total_duration
@@ -151,6 +161,61 @@ class EloRankingService:
         return results
 
 
+    
+    async def _calculate_and_store_single(
+        self,
+        definition_id: Optional[int],
+        time_period_days: Optional[int],
+        calculation_year: Optional[int],
+        n_bootstraps: int,
+        result_type: str
+    ) -> Dict[str, Any]:
+        """
+        Calculate and store ELO ratings for a single configuration.
+        
+        This helper method is designed to be called in parallel with controlled
+        concurrency via semaphore.
+        
+        Args:
+            definition_id: Challenge definition ID (None for global)
+            time_period_days: Time period filter (None for year-based)
+            calculation_year: Year filter (None for period-based)
+            n_bootstraps: Number of bootstrap iterations
+            result_type: "global" or "per_definition" for result categorization
+            
+        Returns:
+            Dict with calculation results and metadata
+        """
+        try:
+            ratings = await self.calculate_elo_ratings(
+                definition_id=definition_id,
+                time_period_days=time_period_days,
+                calculation_year=calculation_year,
+                n_bootstraps=n_bootstraps
+            )
+            
+            if ratings:
+                await self._store_ratings(ratings)
+                
+                result = {
+                    "definition_id": definition_id,
+                    "time_period_days": time_period_days,
+                    "calculation_year": calculation_year,
+                    "n_models": len(ratings),
+                    "result_type": result_type  # For categorization
+                }
+                return result
+            
+            return None
+            
+        except Exception as e:
+            logger.error(
+                f"Failed to calculate ELO for def={definition_id}, "
+                f"period={time_period_days}, year={calculation_year}: {e}",
+                exc_info=True
+            )
+            # Return None on failure, will be filtered out
+            return None
     
     async def calculate_elo_ratings(
         self,
@@ -203,16 +268,15 @@ class EloRankingService:
         logger.debug(f"ELO calculation: {n_matches_total} matches, {n_models} models, "
                    f"{n_bootstraps} bootstraps ({scope_label})")
         
-        # Run bootstrapped ELO
-        all_final_ratings = np.zeros((n_bootstraps, n_models))
-        
-        for b in range(n_bootstraps):
-            final_ratings = self._run_single_bootstrap(
-                mase_matrix=mase_matrix,
-                k_factor=k_factor,
-                base_rating=base_rating
-            )
-            all_final_ratings[b] = final_ratings
+        # Run bootstrapped ELO in thread pool to avoid blocking event loop
+        # This is CPU-intensive work that would otherwise block all other async tasks
+        all_final_ratings = await asyncio.to_thread(
+            self._run_all_bootstraps,
+            mase_matrix=mase_matrix,
+            n_bootstraps=n_bootstraps,
+            k_factor=k_factor,
+            base_rating=base_rating
+        )
         
         # Calculate median and CI
         median_ratings = np.median(all_final_ratings, axis=0)
@@ -329,6 +393,40 @@ class EloRankingService:
         return matrix, match_ids, model_ids
 
 
+    
+    def _run_all_bootstraps(
+        self,
+        mase_matrix: np.ndarray,
+        n_bootstraps: int,
+        k_factor: float,
+        base_rating: float
+    ) -> np.ndarray:
+        """
+        Run all bootstrap iterations in a thread-safe manner.
+        
+        This method is designed to run in a thread pool via asyncio.to_thread()
+        to avoid blocking the async event loop with CPU-intensive calculations.
+        
+        Args:
+            mase_matrix: (n_series, n_models) matrix of MASE values
+            n_bootstraps: Number of bootstrap iterations to run
+            k_factor: ELO K-factor
+            base_rating: Starting rating for all models
+            
+        Returns:
+            Array of shape (n_bootstraps, n_models) with final ratings
+        """
+        n_models = mase_matrix.shape[1]
+        all_final_ratings = np.zeros((n_bootstraps, n_models))
+        
+        for b in range(n_bootstraps):
+            all_final_ratings[b] = self._run_single_bootstrap(
+                mase_matrix=mase_matrix,
+                k_factor=k_factor,
+                base_rating=base_rating
+            )
+        
+        return all_final_ratings
     
     def _run_single_bootstrap(
         self,
@@ -451,8 +549,9 @@ class EloRankingService:
                 calculated_at = NOW()
         """)
         
-        for rating in ratings:
-            await self.session.execute(query, {
+        # Build all parameter dicts for batch execution
+        params_list = [
+            {
                 "model_id": rating.model_id,
                 "definition_id": rating.definition_id,
                 "time_period_days": rating.time_period_days,
@@ -463,7 +562,13 @@ class EloRankingService:
                 "n_matches": rating.n_matches,
                 "n_bootstraps": rating.n_bootstraps,
                 "calculation_duration_ms": rating.calculation_duration_ms
-            })
+            }
+            for rating in ratings
+        ]
+        
+        # Execute as batch to reduce database round-trips
+        for params in params_list:
+            await self.session.execute(query, params)
         
         await self.session.commit()
         return len(ratings)
