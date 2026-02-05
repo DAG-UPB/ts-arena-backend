@@ -168,8 +168,7 @@ class ModelRepository:
                 ARRAY_AGG(DISTINCT vr.domain ORDER BY vr.domain) FILTER (WHERE vr.domain IS NOT NULL) AS domains_covered,
                 ARRAY_AGG(DISTINCT vr.category ORDER BY vr.category) FILTER (WHERE vr.category IS NOT NULL) AS categories_covered,
                 ARRAY_AGG(DISTINCT vr.frequency::INTERVAL ORDER BY vr.frequency) FILTER (WHERE vr.frequency IS NOT NULL) AS frequencies_covered,
-                ARRAY_AGG(DISTINCT vr.horizon::INTERVAL ORDER BY vr.horizon) FILTER (WHERE vr.horizon IS NOT NULL) AS horizons_covered,
-                ARRAY_AGG(DISTINCT ARRAY[cd.id::TEXT, cd.name] ORDER BY cd.name) FILTER (WHERE cd.id IS NOT NULL) AS challenge_definitions
+                ARRAY_AGG(DISTINCT vr.horizon::INTERVAL ORDER BY vr.horizon) FILTER (WHERE vr.horizon IS NOT NULL) AS horizons_covered
             FROM forecasts.v_ranking_base vr
             JOIN models.model_info mi ON mi.id = vr.model_id
             LEFT JOIN challenges.rounds r ON r.id = vr.round_id
@@ -270,19 +269,45 @@ class ModelRepository:
             cur.execute(query, tuple(params))
             rows = [dict(r) for r in cur.fetchall()]
             
+            if not rows:
+                return rows
+            
+            # Fetch definitions for returned models in a separate efficient query
+            model_ids = [r['model_id'] for r in rows]
+            cur.execute("""
+                SELECT DISTINCT 
+                    f.model_id,
+                    cd.id as definition_id,
+                    cd.name as definition_name
+                FROM forecasts.scores f
+                JOIN challenges.rounds r ON r.id = f.round_id
+                JOIN challenges.definitions cd ON cd.id = r.definition_id
+                WHERE f.model_id = ANY(%s)
+                  AND f.final_evaluation = TRUE
+                ORDER BY f.model_id, cd.name
+            """, (model_ids,))
+            
+            # Build model_id -> definitions mapping
+            model_definitions = {}
+            for def_row in cur.fetchall():
+                mid = def_row['model_id']
+                if mid not in model_definitions:
+                    model_definitions[mid] = []
+                model_definitions[mid].append({
+                    "id": def_row['definition_id'],
+                    "name": def_row['definition_name']
+                })
+            
             # Clean up float values and convert INTERVAL to ISO 8601
             for row in rows:
+                # Add definitions from lookup
+                row['challenge_definitions'] = model_definitions.get(row['model_id'], [])
+                
                 for key, value in row.items():
                     if key in ('frequencies_covered', 'horizons_covered') and value:
                         # Convert PostgreSQL INTERVAL strings to ISO 8601
                         row[key] = [self._interval_to_iso8601(iv) for iv in value]
-                    elif key == 'challenge_definitions' and value:
-                        # Convert [[id, name], ...] to [{"id": id, "name": name}, ...]
-                        row[key] = [
-                            {"id": int(item[0]), "name": item[1]} 
-                            for item in value if item and len(item) >= 2
-                        ]
-                    else:
+                    elif key != 'challenge_definitions':
                         row[key] = sanitize_float(value)
             
             return rows
