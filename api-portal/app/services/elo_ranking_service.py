@@ -78,85 +78,95 @@ class EloRankingService:
             "calculated_at": datetime.now(timezone.utc)
         }
         
-        logger.info(f"Starting ELO calculations with max_concurrent={max_concurrent}")
+        # Build ordered list of calculations (smallest datasets first)
+        # Order: 7d → 30d → 90d → 365d → years (smallest to largest)
+        calculations = []
         
-        # Gather all calculation tasks
-        tasks = []
+        # 1. Global ELO calculations (platform-wide) - ordered by size
+        # 1a. Relative time periods (7d, 30d, 90d, 365d) - smallest first
+        for period in self.TIME_PERIODS:  # Already ordered [7, 30, 90, 365]
+            calculations.append({
+                "definition_id": None,
+                "time_period_days": period,
+                "calculation_year": None,
+                "label": f"Global {period}d"
+            })
         
-        # 1. Global ELO calculations (platform-wide, across all definitions)
-        # 1a. Relative time periods (7d, 30d, 90d, 365d)
-        for period in self.TIME_PERIODS:
-            tasks.append(self._calculate_and_store_single(
-                definition_id=None,
-                time_period_days=period,
-                calculation_year=None,
-                n_bootstraps=n_bootstraps,
-                result_type="global"
-            ))
-        
-        # 1b. Calendar years (2024, 2025)
-        for year in self.TIME_YEARS:
-            tasks.append(self._calculate_and_store_single(
-                definition_id=None,
-                time_period_days=None,
-                calculation_year=year,
-                n_bootstraps=n_bootstraps,
-                result_type="global"
-            ))
+        # 1b. Calendar years (smaller = more recent, less data typically)
+        for year in sorted(self.TIME_YEARS, reverse=True):  # 2025 before 2024
+            calculations.append({
+                "definition_id": None,
+                "time_period_days": None,
+                "calculation_year": year,
+                "label": f"Global year={year}"
+            })
         
         # 2. Get all definition_ids with finalized scores
         definition_ids = await self._get_definitions_with_scores()
         logger.info(f"Found {len(definition_ids)} definitions with scores")
-
         
-        # 3. Per-definition ELO calculations
-        for def_id in definition_ids:
-            # 3a. Relative time periods
-            for period in self.TIME_PERIODS:
-                tasks.append(self._calculate_and_store_single(
-                    definition_id=def_id,
-                    time_period_days=period,
-                    calculation_year=None,
+        # 3. Per-definition ELO calculations - ordered by period size
+        for period in self.TIME_PERIODS:  # 7d first, then 30d, etc.
+            for def_id in definition_ids:
+                calculations.append({
+                    "definition_id": def_id,
+                    "time_period_days": period,
+                    "calculation_year": None,
+                    "label": f"Def {def_id} {period}d"
+                })
+        
+        # 4. Per-definition yearly calculations
+        for year in sorted(self.TIME_YEARS, reverse=True):
+            for def_id in definition_ids:
+                calculations.append({
+                    "definition_id": def_id,
+                    "time_period_days": None,
+                    "calculation_year": year,
+                    "label": f"Def {def_id} year={year}"
+                })
+        
+        total_calculations = len(calculations)
+        logger.info(f"Running {total_calculations} ELO calculations SEQUENTIALLY (smallest first)")
+        
+        # Execute calculations ONE AT A TIME
+        completed = 0
+        failed = 0
+        
+        for calc in calculations:
+            try:
+                label = calc.pop("label")
+                is_global = calc["definition_id"] is None
+                calc_start = time.time()
+                
+                result = await self._calculate_and_store_single(
+                    **calc,
                     n_bootstraps=n_bootstraps,
-                    result_type="per_definition"
-                ))
-            
-            # 3b. Calendar years
-            for year in self.TIME_YEARS:
-                tasks.append(self._calculate_and_store_single(
-                    definition_id=def_id,
-                    time_period_days=None,
-                    calculation_year=year,
-                    n_bootstraps=n_bootstraps,
-                    result_type="per_definition"
-                ))
-        
-        # Execute tasks with controlled concurrency
-        semaphore = asyncio.Semaphore(max_concurrent)
-        
-        async def bounded_task(task):
-            """Execute task with semaphore control"""
-            async with semaphore:
-                return await task
-        
-        logger.info(f"Executing {len(tasks)} ELO calculations with max {max_concurrent} concurrent")
-        
-        # Run all tasks with concurrency limit
-        task_results = await asyncio.gather(*[bounded_task(t) for t in tasks], return_exceptions=True)
-        
-        # Process results and collect metrics
-        for task_result in task_results:
-            if isinstance(task_result, Exception):
-                logger.error(f"Task failed: {task_result}", exc_info=task_result)
-                continue
-            
-            if task_result and "result_type" in task_result:
-                result_type = task_result.pop("result_type")
-                results[result_type].append(task_result)
+                    result_type="global" if is_global else "per_definition"
+                )
+                
+                calc_duration = int((time.time() - calc_start) * 1000)
+                completed += 1
+                
+                if result:
+                    result_type = result.pop("result_type", "per_definition")
+                    results[result_type].append(result)
+                    logger.info(f"[{completed}/{total_calculations}] ✓ {label} - {calc_duration}ms")
+                else:
+                    logger.info(f"[{completed}/{total_calculations}] ○ {label} - no data ({calc_duration}ms)")
+                    
+            except Exception as e:
+                failed += 1
+                completed += 1
+                logger.error(f"[{completed}/{total_calculations}] ✗ {label} failed: {e}")
         
         total_duration = int((time.time() - total_start) * 1000)
         results["total_duration_ms"] = total_duration
-        logger.info(f"ELO calculation complete. Total time: {total_duration}ms")
+        
+        logger.info(
+            f"ELO calculation complete. "
+            f"Total: {completed}, Failed: {failed}, "
+            f"Duration: {total_duration}ms ({total_duration/1000:.1f}s)"
+        )
         
         return results
 
