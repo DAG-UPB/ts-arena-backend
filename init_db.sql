@@ -782,93 +782,83 @@ COMMENT ON MATERIALIZED VIEW data_portal.time_series_1d IS
 'Continuous aggregate for daily data. Aggregates all time series with frequency <= 1 day.';
 
 -- ==========================================================
--- 11) ELO Rating System (Bootstrapped)
+-- 11) Daily Rankings System (Bootstrapped ELO Snapshots)
 -- ==========================================================
 
--- ELO Ratings Table
--- Stores bootstrapped ELO ratings per model, optionally scoped to definition
-CREATE TABLE IF NOT EXISTS forecasts.elo_ratings (
+-- Daily Rankings Table (Fact Table)
+-- Stores daily ELO snapshots per model, scoped by type
+CREATE TABLE IF NOT EXISTS forecasts.daily_rankings (
     id SERIAL PRIMARY KEY,
+    calculation_date DATE NOT NULL,
     model_id INTEGER NOT NULL REFERENCES models.model_info(id) ON DELETE CASCADE,
-    definition_id INTEGER REFERENCES challenges.definitions(id) ON DELETE CASCADE,
-    -- NULL = Global ELO across all challenges
-    -- NOT NULL = Definition-specific ELO
     
-    time_period_days INTEGER,
-    -- NULL = All-time (no time filter) or Yearly
-    -- 7, 30, 90, 365 = Last N days based on challenges.rounds.end_time
+    -- Scope: defines WHAT this ranking applies to
+    -- 'global' = platform-wide ranking across all challenges
+    -- 'definition' = per challenge definition ranking (scope_id = definition_id)
+    -- 'frequency_horizon' = grouped by frequency+horizon (scope_id = e.g. '00:15:00_1 day')
+    scope_type TEXT NOT NULL CHECK (scope_type IN ('global', 'definition', 'frequency_horizon')),
+    scope_id TEXT,  -- NULL for global, definition_id as string, or "frequency_horizon" key
     
-    calculation_year INTEGER,
-    -- NULL = Relative time-period or All-time
-    -- 2024, 2025, etc.
-    
-    -- ELO Scores (Median + Confidence Interval from 500 bootstraps)
-    elo_score DOUBLE PRECISION NOT NULL,
-    elo_ci_lower DOUBLE PRECISION,  -- 2.5% Quantile
-    elo_ci_upper DOUBLE PRECISION,  -- 97.5% Quantile
+    -- ELO Results from Bootstrapping
+    elo_rating_median DOUBLE PRECISION NOT NULL,
+    elo_ci_lower DOUBLE PRECISION,
+    elo_ci_upper DOUBLE PRECISION,
     
     -- Metadata
-    n_matches INTEGER DEFAULT 0,        -- Number of series/matches included
-    n_bootstraps INTEGER DEFAULT 500,   -- Number of bootstrap iterations
-    
-    -- Performance tracking
-    calculation_duration_ms INTEGER,    -- Duration of calculation in ms
+    matches_played INTEGER DEFAULT 0,
+    rank_position INTEGER,
+    n_bootstraps INTEGER DEFAULT 500,
+    calculation_duration_ms INTEGER,
     calculated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Unique constraint: one row per model per scope (definition + time period + year)
--- COALESCE handles NULL values: definition_id=-1, time_period_days=0, calculation_year=0
-CREATE UNIQUE INDEX IF NOT EXISTS idx_elo_unique_model_scope 
-ON forecasts.elo_ratings(
+-- Unique constraint: one row per model per scope per day
+CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_rankings_unique 
+ON forecasts.daily_rankings(
+    calculation_date, 
     model_id, 
-    COALESCE(definition_id, -1), 
-    COALESCE(time_period_days, 0),
-    COALESCE(calculation_year, 0)
+    scope_type, 
+    COALESCE(scope_id, '')
 );
 
 -- Indexes for fast lookups
-CREATE INDEX IF NOT EXISTS idx_elo_model ON forecasts.elo_ratings(model_id);
-CREATE INDEX IF NOT EXISTS idx_elo_definition ON forecasts.elo_ratings(definition_id) WHERE definition_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_elo_time_period ON forecasts.elo_ratings(time_period_days) WHERE time_period_days IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_elo_year ON forecasts.elo_ratings(calculation_year) WHERE calculation_year IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_elo_score_desc ON forecasts.elo_ratings(elo_score DESC);
-CREATE INDEX IF NOT EXISTS idx_elo_calculated_at ON forecasts.elo_ratings(calculated_at);
+CREATE INDEX IF NOT EXISTS idx_daily_rankings_date ON forecasts.daily_rankings(calculation_date);
+CREATE INDEX IF NOT EXISTS idx_daily_rankings_model ON forecasts.daily_rankings(model_id);
+CREATE INDEX IF NOT EXISTS idx_daily_rankings_scope ON forecasts.daily_rankings(scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_daily_rankings_score_desc ON forecasts.daily_rankings(elo_rating_median DESC);
 
+COMMENT ON TABLE forecasts.daily_rankings IS 
+'Daily ELO ranking snapshots. Each row represents a model''s ELO score for a specific date and scope.
+Scopes: global (all challenges), definition (per challenge definition), frequency_horizon (grouped by frequency+horizon).
+Uses full historical data (no time-window truncation) for maximum statistical robustness.';
 
+COMMENT ON COLUMN forecasts.daily_rankings.calculation_date IS 
+'The date this snapshot was calculated. Used for trajectory visualization over time.';
 
+COMMENT ON COLUMN forecasts.daily_rankings.scope_type IS 
+'Type of ranking scope: global, definition, or frequency_horizon.';
 
--- Performance index for ELO calculation queries
-CREATE INDEX IF NOT EXISTS idx_scores_elo_lookup 
-ON forecasts.scores(series_id, model_id, mase) 
-WHERE mase IS NOT NULL AND final_evaluation = TRUE;
+COMMENT ON COLUMN forecasts.daily_rankings.scope_id IS 
+'Scope identifier. NULL for global, definition_id for definition, or "frequency::horizon" for frequency_horizon.';
 
-COMMENT ON TABLE forecasts.elo_ratings IS 
-'Bootstrapped ELO ratings for models. Each row represents a model''s ELO score, either global (definition_id IS NULL) or for a specific challenge definition. 
-Calculated via 100 bootstrap iterations where each time series is a "match" comparing models by MASE.';
-
-COMMENT ON COLUMN forecasts.elo_ratings.elo_score IS 
+COMMENT ON COLUMN forecasts.daily_rankings.elo_rating_median IS 
 'Median ELO rating from N bootstrap iterations. Higher is better. Base rating is 1000.';
 
-COMMENT ON COLUMN forecasts.elo_ratings.elo_ci_lower IS 
-'2.5% quantile of ELO ratings from bootstraps (lower bound of 95% CI).';
-
-COMMENT ON COLUMN forecasts.elo_ratings.elo_ci_upper IS 
-'97.5% quantile of ELO ratings from bootstraps (upper bound of 95% CI).';
-
-COMMENT ON COLUMN forecasts.elo_ratings.calculation_duration_ms IS 
-'Time taken to calculate this ELO rating in milliseconds. Used for performance monitoring.';
-
--- View: ELO Leaderboard with model and definition info
-CREATE OR REPLACE VIEW forecasts.v_elo_leaderboard AS
+-- View: Daily Rankings Leaderboard with model and definition info
+CREATE OR REPLACE VIEW forecasts.v_daily_rankings_leaderboard AS
 SELECT 
-    er.id as elo_id,
-    er.elo_score,
-    er.elo_ci_lower,
-    er.elo_ci_upper,
-    er.n_matches,
-    er.n_bootstraps,
-    er.calculation_duration_ms,
-    er.calculated_at,
+    dr.id,
+    dr.calculation_date,
+    dr.elo_rating_median,
+    dr.elo_ci_lower,
+    dr.elo_ci_upper,
+    dr.matches_played,
+    dr.rank_position,
+    dr.n_bootstraps,
+    dr.calculation_duration_ms,
+    dr.calculated_at,
+    dr.scope_type,
+    dr.scope_id,
     -- Model info
     mi.id as model_id,
     mi.name as model_name,
@@ -878,25 +868,19 @@ SELECT
     -- User info
     u.username,
     o.name as organization_name,
-    -- Definition info (NULL for global ELO)
-    er.definition_id,
-    cd.name as definition_name,
-    cd.schedule_id as definition_schedule_id,
-    -- Rank within scope
-    ROW_NUMBER() OVER (
-        PARTITION BY er.definition_id 
-        ORDER BY er.elo_score DESC
-    ) as rank
-FROM forecasts.elo_ratings er
-JOIN models.model_info mi ON er.model_id = mi.id
+    -- Definition info (only for scope_type='definition')
+    CASE WHEN dr.scope_type = 'definition' THEN cd.name END as definition_name,
+    CASE WHEN dr.scope_type = 'definition' THEN cd.schedule_id END as definition_schedule_id
+FROM forecasts.daily_rankings dr
+JOIN models.model_info mi ON dr.model_id = mi.id
 JOIN auth.users u ON mi.user_id = u.id
 LEFT JOIN auth.organizations o ON mi.organization_id = o.id
-LEFT JOIN challenges.definitions cd ON er.definition_id = cd.id
-ORDER BY er.definition_id NULLS FIRST, er.elo_score DESC;
+LEFT JOIN challenges.definitions cd ON dr.scope_type = 'definition' AND dr.scope_id = cd.id::text
+ORDER BY dr.calculation_date DESC, dr.scope_type, dr.scope_id NULLS FIRST, dr.elo_rating_median DESC;
 
-COMMENT ON VIEW forecasts.v_elo_leaderboard IS 
-'Leaderboard view combining ELO ratings with model and definition metadata. 
-Includes rank within each scope (global or per-definition).';
+COMMENT ON VIEW forecasts.v_daily_rankings_leaderboard IS 
+'Leaderboard view combining daily rankings with model metadata. 
+Query by calculation_date and scope_type/scope_id for specific leaderboards.';
 
 -- ==========================================================
 -- Final message

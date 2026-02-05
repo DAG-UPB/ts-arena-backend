@@ -146,8 +146,9 @@ async def periodic_elo_ranking_calculation_job() -> None:
     This job runs 4x daily (every 6 hours) and:
     1. Calculates global ELO rating across all challenges
     2. Calculates per-definition ELO ratings
-    3. Stores results in forecasts.elo_ratings table
-    4. Logs timing metrics for performance monitoring
+    3. Calculates per-frequency+horizon ELO ratings
+    4. Stores results in forecasts.daily_rankings table
+    5. Logs timing metrics for performance monitoring
     """
     logger = logging.getLogger("challenge-scheduler")
     logger.info("Starting periodic ELO ranking calculation job")
@@ -169,12 +170,13 @@ async def periodic_elo_ranking_calculation_job() -> None:
             # Extract metrics
             n_global = len(results.get("global", []))
             n_definitions = len(results.get("per_definition", []))
+            n_freq_horizon = len(results.get("per_frequency_horizon", []))
             total_duration_ms = results.get("total_duration_ms", 0)
             
             # Log success with detailed metrics
             logger.info(
                 f"✅ ELO calculation SUCCESS in {duration_seconds:.1f}s. "
-                f"Global rankings: {n_global}, Per-definition rankings: {n_definitions}, "
+                f"Global: {n_global}, Definitions: {n_definitions}, FreqHorizon: {n_freq_horizon}, "
                 f"Total calculation time: {total_duration_ms}ms"
             )
 
@@ -226,11 +228,12 @@ async def startup_elo_check_job() -> None:
             
             n_global = len(results.get('global', []))
             n_definitions = len(results.get('per_definition', []))
+            n_freq_horizon = len(results.get('per_frequency_horizon', []))
             total_time = results.get('total_duration_ms', 0)
             
             logger.info(
                 f"✅ Startup ELO calculation complete in {duration_seconds:.1f}s. "
-                f"Global: {n_global}, Definitions: {n_definitions}, "
+                f"Global: {n_global}, Definitions: {n_definitions}, FreqHorizon: {n_freq_horizon}, "
                 f"Calculation time: {total_time}ms"
             )
 
