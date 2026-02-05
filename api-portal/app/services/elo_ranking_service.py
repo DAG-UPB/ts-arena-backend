@@ -40,8 +40,9 @@ class EloRankingService:
     DEFAULT_BASE_RATING = 1000.0
     DEFAULT_N_BOOTSTRAPS = 500
     
-    # Time periods to calculate: None = all-time, then 7, 30, 90, 365 days
-    TIME_PERIODS = [None, 7, 30, 90, 365]
+    # Time periods to calculate (relative to now)
+    TIME_PERIODS = [7, 30, 90, 365]
+
     
     # Calendar years to calculate
     TIME_YEARS = [2024, 2025]
@@ -55,10 +56,9 @@ class EloRankingService:
     ) -> Dict[str, Any]:
         """
         Calculate and store ELO ratings for:
-        1. Global rankings (all-time + each time period + each year)
-        2. Per-definition rankings (all-time + each time period + each year)
+        1. Global rankings (each time period + each year)
+        2. Per-definition rankings (each time period + each year)
         
-        Returns:
             Summary dict with calculation results and timing
         """
         total_start = time.time()
@@ -69,43 +69,10 @@ class EloRankingService:
             "calculated_at": datetime.now(timezone.utc)
         }
         
-        # 1. Global ELO calculations
-        logger.info("Calculating global ELO ratings...")
-        
-        # 1a. Relative time periods
-        for period in self.TIME_PERIODS:
-            period_label = f"{period}d" if period else "all-time"
-            ratings = await self.calculate_elo_ratings(
-                definition_id=None,
-                time_period_days=period,
-                n_bootstraps=n_bootstraps
-            )
-            if ratings:
-                await self._store_ratings(ratings)
-                results["global"].append({
-                    "time_period_days": period,
-                    "calculation_year": None,
-                    "n_models": len(ratings)
-                })
-        
-        # 1b. Calendar years
-        for year in self.TIME_YEARS:
-            ratings = await self.calculate_elo_ratings(
-                definition_id=None,
-                calculation_year=year,
-                n_bootstraps=n_bootstraps
-            )
-            if ratings:
-                await self._store_ratings(ratings)
-                results["global"].append({
-                    "time_period_days": None,
-                    "calculation_year": year,
-                    "n_models": len(ratings)
-                })
-        
-        # 2. Get all definition_ids with finalized scores
+        # 1. Get all definition_ids with finalized scores
         definition_ids = await self._get_definitions_with_scores()
         logger.info(f"Found {len(definition_ids)} definitions with scores")
+
         
         # 3. Per-definition ELO calculations
         for def_id in definition_ids:

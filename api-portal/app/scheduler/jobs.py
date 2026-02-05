@@ -162,21 +162,13 @@ async def periodic_elo_ranking_calculation_job() -> None:
 
             
             # Log results
-            if results.get("global"):
-                logger.info(
-                    f"Global ELO: {results['global']['n_models']} models rated "
-                    f"in {results['global']['duration_ms']}ms"
-                )
-            
-            for def_result in results.get("per_definition", []):
-                logger.info(
-                    f"Definition {def_result['definition_id']} ELO: "
-                    f"{def_result['n_models']} models in {def_result['duration_ms']}ms"
-                )
+            n_definitions = len(results.get("per_definition", []))
             
             logger.info(
-                f"ELO calculation complete. Total time: {results['total_duration_ms']}ms"
+                f"ELO calculation complete: {n_definitions} definitions processed. "
+                f"Total time: {results['total_duration_ms']}ms"
             )
+
     
     except Exception as e:
         logger.exception(f"Failed to run periodic ELO ranking calculation: {e}")
@@ -214,17 +206,14 @@ async def startup_elo_check_job() -> None:
                 logger.info("Startup ELO calculation: No data available for ranking.")
                 return
             
-            global_info = results.get('global') or {}
-            n_models = global_info.get('n_models', 0)
             n_definitions = len(results.get('per_definition') or [])
             total_time = results.get('total_duration_ms', 0)
             
             logger.info(
                 f"Startup ELO calculation complete. "
-                f"Global: {n_models} models, "
-                f"Definitions: {n_definitions}, "
-                f"Total time: {total_time}ms"
+                f"Processed {n_definitions} definitions in {total_time}ms"
             )
+
     
     except Exception as e:
         logger.exception(f"Failed to run startup ELO check: {e}")
