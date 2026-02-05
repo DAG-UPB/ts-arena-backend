@@ -320,7 +320,7 @@ class RoundRepository:
     def _get_leaderboard_from_scores(self, round_id: int) -> List[Dict[str, Any]]:
         """
         Get leaderboard from pre-calculated scores in forecasts.scores table.
-        Returns one row per model-series combination.
+        Returns one row per model-series combination, ranked per series.
         """
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
@@ -332,21 +332,21 @@ class RoundRepository:
                     cs.series_id,
                     cs.forecast_count,
                     cs.mase,
-                    cs.rmse
+                    cs.rmse,
+                    RANK() OVER (PARTITION BY cs.series_id ORDER BY cs.mase ASC NULLS LAST) as rank
                 FROM forecasts.scores cs
                 JOIN models.model_info mi ON mi.id = cs.model_id
                 WHERE cs.round_id = %s
                     AND cs.final_evaluation = TRUE
                     AND cs.mase IS NOT NULL
-                ORDER BY cs.mase ASC NULLS LAST, mi.name ASC, cs.series_id ASC
+                ORDER BY cs.series_id ASC, rank ASC, mi.name ASC
                 """,
                 (round_id,)
             )
             rows = [dict(r) for r in cur.fetchall()]
             
-            # Add rank and sanitize values
-            for idx, row in enumerate(rows, start=1):
-                row['rank'] = idx
+            # Sanitize values and add is_final flag
+            for row in rows:
                 row['is_final'] = True
                 # Sanitize float values
                 for key in ['mase', 'rmse']:
@@ -444,16 +444,23 @@ class RoundRepository:
                     'is_final': False
                 })
             
-            # Sort by mase ascending (None values last), then by model_name, then by series_id
+            # Sort by series_id first, then by mase within each series
             leaderboard.sort(key=lambda x: (
+                x['series_id'] or 0,
                 x['mase'] is None, 
                 x['mase'] or float('inf'),
-                x['model_name'] or '',
-                x['series_id'] or 0
+                x['model_name'] or ''
             ))
             
-            # Add rank
-            for idx, item in enumerate(leaderboard, start=1):
-                item['rank'] = idx
+            # Add rank per series
+            current_series_id = None
+            current_rank = 0
+            for item in leaderboard:
+                if item['series_id'] != current_series_id:
+                    current_series_id = item['series_id']
+                    current_rank = 1
+                else:
+                    current_rank += 1
+                item['rank'] = current_rank
             
             return leaderboard
