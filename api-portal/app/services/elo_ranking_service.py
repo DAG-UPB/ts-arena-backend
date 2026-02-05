@@ -15,6 +15,7 @@ class EloRating:
     """Represents an ELO rating result."""
     model_id: int
     definition_id: Optional[int]
+    time_period_days: Optional[int]  # None = all-time, 7/30/90/365 = last N days
     elo_score: float
     elo_ci_lower: float
     elo_ci_upper: float
@@ -38,6 +39,9 @@ class EloRankingService:
     DEFAULT_BASE_RATING = 1000.0
     DEFAULT_N_BOOTSTRAPS = 500
     
+    # Time periods to calculate: None = all-time, then 7, 30, 90, 365 days
+    TIME_PERIODS = [None, 7, 30, 90, 365]
+    
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
     
@@ -47,65 +51,78 @@ class EloRankingService:
     ) -> Dict[str, Any]:
         """
         Calculate and store ELO ratings for:
-        1. Global ranking (all challenges combined)
-        2. Per-definition rankings
+        1. Global rankings (all-time + each time period)
+        2. Per-definition rankings (all-time + each time period)
         
         Returns:
             Summary dict with calculation results and timing
         """
         total_start = time.time()
         results = {
-            "global": None,
+            "global": [],
             "per_definition": [],
             "total_duration_ms": 0,
             "calculated_at": datetime.now(timezone.utc)
         }
         
-        # 1. Calculate global ELO
-        logger.info("Calculating global ELO ratings...")
-        global_ratings = await self.calculate_elo_ratings(
-            definition_id=None,
-            n_bootstraps=n_bootstraps
-        )
-        if global_ratings:
-            await self._store_ratings(global_ratings)
-            results["global"] = {
-                "n_models": len(global_ratings),
-                "duration_ms": global_ratings[0].calculation_duration_ms if global_ratings else 0
-            }
-            logger.info(f"Global ELO: {len(global_ratings)} models rated")
+        # 1. Calculate global ELO for all time periods
+        logger.info("Calculating global ELO ratings for all time periods...")
+        for period in self.TIME_PERIODS:
+            period_label = f"{period}d" if period else "all-time"
+            try:
+                ratings = await self.calculate_elo_ratings(
+                    definition_id=None,
+                    time_period_days=period,
+                    n_bootstraps=n_bootstraps
+                )
+                if ratings:
+                    await self._store_ratings(ratings)
+                    results["global"].append({
+                        "time_period_days": period,
+                        "n_models": len(ratings),
+                        "duration_ms": ratings[0].calculation_duration_ms if ratings else 0
+                    })
+                    logger.info(f"Global ELO ({period_label}): {len(ratings)} models rated")
+            except Exception as e:
+                logger.exception(f"Failed global ELO for {period_label}: {e}")
         
         # 2. Get all definition_ids with finalized scores
         definition_ids = await self._get_definitions_with_scores()
         logger.info(f"Found {len(definition_ids)} definitions with scores")
         
-        # 3. Calculate per-definition ELO
+        # 3. Calculate per-definition ELO for all time periods
         for def_id in definition_ids:
-            try:
-                ratings = await self.calculate_elo_ratings(
-                    definition_id=def_id,
-                    n_bootstraps=n_bootstraps
-                )
-                if ratings:
-                    await self._store_ratings(ratings)
-                    results["per_definition"].append({
-                        "definition_id": def_id,
-                        "n_models": len(ratings),
-                        "duration_ms": ratings[0].calculation_duration_ms if ratings else 0
-                    })
-                    logger.info(f"Definition {def_id} ELO: {len(ratings)} models rated")
-            except Exception as e:
-                logger.exception(f"Failed to calculate ELO for definition {def_id}: {e}")
+            for period in self.TIME_PERIODS:
+                period_label = f"{period}d" if period else "all-time"
+                try:
+                    ratings = await self.calculate_elo_ratings(
+                        definition_id=def_id,
+                        time_period_days=period,
+                        n_bootstraps=n_bootstraps
+                    )
+                    if ratings:
+                        await self._store_ratings(ratings)
+                        results["per_definition"].append({
+                            "definition_id": def_id,
+                            "time_period_days": period,
+                            "n_models": len(ratings),
+                            "duration_ms": ratings[0].calculation_duration_ms if ratings else 0
+                        })
+                        logger.debug(f"Definition {def_id} ELO ({period_label}): {len(ratings)} models")
+                except Exception as e:
+                    logger.exception(f"Failed ELO for def {def_id} ({period_label}): {e}")
         
         total_duration = int((time.time() - total_start) * 1000)
         results["total_duration_ms"] = total_duration
         logger.info(f"ELO calculation complete. Total time: {total_duration}ms")
         
         return results
+
     
     async def calculate_elo_ratings(
         self,
         definition_id: Optional[int] = None,
+        time_period_days: Optional[int] = None,
         n_bootstraps: int = DEFAULT_N_BOOTSTRAPS,
         k_factor: float = DEFAULT_K_FACTOR,
         base_rating: float = DEFAULT_BASE_RATING
@@ -116,7 +133,9 @@ class EloRankingService:
         Args:
             definition_id: If provided, filter to this challenge definition.
                           If None, calculate global ELO across all challenges.
-            n_bootstraps: Number of bootstrap iterations (default 100)
+            time_period_days: If provided, only include matches from the last N days.
+                             If None, include all-time data.
+            n_bootstraps: Number of bootstrap iterations (default 500)
             k_factor: ELO K-factor for rating updates
             base_rating: Starting ELO rating (default 1000)
             
@@ -124,18 +143,22 @@ class EloRankingService:
             List of EloRating objects, sorted by elo_score descending
         """
         start_time = time.time()
+        scope_label = f"def={definition_id}, period={time_period_days}d" if time_period_days else f"def={definition_id}, all-time"
         
         # Get scores matrix
-        mase_matrix, series_ids, model_ids = await self._get_scores_matrix(definition_id)
+        mase_matrix, series_ids, model_ids = await self._get_scores_matrix(
+            definition_id=definition_id,
+            time_period_days=time_period_days
+        )
         
         if mase_matrix.size == 0 or len(model_ids) < 2:
-            logger.warning(f"Not enough data for ELO (definition_id={definition_id}): "
-                          f"{len(series_ids)} series, {len(model_ids)} models")
+            logger.debug(f"Not enough data for ELO ({scope_label}): "
+                        f"{len(series_ids)} series, {len(model_ids)} models")
             return []
         
         n_series, n_models = mase_matrix.shape
-        logger.info(f"ELO calculation: {n_series} series, {n_models} models, "
-                   f"{n_bootstraps} bootstraps (definition_id={definition_id})")
+        logger.debug(f"ELO calculation: {n_series} series, {n_models} models, "
+                   f"{n_bootstraps} bootstraps ({scope_label})")
         
         # Run bootstrapped ELO
         all_final_ratings = np.zeros((n_bootstraps, n_models))
@@ -164,6 +187,7 @@ class EloRankingService:
             results.append(EloRating(
                 model_id=model_id,
                 definition_id=definition_id,
+                time_period_days=time_period_days,
                 elo_score=float(median_ratings[i]),
                 elo_ci_lower=float(ci_lower[i]),
                 elo_ci_upper=float(ci_upper[i]),
@@ -175,54 +199,60 @@ class EloRankingService:
         # Sort by ELO descending
         results.sort(key=lambda x: x.elo_score, reverse=True)
         
-        logger.info(f"ELO calculation done in {duration_ms}ms (definition_id={definition_id})")
+        logger.debug(f"ELO done in {duration_ms}ms ({scope_label})")
         return results
+
     
     async def _get_scores_matrix(
         self,
-        definition_id: Optional[int] = None
+        definition_id: Optional[int] = None,
+        time_period_days: Optional[int] = None
     ) -> Tuple[np.ndarray, List[int], List[int]]:
         """
         Build pivot matrix: rows=series_id, cols=model_id, values=MASE.
         
+        Args:
+            definition_id: Filter to this definition (None = all)
+            time_period_days: Filter to rounds ending in last N days (None = all-time)
+        
         Returns:
             tuple: (mase_matrix, series_ids, model_ids)
         """
-        # Query all finalized scores
-        if definition_id is not None:
-            query = text("""
-                SELECT fs.series_id, fs.model_id, fs.mase
-                FROM forecasts.scores fs
-                JOIN challenges.rounds cr ON fs.round_id = cr.id
-                WHERE fs.final_evaluation = TRUE
-                  AND fs.mase IS NOT NULL
-                  AND fs.mase != 'NaN'
-                  AND fs.mase != 'Infinity'
-                  AND fs.mase != '-Infinity'
-                  AND cr.definition_id = :definition_id
-                ORDER BY fs.series_id, fs.model_id
-            """)
-            result = await self.session.execute(query, {"definition_id": definition_id})
-        else:
-            query = text("""
-                SELECT series_id, model_id, mase
-                FROM forecasts.scores
-                WHERE final_evaluation = TRUE
-                  AND mase IS NOT NULL
-                  AND mase != 'NaN'
-                  AND mase != 'Infinity'
-                  AND mase != '-Infinity'
-                ORDER BY series_id, model_id
-            """)
-            result = await self.session.execute(query)
+        # Build dynamic query with optional filters
+        # Always join to challenges.rounds for time filtering
+        base_query = """
+            SELECT fs.series_id, fs.model_id, fs.mase
+            FROM forecasts.scores fs
+            JOIN challenges.rounds cr ON fs.round_id = cr.id
+            WHERE fs.final_evaluation = TRUE
+              AND fs.mase IS NOT NULL
+              AND fs.mase != 'NaN'
+              AND fs.mase != 'Infinity'
+              AND fs.mase != '-Infinity'
+        """
         
+        params = {}
+        
+        # Add definition filter
+        if definition_id is not None:
+            base_query += " AND cr.definition_id = :definition_id"
+            params["definition_id"] = definition_id
+        
+        # Add time period filter
+        if time_period_days is not None:
+            base_query += " AND cr.end_time >= NOW() - INTERVAL ':days days'"
+            # Note: interval syntax requires direct substitution for safety
+            base_query = base_query.replace(":days", str(int(time_period_days)))
+        
+        base_query += " ORDER BY fs.series_id, fs.model_id"
+        
+        result = await self.session.execute(text(base_query), params)
         rows = result.fetchall()
         
         if not rows:
             return np.array([]), [], []
         
         # Build pivot matrix
-        # Get unique series and model IDs
         series_set = set()
         model_set = set()
         data_dict = {}
@@ -248,6 +278,7 @@ class EloRankingService:
             matrix[i, j] = mase
         
         return matrix, series_ids, model_ids
+
     
     def _run_single_bootstrap(
         self,
@@ -349,14 +380,15 @@ class EloRankingService:
             return 0
         
         # Use raw SQL for UPSERT with COALESCE for NULL handling
+        # The unique index is on (model_id, COALESCE(definition_id, -1), COALESCE(time_period_days, 0))
         query = text("""
             INSERT INTO forecasts.elo_ratings 
-                (model_id, definition_id, elo_score, elo_ci_lower, elo_ci_upper, 
+                (model_id, definition_id, time_period_days, elo_score, elo_ci_lower, elo_ci_upper, 
                  n_matches, n_bootstraps, calculation_duration_ms, calculated_at)
             VALUES 
-                (:model_id, :definition_id, :elo_score, :elo_ci_lower, :elo_ci_upper,
+                (:model_id, :definition_id, :time_period_days, :elo_score, :elo_ci_lower, :elo_ci_upper,
                  :n_matches, :n_bootstraps, :calculation_duration_ms, NOW())
-            ON CONFLICT (model_id, COALESCE(definition_id, -1))
+            ON CONFLICT (model_id, COALESCE(definition_id, -1), COALESCE(time_period_days, 0))
             DO UPDATE SET
                 elo_score = EXCLUDED.elo_score,
                 elo_ci_lower = EXCLUDED.elo_ci_lower,
@@ -371,6 +403,7 @@ class EloRankingService:
             await self.session.execute(query, {
                 "model_id": rating.model_id,
                 "definition_id": rating.definition_id,
+                "time_period_days": rating.time_period_days,
                 "elo_score": rating.elo_score,
                 "elo_ci_lower": rating.elo_ci_lower,
                 "elo_ci_upper": rating.elo_ci_upper,
@@ -381,6 +414,7 @@ class EloRankingService:
         
         await self.session.commit()
         return len(ratings)
+
     
     async def has_calculated_today(self) -> bool:
         """

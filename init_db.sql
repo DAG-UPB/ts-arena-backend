@@ -786,29 +786,36 @@ CREATE TABLE IF NOT EXISTS forecasts.elo_ratings (
     -- NULL = Global ELO across all challenges
     -- NOT NULL = Definition-specific ELO
     
-    -- ELO Scores (Median + Confidence Interval from 100 bootstraps)
+    time_period_days INTEGER,
+    -- NULL = All-time (no time filter)
+    -- 7, 30, 90, 365 = Last N days based on challenges.rounds.end_time
+    
+    -- ELO Scores (Median + Confidence Interval from 500 bootstraps)
     elo_score DOUBLE PRECISION NOT NULL,
     elo_ci_lower DOUBLE PRECISION,  -- 2.5% Quantile
     elo_ci_upper DOUBLE PRECISION,  -- 97.5% Quantile
     
     -- Metadata
     n_matches INTEGER DEFAULT 0,        -- Number of series/matches included
-    n_bootstraps INTEGER DEFAULT 100,   -- Number of bootstrap iterations
+    n_bootstraps INTEGER DEFAULT 500,   -- Number of bootstrap iterations
     
     -- Performance tracking
     calculation_duration_ms INTEGER,    -- Duration of calculation in ms
     calculated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Unique constraint: one row per model per scope (NULL = global, otherwise per-definition)
+-- Unique constraint: one row per model per scope (definition + time period)
+-- COALESCE handles NULL values: definition_id=-1 means global, time_period_days=0 means all-time
 CREATE UNIQUE INDEX IF NOT EXISTS idx_elo_unique_model_scope 
-ON forecasts.elo_ratings(model_id, COALESCE(definition_id, -1));
+ON forecasts.elo_ratings(model_id, COALESCE(definition_id, -1), COALESCE(time_period_days, 0));
 
 -- Indexes for fast lookups
 CREATE INDEX IF NOT EXISTS idx_elo_model ON forecasts.elo_ratings(model_id);
 CREATE INDEX IF NOT EXISTS idx_elo_definition ON forecasts.elo_ratings(definition_id) WHERE definition_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_elo_time_period ON forecasts.elo_ratings(time_period_days) WHERE time_period_days IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_elo_score_desc ON forecasts.elo_ratings(elo_score DESC);
 CREATE INDEX IF NOT EXISTS idx_elo_calculated_at ON forecasts.elo_ratings(calculated_at);
+
 
 
 -- Performance index for ELO calculation queries
