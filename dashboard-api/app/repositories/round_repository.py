@@ -27,6 +27,16 @@ class RoundRepository:
     def __init__(self, conn):
         self.conn = conn
 
+    def get_round_status(self, round_id: int) -> Optional[str]:
+        """Get the status of a round."""
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT status FROM challenges.rounds WHERE id = %s",
+                (round_id,),
+            )
+            row = cur.fetchone()
+            return row['status'] if row else None
+
     def get_round_meta(self, round_id: int) -> Optional[Dict[str, Any]]:
         """Fetch metadata for a round."""
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
