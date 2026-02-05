@@ -660,9 +660,17 @@ ON challenges.series_pseudo(series_id);
 CREATE INDEX idx_forecasts_round_model 
 ON forecasts.forecasts(round_id, model_id);
 
+-- Composite index for round + series queries (used by dashboard get_series_forecasts)
+CREATE INDEX IF NOT EXISTS idx_forecasts_round_series 
+ON forecasts.forecasts(round_id, series_id);
+
 CREATE INDEX IF NOT EXISTS idx_forecasts_series_id ON forecasts.forecasts(series_id);
 CREATE INDEX IF NOT EXISTS idx_scores_series_id ON forecasts.scores(series_id);
 CREATE INDEX IF NOT EXISTS idx_context_data_series_id ON challenges.context_data(series_id);
+
+-- Composite index for series_pseudo lookups by round + series
+CREATE INDEX IF NOT EXISTS idx_series_pseudo_round_series 
+ON challenges.series_pseudo(round_id, series_id);
 
 
 -- ==========================================================

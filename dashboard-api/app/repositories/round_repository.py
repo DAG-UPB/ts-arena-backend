@@ -122,7 +122,19 @@ class RoundRepository:
              table_name = "data_portal.time_series_data"
 
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # Optimized query: Use CTE to compute latest_observed_value ONCE
+            # instead of a correlated subquery that runs for every row
             query = f"""
+                WITH latest_obs AS (
+                    -- Compute once: get the latest observed value from series_pseudo
+                    SELECT tsd_v.value as latest_observed_value
+                    FROM {table_name} tsd_v
+                    INNER JOIN challenges.series_pseudo sp 
+                        ON sp.series_id = tsd_v.series_id 
+                        AND tsd_v.ts = sp.max_ts
+                    WHERE sp.round_id = %s AND sp.series_id = %s
+                    LIMIT 1
+                )
                 SELECT
                     f.id as forecast_id,
                     f.created_at,
@@ -132,25 +144,17 @@ class RoundRepository:
                     f.ts,
                     f.predicted_value as value,
                     f.probabilistic_values as confidence_intervals,
-                    -- Flattened subquery to extract the latest observed value
-                    (
-                        SELECT tsd_v.value
-                        FROM {table_name} tsd_v
-                        INNER JOIN challenges.series_pseudo sp ON sp.series_id = tsd_v.series_id
-                        WHERE sp.round_id = f.round_id
-                            AND sp.series_id = f.series_id
-                            AND tsd_v.ts = sp.max_ts
-                        LIMIT 1
-                    ) as latest_observed_value,
+                    lo.latest_observed_value,
                     tsd.value::FLOAT as current_value
                 FROM forecasts.forecasts f
                 JOIN models.model_info mi ON mi.id = f.model_id
                 LEFT JOIN {table_name} tsd ON tsd.series_id = f.series_id AND tsd.ts = f.ts
+                CROSS JOIN latest_obs lo
                 WHERE f.round_id = %s AND f.series_id = %s
                 ORDER BY f.created_at ASC, f.ts ASC;
             """
             
-            cur.execute(query, (round_id, series_id))
+            cur.execute(query, (round_id, series_id, round_id, series_id))
             rows = [dict(row) for row in cur.fetchall()]
             
             if not rows:
