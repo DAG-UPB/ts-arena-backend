@@ -672,6 +672,18 @@ CREATE INDEX IF NOT EXISTS idx_context_data_series_id ON challenges.context_data
 CREATE INDEX IF NOT EXISTS idx_series_pseudo_round_series 
 ON challenges.series_pseudo(round_id, series_id);
 
+-- Index for model-based filtering on forecasts (critical for deletions and model queries)
+CREATE INDEX IF NOT EXISTS idx_forecasts_model_id 
+ON forecasts.forecasts(model_id);
+
+-- Index for model-based filtering on scores
+CREATE INDEX IF NOT EXISTS idx_scores_model_id 
+ON forecasts.scores(model_id);
+
+-- Index for model-based filtering on participants
+CREATE INDEX IF NOT EXISTS idx_participants_model_id 
+ON challenges.participants(model_id);
+
 
 -- ==========================================================
 -- 10) Continuous Aggregates for Multi-Granularity Time Series
