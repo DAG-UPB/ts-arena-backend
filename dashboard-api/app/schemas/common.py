@@ -15,9 +15,9 @@ class PaginationMeta(BaseModel):
     has_previous: bool = Field(..., description="Whether there is a previous page")
 
 
-class PaginatedResponse(BaseModel):
+class PaginatedResponse(BaseModel, Generic[T]):
     """Generic paginated response wrapper."""
-    items: List[Any] = Field(..., description="List of items for the current page")
+    items: List[T] = Field(..., description="List of items for the current page")
     pagination: PaginationMeta = Field(..., description="Pagination metadata")
 
 
