@@ -315,22 +315,20 @@ class ModelRepository:
         model_id: int
     ) -> Dict[str, Any]:
         """
-        Get rankings for a model across all definitions it participated in.
-        Returns rankings for 7d, 30d, 90d, and 365d time ranges.
+        Get ELO rankings for a model across all definitions it participated in.
+        Returns daily ELO rankings for the last 30 days.
         
         Args:
             model_id: The model ID
             
         Returns:
-            Dict with model info and rankings grouped by definition
+            Dict with model info and ELO rankings grouped by definition for the last 30 days
         """
-        now = datetime.utcnow()
-        time_ranges = {
-            "7d": now - timedelta(days=7),
-            "30d": now - timedelta(days=30),
-            "90d": now - timedelta(days=90),
-            "365d": now - timedelta(days=365),
-        }
+        from datetime import date
+        
+        # Calculate date range: today and last 30 days
+        today = date.today()
+        start_date = today - timedelta(days=30)
         
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             # Get model name
@@ -348,93 +346,62 @@ class ModelRepository:
             
             model_name = model_row['name']
             
-            # Get all definitions the model participated in
+            # Get all definitions the model has ELO rankings for in the last 30 days
             cur.execute(
                 """
-                SELECT DISTINCT cd.id, cd.name
-                FROM forecasts.v_ranking_base fv
-                JOIN challenges.rounds r ON r.id = fv.round_id
-                JOIN challenges.definitions cd ON cd.id = r.definition_id
-                WHERE fv.model_id = %s
+                SELECT DISTINCT 
+                    dr.scope_id,
+                    cd.id as definition_id,
+                    cd.name as definition_name
+                FROM forecasts.daily_rankings dr
+                JOIN challenges.definitions cd ON cd.id = CAST(dr.scope_id AS INTEGER)
+                WHERE dr.model_id = %s
+                  AND dr.scope_type = 'definition'
+                  AND dr.calculation_date BETWEEN %s AND %s
                 ORDER BY cd.name
                 """,
-                (model_id,)
+                (model_id, start_date, today)
             )
             definitions = [dict(row) for row in cur.fetchall()]
             
-            # For each definition, calculate rankings for each time range
+            # For each definition, get daily ELO rankings for the last 30 days
             definition_rankings = []
             for definition in definitions:
-                definition_id = definition['id']
-                definition_name = definition['name']
+                definition_id = definition['definition_id']
+                definition_name = definition['definition_name']
                 
-                rankings_data = {
+                # Get all daily rankings for this definition in the last 30 days
+                cur.execute(
+                    """
+                    SELECT
+                        dr.calculation_date,
+                        dr.elo_rating_median as elo_score,
+                        dr.elo_ci_lower,
+                        dr.elo_ci_upper,
+                        dr.rank_position
+                    FROM forecasts.daily_rankings dr
+                    WHERE dr.model_id = %s
+                      AND dr.scope_type = 'definition'
+                      AND dr.scope_id = %s
+                      AND dr.calculation_date BETWEEN %s AND %s
+                    ORDER BY dr.calculation_date ASC
+                    """,
+                    (model_id, str(definition_id), start_date, today)
+                )
+                
+                daily_rankings = []
+                for row in cur.fetchall():
+                    ranking_dict = dict(row)
+                    # Sanitize float values
+                    for key, value in ranking_dict.items():
+                        ranking_dict[key] = sanitize_float(value)
+                    daily_rankings.append(ranking_dict)
+                
+                definition_rankings.append({
                     "definition_id": definition_id,
                     "definition_name": definition_name,
-                    "rankings_7d": None,
-                    "rankings_30d": None,
-                    "rankings_90d": None,
-                    "rankings_365d": None,
-                }
-                
-                # Calculate rankings for each time range
-                for range_key, since_date in time_ranges.items():
-                    # Get model's ranking in this definition for this time range
-                    cur.execute(
-                        """
-                        WITH model_scores AS (
-                            SELECT
-                                fv.model_id,
-                                fv.model_name,
-                                COUNT(DISTINCT fv.round_id) as rounds_participated,
-                                AVG(fv.mase) as avg_mase,
-                                STDDEV(fv.mase) as stddev_mase,
-                                MIN(fv.mase) as min_mase,
-                                MAX(fv.mase) as max_mase
-                            FROM forecasts.v_ranking_base fv
-                            JOIN challenges.rounds r ON r.id = fv.round_id
-                            WHERE r.definition_id = %s
-                                AND r.registration_start >= %s
-                                AND fv.mase IS NOT NULL
-                                AND fv.mase NOT IN ('NaN', 'Infinity', '-Infinity')
-                            GROUP BY fv.model_id, fv.model_name
-                        ),
-                        ranked_models AS (
-                            SELECT
-                                model_id,
-                                model_name,
-                                rounds_participated,
-                                avg_mase,
-                                stddev_mase,
-                                min_mase,
-                                max_mase,
-                                RANK() OVER (ORDER BY avg_mase ASC NULLS LAST, rounds_participated DESC) as rank,
-                                COUNT(*) OVER () as total_models
-                            FROM model_scores
-                        )
-                        SELECT
-                            rank,
-                            total_models,
-                            rounds_participated,
-                            avg_mase,
-                            stddev_mase,
-                            min_mase,
-                            max_mase
-                        FROM ranked_models
-                        WHERE model_id = %s
-                        """,
-                        (definition_id, since_date, model_id)
-                    )
-                    
-                    ranking_row = cur.fetchone()
-                    if ranking_row:
-                        ranking_dict = dict(ranking_row)
-                        # Sanitize float values
-                        for key, value in ranking_dict.items():
-                            ranking_dict[key] = sanitize_float(value)
-                        rankings_data[f"rankings_{range_key}"] = ranking_dict
-                
-                definition_rankings.append(rankings_data)
+                    "daily_rankings": daily_rankings
+                })
             
             return {
                 "model_id": model_id,

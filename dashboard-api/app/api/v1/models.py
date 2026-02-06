@@ -248,22 +248,20 @@ async def get_model_series_forecasts(
     return data
 
 
-@router.get("/models/{model_id}/rankings", response_model=ModelRankingsResponseSchema)
+@router.get("/models/{model_id}/rankings")
 async def get_model_rankings(
     model_id: int,
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
 ):
     """
-    Get rankings for a model across all definitions it participated in.
+    Get ELO rankings for a model across all definitions it participated in.
     
-    Returns rankings for 7 days, 30 days, 90 days, and 365 days time ranges.
-    For each definition and time range, provides:
-    - Rank among all models in that definition
-    - Total number of models
-    - Rounds participated
-    - Average MASE score
-    - Standard deviation, min, and max MASE scores
+    Returns daily ELO rankings for the last 30 days (from today back to 30 days ago).
+    For each definition and date, provides:
+    - ELO score (median)
+    - ELO confidence interval (lower and upper bounds)
+    - Rank position
     
     **Response Example:**
     ```json
@@ -274,18 +272,22 @@ async def get_model_rankings(
         {
           "definition_id": 1,
           "definition_name": "Day-Ahead Power Forecast",
-          "rankings_7d": {
-            "rank": 5,
-            "total_models": 20,
-            "rounds_participated": 7,
-            "avg_mase": 0.85,
-            "stddev_mase": 0.12,
-            "min_mase": 0.65,
-            "max_mase": 1.05
-          },
-          "rankings_30d": { ... },
-          "rankings_90d": { ... },
-          "rankings_365d": { ... }
+          "daily_rankings": [
+            {
+              "calculation_date": "2025-01-08",
+              "elo_score": 1337.5,
+              "elo_ci_lower": 1300.2,
+              "elo_ci_upper": 1374.8,
+              "rank_position": 1
+            },
+            {
+              "calculation_date": "2025-01-09",
+              "elo_score": 1342.1,
+              "elo_ci_lower": 1305.0,
+              "elo_ci_upper": 1379.2,
+              "rank_position": 1
+            }
+          ]
         }
       ]
     }
@@ -295,10 +297,9 @@ async def get_model_rankings(
     - X-API-Key: Valid API key required
     
     **Notes:**
-    - Only includes definitions where the model has participated
-    - Rankings are null for time ranges where no data exists
-    - Rankings are based on average MASE score (lower is better)
-    - Only valid MASE scores are considered (NaN, Infinity filtered out)
+    - Only includes definitions where the model has ELO rankings in the last 30 days
+    - Daily rankings are sorted by date (ascending)
+    - ELO scores are based on bootstrapped comparisons from the daily ranking calculations
     """
     repo = ModelRepository(conn)
     result = repo.get_model_rankings_by_definition(model_id)
