@@ -196,18 +196,22 @@ class TimeSeriesDataRepository:
     ) -> int:
         """
         Insert or update time series data points using PostgreSQL UPSERT.
+        Uses bulk insert with jsonb_array_elements for efficient batch processing.
         
         Args:
             series_id: The series ID
-            data_points: List of dicts with 'timestamp' and 'value' keys
+            data_points: List of dicts with 'ts' and 'value' keys
             
         Returns:
             Number of rows affected
         """
+        import json
+        
         if not data_points:
             return 0
         
-        values = []
+        # Prepare and deduplicate data by timestamp (keep last value for duplicates)
+        temp_dict = {}
         for point in data_points:
             timestamp = point.get('ts')
             value = point.get('value')
@@ -218,20 +222,31 @@ class TimeSeriesDataRepository:
             if isinstance(timestamp, str):
                 timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
             
-            values.append({
+            # Overwrite with later value if duplicate timestamp exists
+            temp_dict[timestamp] = {
                 'series_id': series_id,
-                'ts': timestamp,
-                'value': float(value),
-                'updated_at': datetime.utcnow()
-            })
+                'ts': timestamp.isoformat(),
+                'value': float(value)
+            }
+        
+        values = list(temp_dict.values())
         
         if not values:
             logger.warning(f"No valid data points to insert for series_id={series_id}")
             return 0
         
+        # Bulk upsert using jsonb_array_elements - single query instead of N queries
         stmt = text("""
+            WITH input_data AS (
+                SELECT 
+                    (d->>'series_id')::int AS series_id,
+                    (d->>'ts')::timestamptz AS ts,
+                    (d->>'value')::double precision AS value
+                FROM jsonb_array_elements(CAST(:data AS jsonb)) d
+            )
             INSERT INTO data_portal.time_series_data (series_id, ts, value, updated_at)
-            VALUES (:series_id, :ts, :value, :updated_at)
+            SELECT series_id, ts, value, NOW()
+            FROM input_data
             ON CONFLICT (series_id, ts) 
             DO UPDATE SET 
                 value = EXCLUDED.value,
@@ -239,16 +254,14 @@ class TimeSeriesDataRepository:
         """)
         
         try:
-            for value_dict in values:
-                await self.session.execute(stmt, value_dict)
-            
+            await self.session.execute(stmt, {'data': json.dumps(values)})
             await self.session.commit()
-            logger.info(f"Upserted {len(values)} data points for series_id={series_id}")
+            logger.info(f"Bulk upserted {len(values)} data points for series_id={series_id}")
             return len(values)
             
         except Exception as e:
             await self.session.rollback()
-            logger.error(f"Failed to upsert data points for series_id={series_id}: {e}", exc_info=True)
+            logger.error(f"Failed to bulk upsert data points for series_id={series_id}: {e}", exc_info=True)
             raise
     
     async def get_latest_timestamp(self, series_id: int) -> Optional[datetime]:

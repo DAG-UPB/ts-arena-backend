@@ -107,7 +107,7 @@ class DataPortalScheduler:
         single_items = list(self.plugins.items())
         multi_items = list(self.multi_series_plugins.items())
         
-        batch_size = 15  # Increased for faster initial fetch (external APIs can handle more concurrency)
+        batch_size = 5  # Reduced to prevent DB/CPU overload during initial fetch
         total_successful = 0
         total_failed = 0
         
@@ -136,9 +136,9 @@ class DataPortalScheduler:
                 
                 logger.info(f"Batch completed: {batch_successful} successful, {batch_failed} failed")
                 
-                # Small delay between batches to let DB recover
+                # Longer delay between batches to let DB recover
                 if i + batch_size < len(single_items):
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(2.0)
         
         # Process multi-series plugins (sequentially since each makes one API call for multiple series)
         logger.info(f"Running initial fetch for {len(multi_items)} multi-series plugins")
