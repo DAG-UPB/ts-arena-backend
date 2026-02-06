@@ -76,14 +76,14 @@ schedules:
     required_time_series:
     - electricity_coal_power_plant_generation_TSO_50Hertz_quarterhour_1223
     - electricity_coal_power_plant_generation_TSO_Amprion_quarterhour_1223
-    - electricity_hard_coal_power_plant_generation_TSO_50Hertz_quarterhour_4069
-    - electricity_hard_coal_power_plant_generation_TSO_Amprion_quarterhour_4069
-    - electricity_hard_coal_power_plant_generation_TSO_TenneT_quarterhour_4069
-    - electricity_hard_coal_power_plant_generation_TSO_TransnetBW_quarterhour_4069
-    - electricity_natural_gas_power_plant_generation_TSO_50Hertz_quarterhour_4071
-    - electricity_natural_gas_power_plant_generation_TSO_Amprion_quarterhour_4071
-    - electricity_natural_gas_power_plant_generation_TSO_Creos_quarterhour_4071
-    - electricity_natural_gas_power_plant_generation_TSO_TenneT_quarterhour_4071
+    # - electricity_hard_coal_power_plant_generation_TSO_50Hertz_quarterhour_4069
+    # - electricity_hard_coal_power_plant_generation_TSO_Amprion_quarterhour_4069
+    # - electricity_hard_coal_power_plant_generation_TSO_TenneT_quarterhour_4069
+    # - electricity_hard_coal_power_plant_generation_TSO_TransnetBW_quarterhour_4069
+    # - electricity_natural_gas_power_plant_generation_TSO_50Hertz_quarterhour_4071
+    # - electricity_natural_gas_power_plant_generation_TSO_Amprion_quarterhour_4071
+    # - electricity_natural_gas_power_plant_generation_TSO_Creos_quarterhour_4071
+    # - electricity_natural_gas_power_plant_generation_TSO_TenneT_quarterhour_4071
     - electricity_photovoltaic_power_plant_generation_TSO_50Hertz_quarterhour_4068
     - electricity_photovoltaic_power_plant_generation_TSO_APG_quarterhour_4068
     - electricity_photovoltaic_power_plant_generation_TSO_Amprion_quarterhour_4068
@@ -98,7 +98,7 @@ schedules:
     - electricity_wind_onshore_power_plant_generation_TSO_Creos_quarterhour_4067
     - electricity_wind_onshore_power_plant_generation_TSO_TenneT_quarterhour_4067
     - electricity_wind_onshore_power_plant_generation_TSO_TransnetBW_quarterhour_4067
-    n_time_series: 24
+    n_time_series: 16
     frequency: 15 minutes
     context_length: 1000
     forecast_horizon: 1 day
@@ -180,14 +180,14 @@ schedules:
     required_time_series:
     - electricity_coal_power_plant_generation_TSO_50Hertz_quarterhour_1223
     - electricity_coal_power_plant_generation_TSO_Amprion_quarterhour_1223
-    - electricity_hard_coal_power_plant_generation_TSO_50Hertz_quarterhour_4069
-    - electricity_hard_coal_power_plant_generation_TSO_Amprion_quarterhour_4069
-    - electricity_hard_coal_power_plant_generation_TSO_TenneT_quarterhour_4069
-    - electricity_hard_coal_power_plant_generation_TSO_TransnetBW_quarterhour_4069
-    - electricity_natural_gas_power_plant_generation_TSO_50Hertz_quarterhour_4071
-    - electricity_natural_gas_power_plant_generation_TSO_Amprion_quarterhour_4071
-    - electricity_natural_gas_power_plant_generation_TSO_Creos_quarterhour_4071
-    - electricity_natural_gas_power_plant_generation_TSO_TenneT_quarterhour_4071
+    # - electricity_hard_coal_power_plant_generation_TSO_50Hertz_quarterhour_4069
+    # - electricity_hard_coal_power_plant_generation_TSO_Amprion_quarterhour_4069
+    # - electricity_hard_coal_power_plant_generation_TSO_TenneT_quarterhour_4069
+    # - electricity_hard_coal_power_plant_generation_TSO_TransnetBW_quarterhour_4069
+    # - electricity_natural_gas_power_plant_generation_TSO_50Hertz_quarterhour_4071
+    # - electricity_natural_gas_power_plant_generation_TSO_Amprion_quarterhour_4071
+    # - electricity_natural_gas_power_plant_generation_TSO_Creos_quarterhour_4071
+    # - electricity_natural_gas_power_plant_generation_TSO_TenneT_quarterhour_4071
     - electricity_photovoltaic_power_plant_generation_TSO_50Hertz_quarterhour_4068
     - electricity_photovoltaic_power_plant_generation_TSO_APG_quarterhour_4068
     - electricity_photovoltaic_power_plant_generation_TSO_Amprion_quarterhour_4068
@@ -202,7 +202,7 @@ schedules:
     - electricity_wind_onshore_power_plant_generation_TSO_Creos_quarterhour_4067
     - electricity_wind_onshore_power_plant_generation_TSO_TenneT_quarterhour_4067
     - electricity_wind_onshore_power_plant_generation_TSO_TransnetBW_quarterhour_4067
-    n_time_series: 24
+    n_time_series: 16
     frequency: 1 hour
     context_length: 1000
     forecast_horizon: 3 days
@@ -220,7 +220,7 @@ schedules:
     categories: []
     subcategories: []
     required_time_series:
-    - "electricity_market_price_Trading Hub_TH_NP15_GEN-APND_5min"
+    - "electricity_market_price_Trading Hub_TH_NP15_GEN-APND_5min" # blocked by hetzner
     - "electricity_market_price_Trading Hub_TH_SP15_GEN-APND_5min"
     - "electricity_market_price_Trading Hub_TH_ZP26_GEN-APND_5min"
     - electricity_market_price_Zone_CAPITL_5min
@@ -322,7 +322,7 @@ schedules:
     categories: []
     subcategories: []
     required_time_series:
-    - "electricity_market_price_Trading Hub_TH_NP15_GEN-APND_5min"
+    - "electricity_market_price_Trading Hub_TH_NP15_GEN-APND_5min" # blocked by hetzner
     - "electricity_market_price_Trading Hub_TH_SP15_GEN-APND_5min"
     - "electricity_market_price_Trading Hub_TH_ZP26_GEN-APND_5min"
     - electricity_market_price_Zone_CAPITL_5min
@@ -470,4 +470,21 @@ schedules:
     context_length: 1000
     forecast_horizon: 3 days
     registration_duration: 1 hour
+    evaluation_delay: 0 hours
+- id: test_challenge_15min
+  cron: '*/15 * * * *'
+  run_on_startup: true
+  params:
+    description: 'Test Challenge: 1 hour horizon, 15-min frequency'
+    domains:
+    - test
+    subdomains: []
+    categories: []
+    subcategories: []
+    required_time_series: []
+    n_time_series: 3
+    frequency: 15 minutes
+    context_length: 512
+    forecast_horizon: 1 hour
+    registration_duration: 5 minutes
     evaluation_delay: 0 hours
