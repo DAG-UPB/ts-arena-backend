@@ -142,9 +142,8 @@ class ModelRepository:
         scope_filter = "er.scope_type = %s"
         params = [scope_type]
         
-        if scope_type == "global":
-            scope_filter += " AND er.scope_id IS NULL"
-        elif scope_type == "definition":
+        # global scope has no additional filter
+        if scope_type == "definition":
             scope_filter += " AND er.scope_id = %s"
             params.append(scope_id)
         elif scope_type == "frequency_horizon":
