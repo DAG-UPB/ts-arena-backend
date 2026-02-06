@@ -18,6 +18,7 @@ from app.schemas.round import (
     RoundModelListSchema,
     ForecastsResponseSchema
 )
+from app.schemas.common import PaginatedResponse, PaginationMeta
 
 router = APIRouter(prefix="/api/v1/rounds", tags=["Rounds"])
 
@@ -35,7 +36,7 @@ async def get_rounds_metadata(
     return metadata
 
 
-@router.get("", response_model=List[ChallengeRoundSchema])
+@router.get("", response_model=PaginatedResponse[ChallengeRoundSchema])
 async def list_rounds(
     # Existing filters
     status: Optional[str] = Query(
@@ -82,12 +83,15 @@ async def list_rounds(
         None,
         description="Filter by definition ID"
     ),
+    # Pagination parameters
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(10, ge=1, le=100, description="Number of items per page"),
     # Dependencies
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
 ):
     """
-    List all challenge rounds with optional filters.
+    List all challenge rounds with optional filters and pagination.
     """
     # Parse comma-separated parameters
     status_list = parse_comma_separated(status)
@@ -98,7 +102,7 @@ async def list_rounds(
     horizon_list = parse_comma_separated(horizon)
     
     repo = ChallengeRepository(conn)
-    rounds = repo.list_rounds(
+    result = repo.list_rounds(
         status=status_list,
         from_date=from_date,
         to_date=to_date,
@@ -107,9 +111,24 @@ async def list_rounds(
         subcategories=subcategory_list,
         frequencies=frequency_list,
         horizons=horizon_list,
-        definition_id=definition_id
+        definition_id=definition_id,
+        page=page,
+        page_size=page_size
     )
-    return rounds
+    
+    total_pages = (result['total_count'] + page_size - 1) // page_size if result['total_count'] > 0 else 1
+    
+    return PaginatedResponse(
+        items=result['items'],
+        pagination=PaginationMeta(
+            page=page,
+            page_size=page_size,
+            total_items=result['total_count'],
+            total_pages=total_pages,
+            has_next=page < total_pages,
+            has_previous=page > 1
+        )
+    )
 
 
 @router.get("/{round_id}", response_model=RoundMetaSchema)

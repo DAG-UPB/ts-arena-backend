@@ -1,6 +1,24 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Generic, TypeVar
+
+T = TypeVar('T')
+
+
+class PaginationMeta(BaseModel):
+    """Pagination metadata."""
+    page: int = Field(..., description="Current page number (1-indexed)", ge=1)
+    page_size: int = Field(..., description="Number of items per page", ge=1)
+    total_items: int = Field(..., description="Total number of items across all pages", ge=0)
+    total_pages: int = Field(..., description="Total number of pages", ge=0)
+    has_next: bool = Field(..., description="Whether there is a next page")
+    has_previous: bool = Field(..., description="Whether there is a previous page")
+
+
+class PaginatedResponse(BaseModel):
+    """Generic paginated response wrapper."""
+    items: List[Any] = Field(..., description="List of items for the current page")
+    pagination: PaginationMeta = Field(..., description="Pagination metadata")
 
 
 class ModelRankingSchema(BaseModel):

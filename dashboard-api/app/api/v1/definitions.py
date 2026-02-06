@@ -44,28 +44,63 @@ async def get_definition(
         
     return definition
 
-@router.get("/{definition_id}/rounds", response_model=List)
+@router.get("/{definition_id}/rounds")
 async def list_definition_rounds(
     definition_id: int,
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
 ):
     """
-    List all rounds belonging to a specific definition.
+    List all rounds belonging to a specific definition with pagination.
+    
+    **Query Parameters:**
+    - page: Page number (default: 1)
+    - page_size: Items per page (default: 20, max: 100)
     
     **Headers:**
     - X-API-Key: Valid API Key
+    
+    **Response:**
+    ```json
+    {
+      "items": [...],
+      "pagination": {
+        "page": 1,
+        "page_size": 20,
+        "total_items": 100,
+        "total_pages": 5,
+        "has_next": true,
+        "has_previous": false
+      }
+    }
+    ```
     """
-    # Import locally to avoid circular dependencies if we move schemas around later
-    from app.schemas.challenge import ChallengeRoundSchema
+    from app.schemas.common import PaginatedResponse, PaginationMeta
+    import math
     
     repo = ChallengeRepository(conn)
     # Validate definition exists first
     if not repo.get_definition(definition_id):
         raise HTTPException(status_code=404, detail="Challenge definition not found")
-        
-    rounds = repo.list_rounds(definition_id=definition_id)
-    return rounds
+    
+    result = repo.list_rounds(definition_id=definition_id, page=page, page_size=page_size)
+    
+    total_items = result['total_count']
+    total_pages = math.ceil(total_items / page_size) if total_items > 0 else 0
+    
+    return PaginatedResponse(
+        items=result['items'],
+        pagination=PaginationMeta(
+            page=page,
+            page_size=page_size,
+            total_items=total_items,
+            total_pages=total_pages,
+            has_next=page < total_pages,
+            has_previous=page > 1
+        )
+    )
 
 
 @router.get("/{definition_id}/series", response_model=List)

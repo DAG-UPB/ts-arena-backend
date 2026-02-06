@@ -91,9 +91,14 @@ class ChallengeRepository:
         frequencies: Optional[List[str]] = None,  # ISO 8601 Strings
         horizons: Optional[List[str]] = None,     # ISO 8601 Strings
         definition_id: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+        page: Optional[int] = None,
+        page_size: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """
-        List all challenge rounds with optional filters.
+        List all challenge rounds with optional filters and pagination.
+        
+        Returns:
+            Dict with 'items' (list of rounds) and 'total_count' (int)
         """
         
         # Use new view with challenge frequency
@@ -179,7 +184,8 @@ class ChallengeRepository:
             except ValueError as e:
                 print(f"ERROR: Invalid horizon format: {e}", file=sys.stderr)
         
-        query += """
+        # Build the ORDER BY clause
+        order_by = """
             ORDER BY
                 CASE status
                     WHEN 'active' THEN 0
@@ -187,18 +193,33 @@ class ChallengeRepository:
                     WHEN 'completed' THEN 2
                     ELSE 4
                 END,
-                created_at DESC;
+                created_at DESC
         """
         
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # First, get the total count (without pagination)
+            count_query = f"SELECT COUNT(*) as total FROM ({query}) as filtered_rounds"
+            cur.execute(count_query, tuple(params))
+            total_count = cur.fetchone()['total']
+            
+            # Now add ORDER BY and pagination to main query
+            query += order_by
+            
+            if page is not None and page_size is not None:
+                offset = (page - 1) * page_size
+                query += " LIMIT %s OFFSET %s"
+                params.extend([page_size, offset])
+            
             cur.execute(query, tuple(params))
             results = []
             for row in cur.fetchall():
                 row_dict = dict(row)
-                # Convert timedelta to ISO 8601 strings
-                
                 results.append(row_dict)
-            return results
+            
+            return {
+                'items': results,
+                'total_count': total_count
+            }
     
     
     def get_challenge_series(self, challenge_id: int) -> List[Dict[str, Any]]:
