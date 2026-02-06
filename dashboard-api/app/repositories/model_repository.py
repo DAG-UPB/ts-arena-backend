@@ -115,6 +115,7 @@ class ModelRepository:
         self,
         scope_type: str = "global",
         scope_id: Optional[str] = None,
+        calculation_date = None,
         limit: int = 100
     ) -> List[Dict[str, Any]]:
         """
@@ -126,11 +127,16 @@ class ModelRepository:
                 - None for 'global'
                 - Definition ID as string for 'definition'
                 - Frequency::horizon string for 'frequency_horizon' (e.g., '00:15:00::1 day')
+            calculation_date: Date object for filtering rankings (defaults to today if None)
             limit: Max. number of results
         
         Returns:
             List of dicts with ranking information (model_id, model_name, elo_score, rank, etc.)
         """
+        # Default to today if no calculation_date provided
+        if calculation_date is None:
+            from datetime import date
+            calculation_date = date.today()
         # Build query based on scope_type
         query = """
             SELECT
@@ -159,22 +165,9 @@ class ModelRepository:
             query += " AND dr.scope_id = %s"
             params.append(scope_id)
         
-        # Get latest rankings (most recent date)
-        query += """
-            AND dr.ranking_date = (
-                SELECT MAX(ranking_date) 
-                FROM forecasts.daily_rankings 
-                WHERE scope_type = %s
-        """
-        params.append(scope_type)
-        
-        if scope_type == "global":
-            query += " AND scope_id IS NULL"
-        else:
-            query += " AND scope_id = %s"
-            params.append(scope_id)
-        
-        query += ")"
+        # Filter by calculation_date
+        query += " AND dr.ranking_date = %s"
+        params.append(calculation_date)
         
         # Order and limit
         query += """

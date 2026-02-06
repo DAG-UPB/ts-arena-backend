@@ -28,6 +28,11 @@ async def get_filtered_rankings(
         description="Filter by frequency::horizon combination (scope_type='frequency_horizon'), e.g., '00:15:00::1 day'",
         example="00:15:00::1 day"
     ),
+    calculation_date: Optional[str] = Query(
+        None,
+        description="Filter by calculation date (YYYY-MM-DD). Defaults to today if not provided.",
+        example="2025-12-31"
+    ),
     limit: int = Query(
         100,
         ge=1,
@@ -55,6 +60,11 @@ async def get_filtered_rankings(
     - Format: `frequency::horizon` (e.g., `00:15:00::1 day`)
     - Frequency examples: `00:15:00` (15 min), `01:00:00` (1 hour)
     - Horizon examples: `1 day`, `7 days`
+    
+    **Calculation Date:**
+    - Filter rankings by specific calculation date (format: YYYY-MM-DD)
+    - If not provided, defaults to today's date
+    - Only returns rankings calculated on the specified date
     
     **Response:**
     ```json
@@ -109,11 +119,25 @@ async def get_filtered_rankings(
         scope_type = "global"
         scope_id = None
     
+    # Parse calculation_date or default to today
+    from datetime import date
+    if calculation_date:
+        try:
+            calc_date = date.fromisoformat(calculation_date)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid calculation_date format. Use YYYY-MM-DD."
+            )
+    else:
+        calc_date = date.today()
+    
     # Get filtered rankings
     repo = ModelRepository(conn)
     rankings = repo.get_filtered_rankings(
         scope_type=scope_type,
         scope_id=scope_id,
+        calculation_date=calc_date,
         limit=limit
     )
     
