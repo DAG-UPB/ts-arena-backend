@@ -119,7 +119,7 @@ class ModelRepository:
         limit: int = 100
     ) -> List[Dict[str, Any]]:
         """
-        Get model rankings from daily_rankings based on scope.
+        Get model rankings from daily_rankings based on scope, enriched with MASE statistics.
         
         Args:
             scope_type: One of 'global', 'definition', or 'frequency_horizon'
@@ -131,50 +131,95 @@ class ModelRepository:
             limit: Max. number of results
         
         Returns:
-            List of dicts with ranking information (model_id, model_name, elo_score, rank, etc.)
+            List of dicts with ranking information including ELO scores, MASE statistics, and metadata
         """
         # Default to today if no calculation_date provided
         if calculation_date is None:
             from datetime import date
             calculation_date = date.today()
-        # Build query based on scope_type
-        query = """
-            SELECT
-                dr.model_id,
-                mi.name AS model_name,
-                dr.elo_score,
-                dr.elo_ci_lower,
-                dr.elo_ci_upper,
-                dr.matches_played,
-                dr.n_bootstraps,
-                dr.rank_position
-            FROM forecasts.daily_rankings dr
-            JOIN models.model_info mi ON mi.id = dr.model_id
-            WHERE dr.scope_type = %s
-        """
         
+        # Build scope filter conditions
+        scope_filter = "er.scope_type = %s"
         params = [scope_type]
         
-        # Add scope_id filter based on scope_type
         if scope_type == "global":
-            query += " AND dr.scope_id IS NULL"
+            scope_filter += " AND er.scope_id IS NULL"
         elif scope_type == "definition":
-            query += " AND dr.scope_id = %s"
+            scope_filter += " AND er.scope_id = %s"
             params.append(scope_id)
         elif scope_type == "frequency_horizon":
-            query += " AND dr.scope_id = %s"
+            scope_filter += " AND er.scope_id = %s"
             params.append(scope_id)
         
-        # Filter by calculation_date
-        query += " AND dr.ranking_date = %s"
-        params.append(calculation_date)
-        
-        # Order and limit
-        query += """
-            ORDER BY dr.rank_position ASC
+        # Build the query with CTEs
+        query = f"""
+            WITH scope_elo AS (
+                SELECT DISTINCT ON (er.model_id)
+                    er.model_id,
+                    mi.name AS model_name,
+                    mi.readable_id,
+                    u.username,
+                    o.name AS organization_name,
+                    er.elo_rating_median AS elo_score,
+                    er.elo_ci_lower,
+                    er.elo_ci_upper,
+                    (er.elo_rating_median - er.elo_ci_lower) AS elo_ci_lower_diff,
+                    (er.elo_ci_upper - er.elo_rating_median) AS elo_ci_upper_diff,
+                    er.matches_played AS n_matches,
+                    er.n_bootstraps,
+                    er.calculated_at,
+                    er.calculation_date,
+                    er.rank_position
+                FROM forecasts.daily_rankings er
+                JOIN models.model_info mi ON er.model_id = mi.id
+                JOIN auth.users u ON mi.user_id = u.id
+                LEFT JOIN auth.organizations o ON mi.organization_id = o.id
+                WHERE {scope_filter}
+                  AND er.calculation_date = %s
+                ORDER BY er.model_id, er.calculation_date DESC
+            ),
+            scope_mase AS (
+                SELECT 
+                    fs.model_id,
+                    AVG(fs.mase) AS mase_avg,
+                    STDDEV(fs.mase) AS mase_std,
+                    COUNT(*) AS n_evaluations
+                FROM forecasts.scores fs
+                JOIN challenges.rounds cr ON fs.round_id = cr.id
+                WHERE fs.final_evaluation = TRUE
+                  AND fs.mase IS NOT NULL
+                  AND fs.mase != 'NaN'
+                  AND fs.mase != 'Infinity'
+                  AND fs.mase != '-Infinity'
+                  AND cr.end_time <= %s
+                GROUP BY fs.model_id
+            )
+            SELECT 
+                se.model_id,
+                se.model_name,
+                se.readable_id,
+                se.username,
+                se.organization_name,
+                se.elo_score,
+                se.elo_ci_lower,
+                se.elo_ci_upper,
+                se.elo_ci_lower_diff,
+                se.elo_ci_upper_diff,
+                se.n_matches,
+                se.n_bootstraps,
+                se.rank_position,
+                sm.mase_avg,
+                sm.mase_std,
+                sm.n_evaluations,
+                se.calculated_at,
+                se.calculation_date
+            FROM scope_elo se
+            LEFT JOIN scope_mase sm ON se.model_id = sm.model_id
+            ORDER BY se.rank_position ASC
             LIMIT %s;
         """
-        params.append(limit)
+        
+        params.extend([calculation_date, calculation_date, limit])
         
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(query, tuple(params))
