@@ -47,6 +47,10 @@ async def get_definition(
 @router.get("/{definition_id}/rounds")
 async def list_definition_rounds(
     definition_id: int,
+    status: Optional[str] = Query(
+        None,
+        description="Comma-separated status values to filter by (e.g., 'active,completed')"
+    ),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
     api_key: str = Depends(get_api_key),
@@ -56,6 +60,7 @@ async def list_definition_rounds(
     List all rounds belonging to a specific definition with pagination.
     
     **Query Parameters:**
+    - status: Comma-separated status values (e.g., 'active,completed')
     - page: Page number (default: 1)
     - page_size: Items per page (default: 20, max: 100)
     
@@ -85,7 +90,15 @@ async def list_definition_rounds(
     if not repo.get_definition(definition_id):
         raise HTTPException(status_code=404, detail="Challenge definition not found")
     
-    result = repo.list_rounds(definition_id=definition_id, page=page, page_size=page_size)
+    # Parse comma-separated status values
+    status_list = parse_comma_separated(status)
+    
+    result = repo.list_rounds(
+        definition_id=definition_id,
+        status=status_list,
+        page=page,
+        page_size=page_size
+    )
     
     total_items = result['total_count']
     total_pages = math.ceil(total_items / page_size) if total_items > 0 else 0
