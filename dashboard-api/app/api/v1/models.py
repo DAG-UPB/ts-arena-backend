@@ -73,12 +73,22 @@ async def get_filtered_rankings(
         {
           "model_id": 1,
           "model_name": "ExampleModel",
+          "readable_id": "example-model",
+          "username": "john_doe",
+          "organization_name": "ACME Corp",
           "elo_score": 1337.5,
           "elo_ci_lower": 1300.2,
           "elo_ci_upper": 1374.8,
-          "matches_played": 42,
+          "elo_ci_lower_diff": 37.3,
+          "elo_ci_upper_diff": 37.3,
+          "n_matches": 42,
           "n_bootstraps": 1000,
-          "rank_position": 1
+          "rank_position": 1,
+          "mase_avg": 0.85,
+          "mase_std": 0.12,
+          "n_evaluations": 156,
+          "calculated_at": "2025-12-31T23:59:59Z",
+          "calculation_date": "2025-12-31"
         }
       ],
       "scope": {
@@ -89,14 +99,32 @@ async def get_filtered_rankings(
     ```
     
     **Response Fields:**
+    
+    *Model Identifiers:*
     - `model_id`: Model identifier
     - `model_name`: Name of the model
+    - `readable_id`: Human-readable model identifier
+    - `username`: Username of the model owner
+    - `organization_name`: Organization name (if applicable)
+    
+    *ELO Metrics:*
     - `elo_score`: Current ELO rating score
     - `elo_ci_lower`: Lower bound of ELO confidence interval
     - `elo_ci_upper`: Upper bound of ELO confidence interval
-    - `matches_played`: Number of matches/comparisons used for ELO calculation
+    - `elo_ci_lower_diff`: Difference between median and lower CI (uncertainty below)
+    - `elo_ci_upper_diff`: Difference between upper CI and median (uncertainty above)
+    - `n_matches`: Number of matches/comparisons used for ELO calculation
     - `n_bootstraps`: Number of bootstrap iterations performed
     - `rank_position`: Rank position within the scope (1 = best)
+    
+    *MASE Metrics:*
+    - `mase_avg`: Average MASE score across all evaluations up to calculation_date
+    - `mase_std`: Standard deviation of MASE scores
+    - `n_evaluations`: Number of evaluations used for MASE calculation
+    
+    *Metadata:*
+    - `calculated_at`: Timestamp when ELO was calculated
+    - `calculation_date`: Date of the ranking calculation
     
     **Headers:**
     - X-API-Key: Valid API key required
