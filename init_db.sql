@@ -321,7 +321,7 @@ CREATE TABLE challenges.rounds (
     context_length INTEGER NOT NULL,
     horizon INTERVAL NOT NULL,
     frequency INTERVAL,
-    registration_start TIMESTAMPTZ,
+    registration_start TIMESTAMPTZ, -- registration_start is basis for scheduling and basis for registration_end, start_time, end_time. When filtering, grouping, etc., always take registration_start as basis.
     registration_end TIMESTAMPTZ,
     start_time TIMESTAMPTZ,
     end_time TIMESTAMPTZ,
