@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 from contextlib import AsyncExitStack
-from apscheduler import AsyncScheduler, CoalescePolicy, ConflictPolicy
+from apscheduler import AsyncScheduler, CoalescePolicy
 from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.cron import CronTrigger
@@ -232,7 +232,6 @@ class ChallengeScheduler:
                     args=[definition_id],
                     coalesce=CoalescePolicy.latest,
                     misfire_grace_time=600,
-                    conflict_policy=ConflictPolicy.replace,
                 )
                 self.logger.info(f"Upserted cron schedule '{schedule_id}' with cron '{cron_expression}'")
 
@@ -266,7 +265,6 @@ class ChallengeScheduler:
                 args=[round_id],
                 coalesce=CoalescePolicy.latest,
                 misfire_grace_time=300,  # 5 minute grace period
-                conflict_policy=ConflictPolicy.replace,
             )
             self.logger.info(
                 f"Scheduled challenge preparation job '{job_id}' "
@@ -302,7 +300,6 @@ class ChallengeScheduler:
                 coalesce=CoalescePolicy.latest,
                 misfire_grace_time=300,  # 5 minute grace period
                 max_running_jobs=1,  # Only one evaluation at a time
-                conflict_policy=ConflictPolicy.replace,
             )
             self.logger.info(
                 "Scheduled periodic challenge scores evaluation job "
@@ -330,7 +327,6 @@ class ChallengeScheduler:
                 coalesce=CoalescePolicy.latest,
                 misfire_grace_time=3600,  # 1 hour grace period
                 max_running_jobs=1,  # Only one ELO calculation at a time
-                conflict_policy=ConflictPolicy.replace,
             )
             self.logger.info(
                 "Scheduled periodic ELO ranking calculation job "
