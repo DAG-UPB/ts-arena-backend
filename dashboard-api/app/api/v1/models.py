@@ -74,6 +74,8 @@ async def get_filtered_rankings(
           "model_id": 1,
           "model_name": "ExampleModel",
           "readable_id": "example-model",
+          "architecture": "decoder-only",
+          "model_size": 200,
           "username": "john_doe",
           "organization_name": "ACME Corp",
           "elo_score": 1337.5,
@@ -104,6 +106,8 @@ async def get_filtered_rankings(
     - `model_id`: Model identifier
     - `model_name`: Name of the model
     - `readable_id`: Human-readable model identifier
+    - `architecture`: Model architecture type (e.g., decoder-only, encoder-decoder, ...)
+    - `model_size`: Number of parameters in the model in millions
     - `username`: Username of the model owner
     - `organization_name`: Organization name (if applicable)
     
