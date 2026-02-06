@@ -552,7 +552,7 @@ SELECT
     dc.domain,
     dc.category,
     dc.subcategory,
-    MAX(tsd.ts) as last_data_timestamp,
+    latest.last_data_timestamp,
     NOW() as current_timestamp,
     CASE 
         WHEN ts.frequency = '1 hour' THEN NOW() - INTERVAL '6 hours'
@@ -561,7 +561,7 @@ SELECT
         ELSE NOW() - INTERVAL '2 days'
     END as expected_threshold,
     CASE 
-        WHEN MAX(tsd.ts) >= CASE 
+        WHEN latest.last_data_timestamp >= CASE 
             WHEN ts.frequency = '1 hour' THEN NOW() - INTERVAL '12 hours'
             WHEN ts.frequency = '1 day' THEN NOW() - INTERVAL '2 days'
             WHEN ts.frequency = '15 minutes' THEN NOW() - INTERVAL '6 hours'
@@ -570,9 +570,14 @@ SELECT
         ELSE FALSE
     END as has_recent_data
 FROM data_portal.time_series ts
-LEFT JOIN data_portal.time_series_data tsd ON ts.series_id = tsd.series_id
 LEFT JOIN data_portal.domain_category dc ON ts.domain_category_id = dc.id
-GROUP BY ts.series_id, ts.name, ts.frequency, ts.unique_id, dc.domain, dc.category, dc.subcategory;
+LEFT JOIN LATERAL (
+    SELECT tsd.ts AS last_data_timestamp
+    FROM data_portal.time_series_data tsd
+    WHERE tsd.series_id = ts.series_id
+    ORDER BY tsd.ts DESC
+    LIMIT 1
+) latest ON TRUE;
 
 COMMENT ON VIEW data_portal.v_data_availability IS 
 'Checks if time series have recent data based on their configured frequency:
@@ -683,6 +688,10 @@ ON forecasts.scores(model_id);
 -- Index for model-based filtering on participants
 CREATE INDEX IF NOT EXISTS idx_participants_model_id 
 ON challenges.participants(model_id);
+
+-- Index for efficient "latest data per series" lookups (used by v_data_availability)
+CREATE INDEX IF NOT EXISTS idx_time_series_data_series_ts_desc 
+ON data_portal.time_series_data(series_id, ts DESC);
 
 
 -- ==========================================================

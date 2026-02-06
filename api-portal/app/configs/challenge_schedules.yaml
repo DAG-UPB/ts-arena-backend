@@ -471,19 +471,3 @@ schedules:
     forecast_horizon: 3 days
     registration_duration: 1 hour
     evaluation_delay: 0 hours
-- id: test_challenge_15min
-  cron: '*/15 * * * *'
-  run_on_startup: true
-  params:
-    description: 'Test Challenge: 1 hour horizon, 15-min frequency'
-    domains:
-    subdomains: []
-    categories: []
-    subcategories: []
-    required_time_series: []
-    n_time_series: 3
-    frequency: 15 minutes
-    context_length: 512
-    forecast_horizon: 1 hour
-    registration_duration: 5 minutes
-    evaluation_delay: 0 hours
