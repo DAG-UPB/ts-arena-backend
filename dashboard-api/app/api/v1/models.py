@@ -16,55 +16,17 @@ from app.schemas.forecast import ModelSeriesForecastsAcrossRoundsSchema
 router = APIRouter(prefix="/api/v1", tags=["Models"])
 
 
-
-
 @router.get("/models/rankings")
 async def get_filtered_rankings(
-    time_range: Optional[str] = Query(
-        None,
-        description="Time range: 7d, 30d, 90d, 365d",
-        example="30d"
-    ),
-    domain: Optional[str] = Query(
-        None,
-        description="Comma-separated list of domains (e.g., 'Energy,Finance')",
-        example="Energy,Finance"
-    ),
-    category: Optional[str] = Query(
-        None,
-        description="Comma-separated list of categories (e.g., 'Electricity,Gas')",
-        example="Electricity"
-    ),
-    subcategory: Optional[str] = Query(
-        None,
-        description="Comma-separated list of subcategories (e.g., 'Load,Generation')",
-        example="Load,Generation"
-    ),
-    frequency: Optional[str] = Query(
-        None,
-        description="Comma-separated list of frequencies in ISO 8601 format (e.g., 'PT1H,P1D')",
-        example="PT1H,P1D"
-    ),
-    horizon: Optional[str] = Query(
-        None,
-        description="Comma-separated list of horizons in ISO 8601 format (e.g., 'PT6H,P1D')",
-        example="PT6H,P1D"
-    ),
-    definition_name: Optional[str] = Query(
-        None,
-        description="Challenge definition name to filter by",
-        example="Day-Ahead Power"
-    ),
     definition_id: Optional[int] = Query(
         None,
-        description="Challenge definition ID to filter by",
+        description="Filter by challenge definition ID (scope_type='definition')",
         example=1
     ),
-    min_rounds: int = Query(
-        1,
-        ge=1,
-        description="Minimum number of rounds a model must have participated in",
-        example=3
+    frequency_horizon: Optional[str] = Query(
+        None,
+        description="Filter by frequency::horizon combination (scope_type='frequency_horizon'), e.g., '00:15:00::1 day'",
+        example="00:15:00::1 day"
     ),
     limit: int = Query(
         100,
@@ -77,115 +39,90 @@ async def get_filtered_rankings(
     conn = Depends(get_db_connection)
 ):
     """
-    Enhanced Model Rankings with Multiple Filter Dimensions.
+    Model Rankings with Scope-Based Filtering.
     
-    This endpoint allows filtering model rankings by multiple dimensions:
-    - **Time Range**: Filter by challenge end time (7d, 30d, 90d, 365d)
-    - **Domain**: Filter by one or more domains (e.g., Energy, Finance)
-    - **Category**: Filter by one or more categories (e.g., Electricity, Gas)
-    - **Subcategory**: Filter by one or more subcategories (e.g., Load, Generation)
-    - **Frequency**: Filter by data frequency in ISO 8601 format (e.g., PT1H for 1 hour)
-    - **Horizon**: Filter by forecast horizon in ISO 8601 format (e.g., P1D for 1 day)
-    - **Definition Name**: Filter by challenge definition name (e.g., Day-Ahead Power)
-    - **Definition ID**: Filter by challenge definition ID (e.g., 1)
-    - **Min Rounds**: Show only models that participated in at least N rounds
+    This endpoint returns model rankings based on ELO scores from the daily rankings.
     
-    **Filter Format:**
-    - Multiple values: Comma-separated (e.g., `domain=Energy,Finance`)
-    - ISO 8601 Duration Examples:
-      - `PT15M` = 15 minutes
-      - `PT1H` = 1 hour
-      - `PT6H` = 6 hours
-      - `P1D` = 1 day
-      - `P7D` = 7 days
+    **Scope Types:**
+    - **Global** (default): No filter parameters - returns global ELO rankings
+    - **Definition**: Filter by `definition_id` - returns definition-specific ELO rankings
+    - **Frequency/Horizon**: Filter by `frequency_horizon` - returns frequency/horizon-specific ELO rankings
     
-    **ELO Score:**
-    - When filtering by definition, the ELO score is specific to that definition
-    - When no definition filter is applied, the global ELO score is returned
+    **Important:** Only ONE scope filter can be applied at a time. Providing both
+    `definition_id` and `frequency_horizon` will result in an error.
+    
+    **Frequency/Horizon Format:**
+    - Format: `frequency::horizon` (e.g., `00:15:00::1 day`)
+    - Frequency examples: `00:15:00` (15 min), `01:00:00` (1 hour)
+    - Horizon examples: `1 day`, `7 days`
     
     **Response:**
     ```json
     {
       "rankings": [
         {
+          "model_id": 1,
           "model_name": "ExampleModel",
-          "challenges_participated": 10,
-          "avg_mase": 0.85,
-          "stddev_mase": 0.12,
-          "min_mase": 0.65,
-          "max_mase": 1.05,
           "elo_score": 1337.5,
-          "domains_covered": ["Energy", "Finance"],
-          "categories_covered": ["Electricity"],
-          "subcategories_covered": ["Load"],
-          "frequencies_covered": ["PT1H", "P1D"],
-          "horizons_covered": ["PT6H", "P1D"]
+          "elo_ci_lower": 1300.2,
+          "elo_ci_upper": 1374.8,
+          "matches_played": 42,
+          "n_bootstraps": 1000,
+          "rank_position": 1
         }
       ],
-      "filters_applied": {
-        "time_range": "30d",
-        "domain": ["Energy", "Finance"],
-        "min_rounds": 3
+      "scope": {
+        "type": "global",
+        "id": null
       }
     }
     ```
     
+    **Response Fields:**
+    - `model_id`: Model identifier
+    - `model_name`: Name of the model
+    - `elo_score`: Current ELO rating score
+    - `elo_ci_lower`: Lower bound of ELO confidence interval
+    - `elo_ci_upper`: Upper bound of ELO confidence interval
+    - `matches_played`: Number of matches/comparisons used for ELO calculation
+    - `n_bootstraps`: Number of bootstrap iterations performed
+    - `rank_position`: Rank position within the scope (1 = best)
+    
     **Headers:**
     - X-API-Key: Valid API key required
-    
-    **Notes:**
-    - Only models with valid MASE scores are included (NULL, NaN, Infinity filtered out)
-    - Rankings are sorted by avg_mase (ascending), then challenges_participated (descending)
-    - Empty filters mean no filtering on that dimension (show all)
     """
-    # Parse comma-separated parameters
-    domains_list = [d.strip() for d in domain.split(',')] if domain else None
-    categories_list = [c.strip() for c in category.split(',')] if category else None
-    subcategories_list = [s.strip() for s in subcategory.split(',')] if subcategory else None
-    frequencies_list = [f.strip() for f in frequency.split(',')] if frequency else None
-    horizons_list = [h.strip() for h in horizon.split(',')] if horizon else None
+    # Validate that only one scope filter is provided
+    if definition_id is not None and frequency_horizon is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Only one scope filter can be applied at a time. Provide either 'definition_id' OR 'frequency_horizon', not both."
+        )
+    
+    # Determine scope_type and scope_id
+    if definition_id is not None:
+        scope_type = "definition"
+        scope_id = str(definition_id)
+    elif frequency_horizon is not None:
+        scope_type = "frequency_horizon"
+        scope_id = frequency_horizon
+    else:
+        scope_type = "global"
+        scope_id = None
     
     # Get filtered rankings
     repo = ModelRepository(conn)
     rankings = repo.get_filtered_rankings(
-        time_range=time_range,
-        domains=domains_list,
-        categories=categories_list,
-        subcategories=subcategories_list,
-        frequencies=frequencies_list,
-        horizons=horizons_list,
-        definition_name=definition_name,
-        definition_id=definition_id,
-        min_rounds=min_rounds,
+        scope_type=scope_type,
+        scope_id=scope_id,
         limit=limit
     )
     
-    # Build filters_applied dict for transparency
-    filters_applied = {}
-    if time_range:
-        filters_applied['time_range'] = time_range
-    if domains_list:
-        filters_applied['domain'] = domains_list
-    if categories_list:
-        filters_applied['category'] = categories_list
-    if subcategories_list:
-        filters_applied['subcategory'] = subcategories_list
-    if frequencies_list:
-        filters_applied['frequency'] = frequencies_list
-    if horizons_list:
-        filters_applied['horizon'] = horizons_list
-    if definition_name:
-        filters_applied['definition_name'] = definition_name
-    if definition_id:
-        filters_applied['definition_id'] = definition_id
-    if min_rounds > 1:
-        filters_applied['min_rounds'] = min_rounds
-    if limit != 100:
-        filters_applied['limit'] = limit
-    
     return {
         "rankings": rankings,
-        "filters_applied": filters_applied
+        "scope": {
+            "type": scope_type,
+            "id": scope_id
+        }
     }
 
 
@@ -198,26 +135,20 @@ async def get_ranking_filters(
     Get Available Filter Options for Model Rankings.
     
     This endpoint returns all available filter values that can be used with
-    the `/models/rankings` endpoint. This allows for dynamic UI filter construction.
+    the `/models/rankings` endpoint.
     
     **Returns:**
     ```json
     {
-      "domains": ["Energy", "Finance", "Weather"],
-      "categories": ["Electricity", "Gas", "Stock Prices"],
-      "subcategories": ["Load", "Generation", "Wind"],
-      "frequencies": ["PT15M", "PT1H", "P1D"],
-      "horizons": ["PT1H", "PT6H", "P1D", "P7D"],
-      "time_ranges": ["7d", "30d", "90d", "365d"],
-      "definitions": [{"id": 1, "name": "Day-Ahead Power"}, {"id": 2, "name": "Week-Ahead Power"}]
+      "definitions": [{"id": 1, "name": "Day-Ahead Power"}, {"id": 2, "name": "Week-Ahead Power"}],
+      "frequency_horizons": ["00:15:00::1 day", "01:00:00::1 day", "01:00:00::7 days"]
     }
     ```
     
     **Notes:**
     - Only values present in the database are returned
-    - Frequencies and horizons are returned in ISO 8601 format
-    - Lists are sorted alphabetically (except time_ranges which are in logical order)
-    - Empty lists mean no data available for that dimension
+    - `definitions` contains available definition IDs and names for scope_type='definition'
+    - `frequency_horizons` contains available frequency::horizon combinations for scope_type='frequency_horizon'
     
     **Headers:**
     - X-API-Key: Valid API key required
