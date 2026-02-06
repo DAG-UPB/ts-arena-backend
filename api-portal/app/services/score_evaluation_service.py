@@ -201,15 +201,7 @@ class ScoreEvaluationService:
                 rows_affected = await self.forecast_repo.bulk_insert_scores(all_scores)
                 logger.info(f"Updated {rows_affected} scores for round {round_id}")
             
-            # Check if we should finalize this round
-            should_finalize = await self._should_finalize_round(round_info)
-            
-            if should_finalize:
-                await self.forecast_repo.mark_scores_final(round_id)
-                logger.info(f"Round {round_id} scores marked as final")
-                return True
-            
-            return False
+            return True
             
         finally:
             # Only release the lock if it was actually acquired
@@ -328,6 +320,10 @@ class ScoreEvaluationService:
         else:
             evaluation_status = "pending"
         
+        # Determine if final evaluation
+        # Now granular: if complete, it is final
+        final_evaluation = (evaluation_status == "complete")
+        
         # Aligned arrays
         y_pred = np.array([item["predicted_value"] for item in evaluation_data])
         y_true = np.array([item["actual_value"] for item in evaluation_data])
@@ -357,7 +353,7 @@ class ScoreEvaluationService:
             "actual_count": actual_count,
             "evaluated_count": evaluated_count,
             "data_coverage": data_coverage,
-            "final_evaluation": False,
+            "final_evaluation": final_evaluation,
             "evaluation_status": evaluation_status,
             "error_message": None,
         }

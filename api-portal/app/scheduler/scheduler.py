@@ -299,7 +299,7 @@ class ChallengeScheduler:
                 id="periodic_challenge_scores_evaluation",
                 coalesce=CoalescePolicy.latest,
                 misfire_grace_time=300,  # 5 minute grace period
-                max_running_jobs=2, 
+                max_running_jobs=1, 
             )
             self.logger.info(
                 "Scheduled periodic challenge scores evaluation job "
