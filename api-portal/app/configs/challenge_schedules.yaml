@@ -477,7 +477,6 @@ schedules:
   params:
     description: 'Test Challenge: 1 hour horizon, 15-min frequency'
     domains:
-    - test
     subdomains: []
     categories: []
     subcategories: []
