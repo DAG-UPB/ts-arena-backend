@@ -18,10 +18,17 @@ class ForecastRepository:
     def __init__(self, conn):
         self.conn = conn
     
-    def _get_series_resolution(self, series_id: int) -> str:
+    def _get_series_resolution(self, series_id: int, definition_id: int) -> str:
         """Derive resolution from series frequency directly."""
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT frequency FROM data_portal.time_series WHERE series_id = %s", (series_id,))
+            query = """
+                SELECT 
+                    d.frequency 
+                FROM challenges.definitions d
+                JOIN challenges.definition_series_scd2 dss on d.id = dss.definition_id
+                WHERE d.id = %s AND dss.series_id = %s;
+            """
+            cur.execute(query, (definition_id, series_id))
             row = cur.fetchone()
             if not row or not row.get('frequency'):
                 return "raw"
@@ -32,64 +39,6 @@ class ForecastRepository:
                 return self.FREQUENCY_RESOLUTION_MAP.get(total_seconds, "raw")
             return "raw"
     
-
-    def get_model_series_long_term_forecasts(
-        self,
-        model_id: int,
-        series_id: int
-    ) -> Dict[str, Any]:
-        """
-        Get all forecasts for a specific model and series, plus Ground Truth.
-        """
-        resolution = self._get_series_resolution(series_id)
-        
-        table_map = {
-            "raw": "data_portal.time_series_data",
-            "15min": "data_portal.time_series_15min",
-            "1h": "data_portal.time_series_1h",
-            "1d": "data_portal.time_series_1d",
-        }
-        table_name = table_map.get(resolution, "data_portal.time_series_data")
-        
-        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            # 1. Get Forecasts
-            cur.execute("""
-                SELECT
-                    f.ts,
-                    f.predicted_value as value,
-                    f.probabilistic_values as confidence_intervals,
-                    f.created_at,
-                    c.name as round_name,
-                    c.id as round_id
-                FROM forecasts.forecasts f
-                JOIN challenges.rounds c ON c.id = f.challenge_id
-                WHERE f.model_id = %s AND f.series_id = %s
-                ORDER BY f.ts ASC
-            """, (model_id, series_id))
-            forecasts = [dict(r) for r in cur.fetchall()]
-            
-            if not forecasts:
-                return {"forecasts": [], "ground_truth": []}
-
-            # 2. Get Ground Truth (range based on forecasts)
-            min_ts = forecasts[0]['ts']
-            # We might want a bit of history before the first forecast? 
-            # User said "GT & Pred for the series since the first participation", implies from min_ts onwards.
-            # But continuous plot usually implies showing context. Let's start from min_ts.
-            
-            cur.execute(f"""
-                SELECT ts, value::FLOAT as value
-                FROM {table_name}
-                WHERE series_id = %s AND ts >= %s
-                ORDER BY ts ASC
-            """, (series_id, min_ts))
-            gt = [dict(r) for r in cur.fetchall()]
-            
-            return {
-                "forecasts": forecasts,
-                "ground_truth": gt,
-                "resolution": resolution
-            }
 
     def get_model_series_forecasts_across_rounds(
         self,
@@ -118,7 +67,7 @@ class ForecastRepository:
             end_time: Optional end date in YYYY-mm-dd format to filter forecasts and ground truth
         """
         # Determine which table to use for ground truth based on series frequency
-        resolution = self._get_series_resolution(series_id)
+        resolution = self._get_series_resolution(series_id, definition_id)
         table_map = {
             "raw": "data_portal.time_series_data",
             "15min": "data_portal.time_series_15min",

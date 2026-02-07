@@ -233,21 +233,6 @@ async def get_model_details(
     return model
 
 
-@router.get("/models/{model_id}/series/{series_id}/forecasts")
-async def get_model_series_forecasts(
-    model_id: int,
-    series_id: int,
-    api_key: str = Depends(get_api_key),
-    conn = Depends(get_db_connection)
-):
-    """
-    Get all forecasts made by this model for a specific series, along with Ground Truth.
-    """
-    repo = ForecastRepository(conn)
-    data = repo.get_model_series_long_term_forecasts(model_id, series_id)
-    return data
-
-
 @router.get("/models/{model_id}/rankings")
 async def get_model_rankings(
     model_id: int,
