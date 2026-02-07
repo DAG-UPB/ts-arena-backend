@@ -135,6 +135,7 @@ class ChallengeRepository:
             params.append(definition_id)
         
         if status and len(status) > 0:
+            # Use status column from view (computed dynamically, respects is_cancelled)
             placeholders = ','.join(['%s'] * len(status))
             query += f" AND status IN ({placeholders})"
             params.extend(status)

@@ -28,10 +28,18 @@ class RoundRepository:
         self.conn = conn
 
     def get_round_status(self, round_id: int) -> Optional[str]:
-        """Get the status of a round."""
+        """Get the status of a round using the computed status from view.
+        
+        The status is dynamically computed from timestamps in the view,
+        with 'cancelled' if is_cancelled flag is True.
+        """
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                "SELECT status FROM challenges.rounds WHERE id = %s",
+                """
+                SELECT status
+                FROM challenges.v_rounds_with_status 
+                WHERE id = %s
+                """,
                 (round_id,),
             )
             row = cur.fetchone()
