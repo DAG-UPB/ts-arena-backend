@@ -24,7 +24,6 @@ class SeriesInDefinitionSchema(BaseModel):
     series_id: int
     series_name: str
     series_unique_id: Optional[str] = None
-    forecast_count: int
     rounds_participated: int
 
 

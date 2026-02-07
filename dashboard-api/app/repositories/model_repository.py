@@ -435,22 +435,19 @@ class ModelRepository:
                 return None
             
             # Get all series grouped by definition
+            # Using v_ranking_base (based on scores) for better performance than forecasts table
             cur.execute("""
                 SELECT 
-                    d.id as definition_id,
-                    d.name as definition_name,
-                    ts.series_id,
-                    ts.name as series_name,
-                    ts.unique_id as series_unique_id,
-                    COUNT(DISTINCT f.id) as forecast_count,
-                    COUNT(DISTINCT r.id) as rounds_participated
-                FROM forecasts.forecasts f
-                JOIN challenges.rounds r ON r.id = f.round_id
-                JOIN challenges.definitions d ON d.id = r.definition_id
-                JOIN data_portal.time_series ts ON ts.series_id = f.series_id
-                WHERE f.model_id = %s
-                GROUP BY d.id, d.name, ts.series_id, ts.name, ts.unique_id
-                ORDER BY d.name, ts.name
+                    vrb.definition_id,
+                    vrb.definition_name,
+                    vrb.series_id,
+                    vrb.series_name,
+                    vrb.series_unique_id,
+                    COUNT(DISTINCT vrb.round_id) as rounds_participated
+                FROM forecasts.v_ranking_base vrb
+                WHERE vrb.model_id = %s
+                GROUP BY vrb.definition_id, vrb.definition_name, vrb.series_id, vrb.series_name, vrb.unique_id
+                ORDER BY vrb.definition_name, vrb.series_name
             """, (model_id,))
             rows = [dict(r) for r in cur.fetchall()]
             
@@ -469,7 +466,6 @@ class ModelRepository:
                     'series_id': row['series_id'],
                     'series_name': row['series_name'],
                     'series_unique_id': row['series_unique_id'],
-                    'forecast_count': row['forecast_count'],
                     'rounds_participated': row['rounds_participated']
                 })
             

@@ -451,14 +451,12 @@ async def get_model_series_by_definition(
               "series_id": 456,
               "series_name": "Power Load - Region A",
               "series_unique_id": "power_load_region_a",
-              "forecast_count": 240,
               "rounds_participated": 10
             },
             {
               "series_id": 457,
               "series_name": "Power Load - Region B",
               "series_unique_id": "power_load_region_b",
-              "forecast_count": 180,
               "rounds_participated": 8
             }
           ]
@@ -471,7 +469,6 @@ async def get_model_series_by_definition(
               "series_id": 456,
               "series_name": "Power Load - Region A",
               "series_unique_id": "power_load_region_a",
-              "forecast_count": 48,
               "rounds_participated": 4
             }
           ]
@@ -494,7 +491,6 @@ async def get_model_series_by_definition(
     - Series appearing in multiple definitions are listed separately under each
     - Definitions are ordered alphabetically by name
     - Series within each definition are ordered alphabetically by name
-    - forecast_count includes all forecast data points across all rounds
     - rounds_participated shows distinct rounds where forecasts were submitted
     """
     repo = ModelRepository(conn)
