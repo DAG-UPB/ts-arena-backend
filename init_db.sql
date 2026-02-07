@@ -660,7 +660,7 @@ SELECT
     dc.subcategory
 FROM forecasts.scores cs
 JOIN challenges.rounds cr ON cr.id = cs.round_id
-LEFT JOIN challenges.definitions cd ON cr.definition_id = cd.id
+LEFT JOIN challenges.v_active_definitions cd ON cr.definition_id = cd.id
 JOIN models.model_info mi ON mi.id = cs.model_id
 JOIN auth.users u ON u.id = mi.user_id
 JOIN data_portal.time_series ts ON ts.series_id = cs.series_id
