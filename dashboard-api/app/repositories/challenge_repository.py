@@ -1,7 +1,8 @@
 import sys
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import psycopg2.extras
+from cron_converter import Cron
 
 # Import utilities
 from app.core.utils import parse_iso8601_to_interval_list
@@ -27,13 +28,36 @@ class ChallengeRepository:
                 subcategories,
                 frequency,
                 horizon,
-                created_at
+                created_at,
+                cron_schedule,
+                registration_duration
             FROM challenges.definitions
             ORDER BY name;
         """
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(query)
-            return [dict(row) for row in cur.fetchall()]
+            results = []
+            for row in cur.fetchall():
+                row_dict = dict(row)
+                
+                # Calculate next registration dates from cron schedule
+                if row_dict.get('cron_schedule') and row_dict.get('registration_duration'):
+                    try:
+                        cron = Cron(row_dict['cron_schedule'])
+                        schedule = cron.schedule(datetime.now(timezone.utc))
+                        next_start = schedule.next()
+                        row_dict['next_registration_start'] = next_start
+                        row_dict['next_registration_end'] = next_start + row_dict['registration_duration']
+                    except (ValueError, KeyError):
+                        row_dict['next_registration_start'] = None
+                        row_dict['next_registration_end'] = None
+                else:
+                    row_dict['next_registration_start'] = None
+                    row_dict['next_registration_end'] = None
+                
+                results.append(row_dict)
+            
+            return results
 
     def get_definition(self, definition_id: int) -> Optional[Dict[str, Any]]:
         """Get a specific challenge definition."""
