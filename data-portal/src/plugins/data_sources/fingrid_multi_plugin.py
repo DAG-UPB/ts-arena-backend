@@ -71,6 +71,10 @@ class FingridMultiApiClient:
                 f"Fingrid Multi: Fetching page {page} for {len(dataset_ids)} datasets "
                 f"({datasets_param[:50]}{'...' if len(datasets_param) > 50 else ''})"
             )
+            logger.info(
+                f"Fingrid Multi: API params - startTime={params['startTime']}, "
+                f"endTime={params['endTime']}, pageSize={params['pageSize']}"
+            )
             
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
