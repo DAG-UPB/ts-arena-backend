@@ -442,7 +442,7 @@ class ModelRepository:
                     vrb.definition_name,
                     vrb.series_id,
                     vrb.series_name,
-                    vrb.series_unique_id,
+                    vrb.unique_id,
                     COUNT(DISTINCT vrb.round_id) as rounds_participated
                 FROM forecasts.v_ranking_base vrb
                 WHERE vrb.model_id = %s
