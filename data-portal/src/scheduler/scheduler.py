@@ -348,7 +348,9 @@ class DataPortalScheduler:
                         get_interval_seconds(s.update_frequency or '15 minutes') 
                         for s in series_definitions
                     )
-                    start_date = (datetime.now() - timedelta(seconds=1000 * min_interval)).isoformat()
+                    # Use fixed 12-hour lookback for multi-series plugins
+                    # (prevents hitting Fingrid API pagination limits)
+                    start_date = (datetime.now() - timedelta(hours=12)).isoformat()
                     
                     logger.info(f"[{group_id}] Fetching data from {start_date} to latest available")
                     

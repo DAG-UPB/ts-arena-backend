@@ -18,7 +18,7 @@ class FingridMultiApiClient:
     """
     BASE_URL = "https://data.fingrid.fi/api/data"
     
-    def __init__(self, api_key: str, page_size: int = 20000):
+    def __init__(self, api_key: str, page_size: int = 10000):
         self.api_key = api_key
         self.page_size = page_size
         self.session = requests.Session()
@@ -107,7 +107,13 @@ class FingridMultiApiClient:
             
             # Check pagination
             pagination = data_json.get("pagination", {})
+            logger.info(
+                f"Fingrid Multi: Page {page} pagination info - "
+                f"total={pagination.get('total')}, lastPage={pagination.get('lastPage')}, "
+                f"nextPage={pagination.get('nextPage')}, currentPage={pagination.get('currentPage')}"
+            )
             if pagination.get("nextPage") is None:
+                logger.warning(f"Fingrid Multi: Stopping pagination at page {page} - no nextPage")
                 break
             page += 1
 
