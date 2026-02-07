@@ -344,6 +344,10 @@ async def get_model_series_forecasts_across_rounds(
     - definition_id: ID of the challenge definition
     - series_id: ID of the time series
     
+    **Query Parameters:**
+    - start_time: Optional start date (YYYY-mm-dd) to filter forecasts and ground truth
+    - end_time: Optional end date (YYYY-mm-dd) to filter forecasts and ground truth
+    
     **Response Structure:**
     ```json
     {
@@ -388,6 +392,16 @@ async def get_model_series_forecasts_across_rounds(
           "forecast_exists": false,
           "forecasts": null
         }
+      ],
+      "ground_truth": [
+        {
+          "ts": "2024-01-02T00:00:00Z",
+          "value": 1230.2
+        },
+        {
+          "ts": "2024-01-02T00:15:00Z",
+          "value": 1245.8
+        }
       ]
     }
     ```
@@ -397,6 +411,7 @@ async def get_model_series_forecasts_across_rounds(
     - Identify missing forecasts (participation gaps)
     - Distinguish between series not being in scope vs missing forecasts
     - Analyze model consistency across rounds
+    - Compare forecasts against ground truth values
     
     **Headers:**
     - X-API-Key: Valid API key required
@@ -406,6 +421,8 @@ async def get_model_series_forecasts_across_rounds(
     - Rounds are ordered by start_time (ascending)
     - All rounds of the definition are included, regardless of forecast submission
     - Confidence intervals (ci) are optional and depend on whether the model provided them
+    - Ground truth data is fetched from the appropriate resolution table (15min, 1h, or 1d)
+    - Ground truth and forecasts are filtered by the same date range when provided
     """
     repo = ForecastRepository(conn)
     result = repo.get_model_series_forecasts_across_rounds(

@@ -106,6 +106,7 @@ class ForecastRepository:
         - Whether the series was part of each round
         - Whether forecasts were submitted for each round
         - The actual forecast data points if they exist
+        - Ground truth data for the series (filtered by date range if provided)
         
         This allows distinguishing between:
         1. Series not part of the round (series_in_round=False)
@@ -113,9 +114,19 @@ class ForecastRepository:
         3. Series part of the round and forecast submitted (series_in_round=True, forecast_exists=True)
         
         Args:
-            start_time: Optional start date in YYYY-mm-dd format to filter forecasts
-            end_time: Optional end date in YYYY-mm-dd format to filter forecasts
+            start_time: Optional start date in YYYY-mm-dd format to filter forecasts and ground truth
+            end_time: Optional end date in YYYY-mm-dd format to filter forecasts and ground truth
         """
+        # Determine which table to use for ground truth based on series frequency
+        resolution = self._get_series_resolution(series_id)
+        table_map = {
+            "raw": "data_portal.time_series_data",
+            "15min": "data_portal.time_series_15min",
+            "1h": "data_portal.time_series_1h",
+            "1d": "data_portal.time_series_1d",
+        }
+        table_name = table_map.get(resolution, "data_portal.time_series_data")
+        
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             # Get model info
             cur.execute("""
@@ -215,6 +226,26 @@ class ForecastRepository:
                     "forecasts": forecasts if forecasts else None
                 })
             
+            # Get ground truth data with optional date filters
+            gt_query = f"""
+                SELECT ts, value::FLOAT as value
+                FROM {table_name}
+                WHERE series_id = %s
+            """
+            gt_params = [series_id]
+            
+            if start_time:
+                gt_query += " AND ts >= %s::date"
+                gt_params.append(start_time)
+            if end_time:
+                gt_query += " AND ts < (%s::date + INTERVAL '1 day')"
+                gt_params.append(end_time)
+            
+            gt_query += " ORDER BY ts ASC"
+            
+            cur.execute(gt_query, gt_params)
+            ground_truth = [dict(r) for r in cur.fetchall()]
+            
             return {
                 "model_id": model_row['id'],
                 "model_readable_id": model_row['readable_id'],
@@ -223,6 +254,7 @@ class ForecastRepository:
                 "definition_name": definition_row['name'],
                 "series_id": series_row['series_id'],
                 "series_name": series_row['name'],
-                "rounds": result_rounds
+                "rounds": result_rounds,
+                "ground_truth": ground_truth
             }
 

@@ -5,6 +5,12 @@ from typing import Optional, List, Dict, Any
 from app.schemas.round import ForecastDataPoint
 
 
+class GroundTruthDataPoint(BaseModel):
+    """Ground truth data point."""
+    ts: datetime
+    value: float
+
+
 class RoundForecastStatus(BaseModel):
     """Forecast status for a specific round."""
     round_id: int
@@ -26,3 +32,4 @@ class ModelSeriesForecastsAcrossRoundsSchema(BaseModel):
     series_id: int
     series_name: str
     rounds: List[RoundForecastStatus]
+    ground_truth: List[GroundTruthDataPoint]
