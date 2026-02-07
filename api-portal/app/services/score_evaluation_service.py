@@ -25,6 +25,10 @@ FREQUENCY_TO_RESOLUTION: Dict[timedelta, str] = {
     timedelta(days=1): "1d",
 }
 
+# Timeout configuration for forced finalization
+EVALUATION_TIMEOUT = timedelta(days=1)  # Grace period after round end
+MIN_COVERAGE_FOR_FINAL = 0.95           # Minimum 95% coverage required for valid score
+
 
 def timedelta_to_resolution(frequency: Optional[timedelta]) -> str:
     """
@@ -166,7 +170,8 @@ class ScoreEvaluationService:
                             round_id=round_id,
                             model_id=model_id,
                             series_id=series_id,
-                            resolution=resolution
+                            resolution=resolution,
+                            round_end_time=round_info.end_time
                         )
                         
                         if score_data:
@@ -217,10 +222,18 @@ class ScoreEvaluationService:
         round_id: int,
         model_id: int,
         series_id: int,
-        resolution: str = "1h"
+        resolution: str = "1h",
+        round_end_time: Optional[datetime] = None
     ) -> Dict[str, Any] | None:
         """
         Calculate MASE and RMSE for a specific model/series combination.
+        
+        Args:
+            round_id: Challenge round ID
+            model_id: Model ID
+            series_id: Time series ID  
+            resolution: Data resolution for actuals lookup
+            round_end_time: Round end time for timeout calculation
         """
         # Get forecast stats (min_ts, max_ts, count)
         forecast_stats = await self.forecast_repo.get_forecast_stats(
@@ -320,9 +333,50 @@ class ScoreEvaluationService:
         else:
             evaluation_status = "pending"
         
+        # Check if evaluation timeout has passed
+        now = datetime.now(timezone.utc)
+        timeout_passed = False
+        if round_end_time is not None:
+            end_time = round_end_time
+            if end_time.tzinfo is None:
+                end_time = end_time.replace(tzinfo=timezone.utc)
+            else:
+                end_time = end_time.astimezone(timezone.utc)
+            timeout_passed = now > end_time + EVALUATION_TIMEOUT
+        
         # Determine if final evaluation
-        # Now granular: if complete, it is final
-        final_evaluation = (evaluation_status == "complete")
+        # Complete = 100% coverage -> final
+        # Timeout passed with >= 95% coverage -> final (valid score)
+        # Timeout passed with < 95% coverage -> final but excluded (mase=NULL)
+        if evaluation_status == "complete":
+            final_evaluation = True
+        elif timeout_passed:
+            final_evaluation = True
+            if data_coverage < MIN_COVERAGE_FOR_FINAL:
+                # Insufficient data after timeout - exclude from ELO
+                logger.info(
+                    f"Timeout: round {round_id}, model {model_id}, series {series_id} "
+                    f"has only {data_coverage:.1%} coverage - marking as insufficient_data"
+                )
+                return {
+                    "round_id": round_id,
+                    "model_id": model_id,
+                    "series_id": series_id,
+                    "mase": None,  # Excluded from ELO
+                    "rmse": None,
+                    "forecast_count": forecast_count,
+                    "actual_count": actual_count,
+                    "evaluated_count": evaluated_count,
+                    "data_coverage": data_coverage,
+                    "final_evaluation": True,
+                    "evaluation_status": "insufficient_data",
+                    "error_message": f"Timeout: only {data_coverage:.1%} coverage (min {MIN_COVERAGE_FOR_FINAL:.0%} required)",
+                }
+            else:
+                # Sufficient data after timeout - keep as valid partial
+                evaluation_status = "partial"
+        else:
+            final_evaluation = False
         
         # Aligned arrays
         y_pred = np.array([item["predicted_value"] for item in evaluation_data])
