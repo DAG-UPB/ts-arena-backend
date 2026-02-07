@@ -19,6 +19,8 @@ class ChallengeDefinitionSchema(BaseModel):
     frequency: Optional[timedelta] = None
     horizon: Optional[timedelta] = None
     created_at: Optional[datetime] = None
+    next_registration_start: Optional[datetime] = None
+    next_registration_end: Optional[datetime] = None
     
     @field_serializer('frequency', 'horizon')
     def serialize_durations(self, value: Optional[timedelta], info) -> Optional[str]:
