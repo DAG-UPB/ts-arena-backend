@@ -181,7 +181,7 @@ class ChallengeService:
             registration_end=registration_end,
             start_time=start_time,
             end_time=end_time,
-            status="registration",
+
         )
 
         # Schedule data preparation job
@@ -246,7 +246,7 @@ class ChallengeService:
 
         except Exception as e:
             logger.error(f"Error preparing context data for round {round_id}: {e}")
-            await self.round_repository.update_status(round_id, "cancelled")
+            await self.round_repository.cancel_round(round_id)
 
     async def _prepare_context_data(
         self,
@@ -412,7 +412,7 @@ class ChallengeService:
                     registration_end=r.registration_end,
                     start_time=r.start_time,
                     end_time=r.end_time,
-                    status=r.status if r.status == "cancelled" else r.computed_status,
+                    status=r.computed_status,
                     definition_id=r.definition_id,
                     definition_name=r.definition_name,
                     definition_domains=r.definition_domains,
@@ -445,7 +445,7 @@ class ChallengeService:
                 registration_end=r.registration_end,
                 start_time=r.start_time,
                 end_time=r.end_time,
-                status=r.status if r.status == "cancelled" else r.computed_status,
+                status=r.computed_status,
                 definition_id=r.definition_id,
                 definition_name=r.definition_name,
                 definition_domains=r.definition_domains,

@@ -79,7 +79,7 @@ class ChallengeRound(Base):
     registration_end = Column(DateTime(timezone=True))
     start_time = Column(DateTime(timezone=True))
     end_time = Column(DateTime(timezone=True))
-    status = Column(Text, default='registration')
+    is_cancelled = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -156,7 +156,7 @@ class VChallengeRoundWithStatus(Base):
     registration_end = Column(DateTime(timezone=True))
     start_time = Column(DateTime(timezone=True))
     end_time = Column(DateTime(timezone=True))
-    status = Column(String)
+    is_cancelled = Column(Boolean)
     created_at = Column(DateTime(timezone=True))
     updated_at = Column(DateTime(timezone=True))
     # From joined definition
@@ -166,4 +166,6 @@ class VChallengeRoundWithStatus(Base):
     definition_subdomains = Column(ARRAY(Text))
     definition_categories = Column(ARRAY(Text))
     definition_subcategories = Column(ARRAY(Text))
-    computed_status = Column(String)
+    # Computed columns from view
+    status = Column(String)  # Effective status: respects is_cancelled
+    computed_status = Column(String)  # Pure timestamp-based status

@@ -191,42 +191,29 @@ class ChallengeRoundRepository:
     ) -> List[VChallengeRoundWithStatus]:
         """
         Lists challenge rounds from the view, optionally filtered by status or definition.
+        The status is computed dynamically from timestamps in the view.
         Results are ordered by creation date descending.
         """
         query = select(VChallengeRoundWithStatus)
         if statuses:
-            from sqlalchemy import or_, and_
-            conditions = []
-            # specific check for 'cancelled' using static status
-            if 'cancelled' in statuses:
-                conditions.append(VChallengeRoundWithStatus.status == 'cancelled')
-            
-            # for other statuses (active, completed, registration), use computed_status
-            # but ensure we don't include cancelled rounds
-            other_statuses = [s for s in statuses if s != 'cancelled']
-            if other_statuses:
-                conditions.append(
-                    and_(
-                        VChallengeRoundWithStatus.computed_status.in_(other_statuses),
-                        VChallengeRoundWithStatus.status != 'cancelled'
-                    )
-                )
-            
-            if conditions:
-                query = query.where(or_(*conditions))
+            # Filter by effective status from view (includes is_cancelled logic)
+            query = query.where(VChallengeRoundWithStatus.status.in_(statuses))
+        
+        if definition_id:
+            query = query.where(VChallengeRoundWithStatus.definition_id == definition_id)
         
         query = query.order_by(VChallengeRoundWithStatus.created_at.desc())
 
         result = await self.session.execute(query)
         return result.scalars().all()
 
-    async def update_status(self, round_id: int, status: str) -> Optional[ChallengeRound]:
-        """Updates the status of a challenge round."""
+    async def cancel_round(self, round_id: int) -> Optional[ChallengeRound]:
+        """Cancels a challenge round by setting is_cancelled to True."""
         round_obj = await self.get_by_id(round_id)
         if not round_obj:
             return None
         
-        round_obj.status = status
+        round_obj.is_cancelled = True
         await self.session.commit()
         await self.session.refresh(round_obj)
         return round_obj

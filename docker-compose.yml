@@ -73,8 +73,6 @@ services:
     depends_on:
       - timescaledb
 
-volumes:
-
 networks:
   default:
   internal:

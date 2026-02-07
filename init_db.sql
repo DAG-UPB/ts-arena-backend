@@ -325,8 +325,7 @@ CREATE TABLE challenges.rounds (
     registration_end TIMESTAMPTZ,
     start_time TIMESTAMPTZ,
     end_time TIMESTAMPTZ,
-    status TEXT DEFAULT 'registration' 
-        CHECK (status IN ('registration', 'active', 'completed', 'cancelled')),
+    is_cancelled BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -337,15 +336,14 @@ COMMENT ON TABLE challenges.rounds IS
 COMMENT ON COLUMN challenges.rounds.definition_id IS 
 'Links to the parent challenge definition.';
 
-COMMENT ON COLUMN challenges.rounds.status IS 
-'Lifecycle status: announced (pre-registration), registration (accepting participants), 
-active (forecasting in progress), completed (ended), cancelled (aborted).';
+COMMENT ON COLUMN challenges.rounds.is_cancelled IS 
+'Manual override flag. When TRUE, the round is cancelled regardless of timestamps.';
 
 COMMENT ON COLUMN challenges.rounds.context_length IS 
 'Number of historical data points to use as context for forecasting';
 
 CREATE INDEX idx_rounds_definition ON challenges.rounds(definition_id);
-CREATE INDEX idx_rounds_status ON challenges.rounds(status);
+CREATE INDEX idx_rounds_cancelled ON challenges.rounds(is_cancelled) WHERE is_cancelled = TRUE;
 CREATE INDEX idx_rounds_time_range ON challenges.rounds(registration_start, registration_end, end_time);
 
 -- ==========================================================
@@ -423,6 +421,20 @@ CREATE TABLE forecasts.forecasts (
     UNIQUE (round_id, model_id, series_id, ts)
 );
 SELECT create_hypertable('forecasts.forecasts', 'ts', if_not_exists => TRUE);
+
+-- Compression configuration for forecasts.forecasts
+-- Segmenting by round_id, model_id, series_id keeps time series queries fast
+-- Ordering by ts DESC optimizes for recent data access patterns
+ALTER TABLE forecasts.forecasts SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'round_id, model_id, series_id',
+  timescaledb.compress_orderby = 'ts DESC'
+);
+
+-- Automatic compression policy: compress chunks older than 7 days
+-- Forecasts are typically final once a round completes, so this is safe
+SELECT add_compression_policy('forecasts.forecasts', INTERVAL '7 days', if_not_exists => TRUE);
+
 CREATE INDEX idx_forecasts_round ON forecasts.forecasts(round_id);
 
 CREATE TABLE forecasts.scores (
@@ -456,12 +468,21 @@ SELECT
     cd.subdomains AS definition_subdomains,
     cd.categories AS definition_categories,
     cd.subcategories AS definition_subcategories,
+    -- Computed status from timestamps (pure computation, no override)
     CASE
         WHEN NOW() >= cr.registration_start AND NOW() <= cr.registration_end THEN 'registration'
         WHEN NOW() > cr.registration_end AND NOW() <= cr.end_time THEN 'active'
         WHEN NOW() > cr.end_time THEN 'completed'
         ELSE 'undefined'
-    END AS computed_status
+    END AS computed_status,
+    -- Effective status: respects is_cancelled override
+    CASE
+        WHEN cr.is_cancelled THEN 'cancelled'
+        WHEN NOW() >= cr.registration_start AND NOW() <= cr.registration_end THEN 'registration'
+        WHEN NOW() > cr.registration_end AND NOW() <= cr.end_time THEN 'active'
+        WHEN NOW() > cr.end_time THEN 'completed'
+        ELSE 'undefined'
+    END AS status
 FROM challenges.rounds cr
 LEFT JOIN challenges.definitions cd ON cr.definition_id = cd.id;
 
@@ -502,16 +523,24 @@ SELECT
     cr.context_length,
     cr.horizon,
     cr.frequency,
-    cr.status,
-    cr.created_at,
-    cr.updated_at,
-    -- Computed status from timestamps (fallback)
+    cr.is_cancelled,
+    -- Effective status: computed from timestamps, respecting is_cancelled override
+    CASE
+        WHEN cr.is_cancelled THEN 'cancelled'
+        WHEN NOW() >= cr.registration_start AND NOW() <= cr.registration_end THEN 'registration'
+        WHEN NOW() > cr.registration_end AND NOW() <= cr.end_time THEN 'active'
+        WHEN NOW() > cr.end_time THEN 'completed'
+        ELSE 'undefined'
+    END AS status,
+    -- Pure computed status (for backwards compatibility)
     CASE
         WHEN NOW() >= cr.registration_start AND NOW() <= cr.registration_end THEN 'registration'
         WHEN NOW() > cr.registration_end AND NOW() <= cr.end_time THEN 'active'
         WHEN NOW() > cr.end_time THEN 'completed'
         ELSE 'undefined'
     END AS computed_status,
+    cr.created_at,
+    cr.updated_at,
     -- Time series statistics
     COUNT(DISTINCT csp.series_id) as n_time_series,
     -- Aggregated domain information (arrays)
@@ -534,10 +563,11 @@ LEFT JOIN data_portal.domain_category dc ON ts.domain_category_id = dc.id
 GROUP BY 
     cr.id, cr.name, cr.description, cr.definition_id, cd.schedule_id, cd.name, cd.domains, cd.subdomains, cd.categories, cd.subcategories,
     cr.registration_start, cr.registration_end, cr.start_time, cr.end_time, 
-    cr.context_length, cr.horizon, cr.frequency, cr.status, cr.created_at, cr.updated_at;
+    cr.context_length, cr.horizon, cr.frequency, cr.is_cancelled, cr.created_at, cr.updated_at;
 
 COMMENT ON VIEW challenges.v_rounds_with_metadata IS 
 'Challenge rounds with aggregated metadata for participant-facing filtering.
+The status column is computed dynamically from timestamps, respecting is_cancelled override.
 Includes definition info, round timing, and aggregated domain/category data from time series.';
 
 -- ==========================================================
