@@ -57,6 +57,7 @@ class RoundRepository:
                     c.status,
                     c.context_length,
                     c.horizon,
+                    c.frequency,
                     c.start_time,
                     c.end_time,
                     c.registration_start,

@@ -13,12 +13,13 @@ class RoundMetaSchema(BaseModel):
     status: str
     context_length: Optional[Any] = None
     horizon: Optional[timedelta] = None
+    frequency: Optional[timedelta] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     registration_start: Optional[datetime] = None
     registration_end: Optional[datetime] = None
 
-    @field_serializer('horizon')
+    @field_serializer('horizon', 'frequency')
     def serialize_durations(self, value: Optional[timedelta], info) -> Optional[str]:
         """Convert timedelta to ISO 8601 duration format for API responses."""
         return serialize_timedelta_to_iso8601(value)
