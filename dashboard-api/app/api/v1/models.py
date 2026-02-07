@@ -318,6 +318,8 @@ async def get_model_series_forecasts_across_rounds(
     model_id: int,
     definition_id: int,
     series_id: int,
+    start_time: Optional[str] = Query(None, description="Filter forecasts from this date (YYYY-mm-dd)", example="2025-12-01"),
+    end_time: Optional[str] = Query(None, description="Filter forecasts until this date (YYYY-mm-dd)", example="2025-12-31"),
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
 ):
@@ -406,7 +408,13 @@ async def get_model_series_forecasts_across_rounds(
     - Confidence intervals (ci) are optional and depend on whether the model provided them
     """
     repo = ForecastRepository(conn)
-    result = repo.get_model_series_forecasts_across_rounds(model_id, definition_id, series_id)
+    result = repo.get_model_series_forecasts_across_rounds(
+        model_id, 
+        definition_id, 
+        series_id,
+        start_time=start_time,
+        end_time=end_time
+    )
     
     if not result:
         raise HTTPException(

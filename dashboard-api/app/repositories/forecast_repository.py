@@ -95,7 +95,9 @@ class ForecastRepository:
         self,
         model_id: int,
         definition_id: int,
-        series_id: int
+        series_id: int,
+        start_time: str = None,
+        end_time: str = None
     ) -> Dict[str, Any]:
         """
         Get forecasts for a specific model and series across all rounds of a definition.
@@ -109,6 +111,10 @@ class ForecastRepository:
         1. Series not part of the round (series_in_round=False)
         2. Series part of the round but no forecast submitted (series_in_round=True, forecast_exists=False)
         3. Series part of the round and forecast submitted (series_in_round=True, forecast_exists=True)
+        
+        Args:
+            start_time: Optional start date in YYYY-mm-dd format to filter forecasts
+            end_time: Optional end date in YYYY-mm-dd format to filter forecasts
         """
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             # Get model info
@@ -170,7 +176,8 @@ class ForecastRepository:
                 
                 if series_in_round:
                     # Check if forecasts exist for this round
-                    cur.execute("""
+                    # Build query with optional date filters
+                    query = """
                         SELECT 
                             f.ts,
                             f.predicted_value as y,
@@ -179,8 +186,19 @@ class ForecastRepository:
                         WHERE f.round_id = %s 
                             AND f.model_id = %s 
                             AND f.series_id = %s
-                        ORDER BY f.ts ASC
-                    """, (round_id, model_id, series_id))
+                    """
+                    params = [round_id, model_id, series_id]
+                    
+                    if start_time:
+                        query += " AND f.ts >= %s::date"
+                        params.append(start_time)
+                    if end_time:
+                        query += " AND f.ts < (%s::date + INTERVAL '1 day')"
+                        params.append(end_time)
+                    
+                    query += " ORDER BY f.ts ASC"
+                    
+                    cur.execute(query, params)
                     forecast_rows = [dict(r) for r in cur.fetchall()]
                     
                     if forecast_rows:
