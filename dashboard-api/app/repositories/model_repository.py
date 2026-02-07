@@ -465,7 +465,7 @@ class ModelRepository:
                 definitions_dict[def_id]['series'].append({
                     'series_id': row['series_id'],
                     'series_name': row['series_name'],
-                    'series_unique_id': row['series_unique_id'],
+                    'series_unique_id': row['unique_id'],
                     'rounds_participated': row['rounds_participated']
                 })
             
