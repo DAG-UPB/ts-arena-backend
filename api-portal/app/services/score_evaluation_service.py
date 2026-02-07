@@ -185,7 +185,19 @@ class ScoreEvaluationService:
                             f"Error calculating score for round {round_id}, "
                             f"model {model_id}, series {series_id}: {e}"
                         )
+                        
+                        # Check if timeout has passed
+                        now = datetime.now(timezone.utc)
+                        end_time = round_info.end_time
+                        if end_time.tzinfo is None:
+                            end_time = end_time.replace(tzinfo=timezone.utc)
+                        else:
+                            end_time = end_time.astimezone(timezone.utc)
+                        
+                        timeout_passed = now > end_time + EVALUATION_TIMEOUT
+                        
                         # Add an error entry
+                        # If timeout has passed, we mark it as final evaluation even on error
                         all_scores.append({
                             "round_id": round_id,
                             "model_id": model_id,
@@ -196,7 +208,7 @@ class ScoreEvaluationService:
                             "actual_count": 0,
                             "evaluated_count": 0,
                             "data_coverage": 0.0,
-                            "final_evaluation": False,
+                            "final_evaluation": timeout_passed,
                             "evaluation_status": "error",
                             "error_message": str(e)[:500],
                         })
