@@ -289,7 +289,7 @@ class ModelRepository:
             # Get unique challenge definitions with IDs and names
             cur.execute("""
                 SELECT id, name
-                FROM challenges.definitions
+                FROM challenges.v_active_definitions
                 WHERE id IS NOT NULL
                 ORDER BY name
             """)
@@ -354,7 +354,7 @@ class ModelRepository:
                     cd.id as definition_id,
                     cd.name as definition_name
                 FROM forecasts.daily_rankings dr
-                JOIN challenges.definitions cd ON cd.id = CAST(dr.scope_id AS INTEGER)
+                JOIN challenges.v_active_definitions cd ON cd.id = CAST(dr.scope_id AS INTEGER)
                 WHERE dr.model_id = %s
                   AND dr.scope_type = 'definition'
                   AND dr.calculation_date BETWEEN %s AND %s

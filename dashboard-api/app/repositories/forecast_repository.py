@@ -141,7 +141,7 @@ class ForecastRepository:
             # Get definition info
             cur.execute("""
                 SELECT id, name
-                FROM challenges.definitions
+                FROM challenges.v_active_definitions
                 WHERE id = %s
             """, (definition_id,))
             definition_row = cur.fetchone()

@@ -571,6 +571,17 @@ The status column is computed dynamically from timestamps, respecting is_cancell
 Includes definition info, round timing, and aggregated domain/category data from time series.';
 
 -- ==========================================================
+-- View: Active Challenge Definitions
+-- ==========================================================
+CREATE OR REPLACE VIEW challenges.v_active_definitions AS
+SELECT *
+FROM challenges.definitions
+WHERE is_active = TRUE;
+
+COMMENT ON VIEW challenges.v_active_definitions IS 
+'View returning only active challenge definitions, mirroring the table structure 1:1.';
+
+-- ==========================================================
 -- 7) View: Data Availability Check
 -- ==========================================================
 CREATE OR REPLACE VIEW data_portal.v_data_availability AS

@@ -31,7 +31,7 @@ class ChallengeRepository:
                 created_at,
                 cron_schedule,
                 registration_duration
-            FROM challenges.definitions
+            FROM challenges.v_active_definitions
             ORDER BY name;
         """
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -73,7 +73,7 @@ class ChallengeRepository:
                 frequency,
                 horizon,
                 created_at
-            FROM challenges.definitions
+            FROM challenges.v_active_definitions
             WHERE id = %s;
         """
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
