@@ -430,13 +430,11 @@ schedules:
     - electricity_emission_factor_consumed_electricity_TSO_Fingrid_15min_396
     - electricity_hydropower_power_plant_generation_TSO_Fingrid_3min_191
     - electricity_industrial_cogeneration_power_plant_generation_TSO_Fingrid_3min_202
-    - electricity_mfrr_direct_activation_price_down_TSO_Fingrid_15min_402
-    - electricity_mfrr_direct_activation_price_up_TSO_Fingrid_15min_401
     - electricity_net_consumption_TSO_Fingrid_3min_193
     - electricity_non_fossil_generation_share_TSO_Fingrid_15min_395
     - electricity_nuclear_power_plant_generation_TSO_Fingrid_3min_188
     - electricity_wind_onshore_power_plant_generation_TSO_Fingrid_3min_181
-    n_time_series: 12
+    n_time_series: 10
     frequency: 15 minutes
     context_length: 1000
     forecast_horizon: 1 day
@@ -459,13 +457,11 @@ schedules:
     - electricity_emission_factor_consumed_electricity_TSO_Fingrid_15min_396
     - electricity_hydropower_power_plant_generation_TSO_Fingrid_3min_191
     - electricity_industrial_cogeneration_power_plant_generation_TSO_Fingrid_3min_202
-    - electricity_mfrr_direct_activation_price_down_TSO_Fingrid_15min_402
-    - electricity_mfrr_direct_activation_price_up_TSO_Fingrid_15min_401
     - electricity_net_consumption_TSO_Fingrid_3min_193
     - electricity_non_fossil_generation_share_TSO_Fingrid_15min_395
     - electricity_nuclear_power_plant_generation_TSO_Fingrid_3min_188
     - electricity_wind_onshore_power_plant_generation_TSO_Fingrid_3min_181
-    n_time_series: 12
+    n_time_series: 10
     frequency: 1 hour
     context_length: 1000
     forecast_horizon: 3 days
