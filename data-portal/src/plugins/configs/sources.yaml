@@ -1,7 +1,7 @@
 
 request_groups:
   # Example: Fingrid generation data - fetches multiple generation types with fewer API calls
-  fingrid-generation-3min:
+  fingrid-generation:
     module: src.plugins.data_sources.fingrid_multi_plugin
     class: FingridMultiSeriesPlugin
     schedule: 180 seconds  # 3 minutes
@@ -13,7 +13,7 @@ request_groups:
       extract_filter:
         dataset_id: 399
       metadata:
-        name: Fingrid-Fingrid-battery_energy_storage_charge_power-3min
+        name: Fingrid-Fingrid-battery_energy_storage_charge_power
         description: Battery energy storage systems charging power - real-time data
         frequency: 3 minutes
         unit: MW
@@ -25,7 +25,7 @@ request_groups:
       extract_filter:
         dataset_id: 398
       metadata:
-        name: Fingrid-Fingrid-battery_energy_storage_discharge_power-3min
+        name: Fingrid-Fingrid-battery_energy_storage_discharge_power
         description: Battery energy storage systems discharging power - real-time
           data
         frequency: 3 minutes
@@ -38,7 +38,7 @@ request_groups:
       extract_filter:
         dataset_id: 201
       metadata:
-        name: Fingrid-Fingrid-cogeneration_district_heating_power_plant_generation-3min
+        name: Fingrid-Fingrid-cogeneration_district_heating_power_plant_generation
         description: Cogeneration of district heating - real-time data
         frequency: 3 minutes
         unit: MW
@@ -50,7 +50,7 @@ request_groups:
       extract_filter:
         dataset_id: 371
       metadata:
-        name: Fingrid-Fingrid-electric_boiler_consumption-1min
+        name: Fingrid-Fingrid-electric_boiler_consumption
         description: Electric boiler consumption sum - real-time data
         frequency: 1 minute
         unit: MW
@@ -62,7 +62,7 @@ request_groups:
       extract_filter:
         dataset_id: 192
       metadata:
-        name: Fingrid-Fingrid-electricity_production-3min
+        name: Fingrid-Fingrid-electricity_production
         description: Electricity production in Finland - real-time data
         frequency: 3 minutes
         unit: MW
@@ -74,7 +74,7 @@ request_groups:
       extract_filter:
         dataset_id: 396
       metadata:
-        name: Fingrid-Fingrid-emission_factor_consumed_electricity-15min
+        name: Fingrid-Fingrid-emission_factor_consumed_electricity
         description: Emission factor for electricity consumed in Finland - updated
           every 15 minutes
         frequency: 15 minutes
@@ -87,7 +87,7 @@ request_groups:
       extract_filter:
         dataset_id: 191
       metadata:
-        name: Fingrid-Fingrid-hydropower_power_plant_generation-3min
+        name: Fingrid-Fingrid-hydropower_power_plant_generation
         description: Hydro power production - real-time data
         frequency: 3 minutes
         unit: MW
@@ -99,7 +99,7 @@ request_groups:
       extract_filter:
         dataset_id: 202
       metadata:
-        name: Fingrid-Fingrid-industrial_cogeneration_power_plant_generation-3min
+        name: Fingrid-Fingrid-industrial_cogeneration_power_plant_generation
         description: Industrial cogeneration - real-time data
         frequency: 3 minutes
         unit: MW
@@ -111,7 +111,7 @@ request_groups:
       extract_filter:
         dataset_id: 193
       metadata:
-        name: Fingrid-Fingrid-net_consumption-3min
+        name: Fingrid-Fingrid-net_consumption
         description: Electricity consumption in Finland - real-time data
         frequency: 3 minutes
         unit: MW
@@ -123,7 +123,7 @@ request_groups:
       extract_filter:
         dataset_id: 395
       metadata:
-        name: Fingrid-Fingrid-non_fossil_generation_share-15min
+        name: Fingrid-Fingrid-non_fossil_generation_share
         description: Share of non-fossil electricity generation in Finland - updated
           every 15 minutes
         frequency: 15 minutes
@@ -136,7 +136,7 @@ request_groups:
       extract_filter:
         dataset_id: 188
       metadata:
-        name: Fingrid-Fingrid-nuclear_power_plant_generation-3min
+        name: Fingrid-Fingrid-nuclear_power_plant_generation
         description: Nuclear power production - real-time data
         frequency: 3 minutes
         unit: MW
@@ -148,7 +148,7 @@ request_groups:
       extract_filter:
         dataset_id: 181
       metadata:
-        name: Fingrid-Fingrid-wind_onshore_power_plant_generation-3min
+        name: Fingrid-Fingrid-wind_onshore_power_plant_generation
         description: Wind power production - real-time data
         frequency: 3 minutes
         unit: MW
@@ -168,7 +168,7 @@ request_groups:
     timeseries:
     - unique_id: electricity_batteries_ISO_CAISO_5min
       metadata:
-        name: CAISO-CAISO-Batteries-5min
+        name: CAISO-CAISO-Batteries
         description: California ISO battery storage generation
         frequency: 5 minutes
         unit: MW
@@ -180,7 +180,7 @@ request_groups:
         value_column: Batteries
     - unique_id: electricity_biogas_power_plant_generation_ISO_CAISO_5min
       metadata:
-        name: CAISO-CAISO-Biogas-5min
+        name: CAISO-CAISO-Biogas
         description: California ISO biogas generation
         frequency: 5 minutes
         unit: MW
@@ -192,7 +192,7 @@ request_groups:
         value_column: Biogas
     - unique_id: electricity_biomass_power_plant_generation_ISO_CAISO_5min
       metadata:
-        name: CAISO-CAISO-Biomass-5min
+        name: CAISO-CAISO-Biomass
         description: California ISO biomass generation
         frequency: 5 minutes
         unit: MW
@@ -204,7 +204,7 @@ request_groups:
         value_column: Biomass
     - unique_id: electricity_geothermal_power_plant_generation_ISO_CAISO_5min
       metadata:
-        name: CAISO-CAISO-Geothermal-5min
+        name: CAISO-CAISO-Geothermal
         description: California ISO geothermal generation
         frequency: 5 minutes
         unit: MW
@@ -216,7 +216,7 @@ request_groups:
         value_column: Geothermal
     - unique_id: electricity_imports_ISO_CAISO_5min
       metadata:
-        name: CAISO-CAISO-Imports-5min
+        name: CAISO-CAISO-Imports
         description: California ISO electricity imports
         frequency: 5 minutes
         unit: MW
@@ -228,7 +228,7 @@ request_groups:
         value_column: Imports
     - unique_id: electricity_large_hydropower_power_plant_generation_ISO_CAISO_5min
       metadata:
-        name: CAISO-CAISO-LargeHydro-5min
+        name: CAISO-CAISO-LargeHydro
         description: California ISO large hydropower generation
         frequency: 5 minutes
         unit: MW
@@ -240,7 +240,7 @@ request_groups:
         value_column: Large Hydro
     - unique_id: electricity_natural_gas_power_plant_generation_ISO_CAISO_5min
       metadata:
-        name: CAISO-CAISO-NaturalGas-5min
+        name: CAISO-CAISO-NaturalGas
         description: California ISO natural gas generation
         frequency: 5 minutes
         unit: MW
@@ -252,7 +252,7 @@ request_groups:
         value_column: Natural Gas
     - unique_id: electricity_nuclear_power_plant_generation_ISO_CAISO_5min
       metadata:
-        name: CAISO-CAISO-Nuclear-5min
+        name: CAISO-CAISO-Nuclear
         description: California ISO nuclear generation
         frequency: 5 minutes
         unit: MW
@@ -264,7 +264,7 @@ request_groups:
         value_column: Nuclear
     - unique_id: electricity_photovoltaic_power_plant_generation_ISO_CAISO_5min
       metadata:
-        name: CAISO-CAISO-Solar-5min
+        name: CAISO-CAISO-Solar
         description: California ISO solar photovoltaic generation
         frequency: 5 minutes
         unit: MW
@@ -276,7 +276,7 @@ request_groups:
         value_column: Solar
     - unique_id: electricity_small_hydropower_power_plant_generation_ISO_CAISO_5min
       metadata:
-        name: CAISO-CAISO-SmallHydro-5min
+        name: CAISO-CAISO-SmallHydro
         description: California ISO small hydropower generation
         frequency: 5 minutes
         unit: MW
@@ -288,7 +288,7 @@ request_groups:
         value_column: Small Hydro
     - unique_id: electricity_wind_onshore_power_plant_generation_ISO_CAISO_5min
       metadata:
-        name: CAISO-CAISO-Wind-5min
+        name: CAISO-CAISO-Wind
         description: California ISO onshore wind generation
         frequency: 5 minutes
         unit: MW
@@ -308,7 +308,7 @@ request_groups:
     timeseries:
     - unique_id: electricity_net_consumption_ISO_CAISO_5min
       metadata:
-        name: CAISO-CAISO-Load-5min
+        name: CAISO-CAISO-Load
         description: California ISO net electricity consumption
         frequency: 5 minutes
         unit: MW
@@ -329,7 +329,7 @@ request_groups:
     timeseries:
     - unique_id: electricity_lmp_congestion_Trading Hub_TH_NP15_GEN-APND_5min
       metadata:
-        name: CAISO-NP15-LMP-Congestion-5min
+        name: CAISO-NP15-LMP-Congestion
         description: California ISO NP15 trading hub LMP congestion component
         frequency: 5 minutes
         unit: $/MWh
@@ -343,7 +343,7 @@ request_groups:
         filter_value: TH_NP15_GEN-APND
     - unique_id: electricity_lmp_congestion_Trading Hub_TH_SP15_GEN-APND_5min
       metadata:
-        name: CAISO-SP15-LMP-Congestion-5min
+        name: CAISO-SP15-LMP-Congestion
         description: California ISO SP15 trading hub LMP congestion component
         frequency: 5 minutes
         unit: $/MWh
@@ -357,7 +357,7 @@ request_groups:
         filter_value: TH_SP15_GEN-APND
     - unique_id: electricity_lmp_congestion_Trading Hub_TH_ZP26_GEN-APND_5min
       metadata:
-        name: CAISO-ZP26-LMP-Congestion-5min
+        name: CAISO-ZP26-LMP-Congestion
         description: California ISO ZP26 trading hub LMP congestion component
         frequency: 5 minutes
         unit: $/MWh
@@ -371,7 +371,7 @@ request_groups:
         filter_value: TH_ZP26_GEN-APND
     - unique_id: electricity_lmp_energy_Trading Hub_TH_NP15_GEN-APND_5min
       metadata:
-        name: CAISO-NP15-LMP-Energy-5min
+        name: CAISO-NP15-LMP-Energy
         description: California ISO NP15 trading hub LMP energy component
         frequency: 5 minutes
         unit: $/MWh
@@ -385,7 +385,7 @@ request_groups:
         filter_value: TH_NP15_GEN-APND
     - unique_id: electricity_lmp_energy_Trading Hub_TH_SP15_GEN-APND_5min
       metadata:
-        name: CAISO-SP15-LMP-Energy-5min
+        name: CAISO-SP15-LMP-Energy
         description: California ISO SP15 trading hub LMP energy component
         frequency: 5 minutes
         unit: $/MWh
@@ -399,7 +399,7 @@ request_groups:
         filter_value: TH_SP15_GEN-APND
     - unique_id: electricity_lmp_energy_Trading Hub_TH_ZP26_GEN-APND_5min
       metadata:
-        name: CAISO-ZP26-LMP-Energy-5min
+        name: CAISO-ZP26-LMP-Energy
         description: California ISO ZP26 trading hub LMP energy component
         frequency: 5 minutes
         unit: $/MWh
@@ -413,7 +413,7 @@ request_groups:
         filter_value: TH_ZP26_GEN-APND
     - unique_id: electricity_lmp_loss_Trading Hub_TH_NP15_GEN-APND_5min
       metadata:
-        name: CAISO-NP15-LMP-Loss-5min
+        name: CAISO-NP15-LMP-Loss
         description: California ISO NP15 trading hub LMP loss component
         frequency: 5 minutes
         unit: $/MWh
@@ -427,7 +427,7 @@ request_groups:
         filter_value: TH_NP15_GEN-APND
     - unique_id: electricity_lmp_loss_Trading Hub_TH_SP15_GEN-APND_5min
       metadata:
-        name: CAISO-SP15-LMP-Loss-5min
+        name: CAISO-SP15-LMP-Loss
         description: California ISO SP15 trading hub LMP loss component
         frequency: 5 minutes
         unit: $/MWh
@@ -441,7 +441,7 @@ request_groups:
         filter_value: TH_SP15_GEN-APND
     - unique_id: electricity_lmp_loss_Trading Hub_TH_ZP26_GEN-APND_5min
       metadata:
-        name: CAISO-ZP26-LMP-Loss-5min
+        name: CAISO-ZP26-LMP-Loss
         description: California ISO ZP26 trading hub LMP loss component
         frequency: 5 minutes
         unit: $/MWh
@@ -455,7 +455,7 @@ request_groups:
         filter_value: TH_ZP26_GEN-APND
     - unique_id: "electricity_market_price_Trading Hub_TH_NP15_GEN-APND_5min"
       metadata:
-        name: CAISO-NP15-MarketPrice-5min
+        name: CAISO-NP15-MarketPrice
         description: California ISO NP15 trading hub total market price
         frequency: 5 minutes
         unit: $/MWh
@@ -469,7 +469,7 @@ request_groups:
         filter_value: TH_NP15_GEN-APND
     - unique_id: "electricity_market_price_Trading Hub_TH_SP15_GEN-APND_5min"
       metadata:
-        name: CAISO-SP15-MarketPrice-5min
+        name: CAISO-SP15-MarketPrice
         description: California ISO SP15 trading hub total market price
         frequency: 5 minutes
         unit: $/MWh
@@ -483,7 +483,7 @@ request_groups:
         filter_value: TH_SP15_GEN-APND
     - unique_id: "electricity_market_price_Trading Hub_TH_ZP26_GEN-APND_5min"
       metadata:
-        name: CAISO-ZP26-MarketPrice-5min
+        name: CAISO-ZP26-MarketPrice
         description: California ISO ZP26 trading hub total market price
         frequency: 5 minutes
         unit: $/MWh
@@ -505,7 +505,7 @@ request_groups:
     timeseries:
     - unique_id: electricity_dual_fuel_power_plant_generation_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-DualFuel-5min
+        name: NYISO-NYISO-DualFuel
         description: New York ISO dual fuel generation
         frequency: 5 minutes
         unit: MW
@@ -517,7 +517,7 @@ request_groups:
         value_column: Dual Fuel
     - unique_id: electricity_hydropower_power_plant_generation_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-Hydro-5min
+        name: NYISO-NYISO-Hydro
         description: New York ISO hydropower generation
         frequency: 5 minutes
         unit: MW
@@ -529,7 +529,7 @@ request_groups:
         value_column: Hydro
     - unique_id: electricity_natural_gas_power_plant_generation_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-NaturalGas-5min
+        name: NYISO-NYISO-NaturalGas
         description: New York ISO natural gas generation
         frequency: 5 minutes
         unit: MW
@@ -541,7 +541,7 @@ request_groups:
         value_column: Natural Gas
     - unique_id: electricity_nuclear_power_plant_generation_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-Nuclear-5min
+        name: NYISO-NYISO-Nuclear
         description: New York ISO nuclear generation
         frequency: 5 minutes
         unit: MW
@@ -553,7 +553,7 @@ request_groups:
         value_column: Nuclear
     - unique_id: electricity_other_fossil_fuels_power_plant_generation_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-OtherFossil-5min
+        name: NYISO-NYISO-OtherFossil
         description: New York ISO other fossil fuel generation
         frequency: 5 minutes
         unit: MW
@@ -565,7 +565,7 @@ request_groups:
         value_column: Other Fossil Fuels
     - unique_id: electricity_other_renewable_power_plant_generation_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-OtherRenewable-5min
+        name: NYISO-NYISO-OtherRenewable
         description: New York ISO other renewable generation
         frequency: 5 minutes
         unit: MW
@@ -577,7 +577,7 @@ request_groups:
         value_column: Other Renewables
     - unique_id: electricity_wind_onshore_power_plant_generation_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-Wind-5min
+        name: NYISO-NYISO-Wind
         description: New York ISO onshore wind generation
         frequency: 5 minutes
         unit: MW
@@ -597,7 +597,7 @@ request_groups:
     timeseries:
     - unique_id: electricity_capitl_load_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-CAPITL-Load-5min
+        name: NYISO-NYISO-CAPITL-Load
         description: New York ISO capitl load
         frequency: 5 minutes
         unit: MW
@@ -609,7 +609,7 @@ request_groups:
         value_column: CAPITL
     - unique_id: electricity_centrl_load_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-CENTRL-Load-5min
+        name: NYISO-NYISO-CENTRL-Load
         description: New York ISO centrl load
         frequency: 5 minutes
         unit: MW
@@ -621,7 +621,7 @@ request_groups:
         value_column: CENTRL
     - unique_id: electricity_dunwod_load_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-DUNWOD-Load-5min
+        name: NYISO-NYISO-DUNWOD-Load
         description: New York ISO dunwod load
         frequency: 5 minutes
         unit: MW
@@ -633,7 +633,7 @@ request_groups:
         value_column: DUNWOD
     - unique_id: electricity_genese_load_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-GENESE-Load-5min
+        name: NYISO-NYISO-GENESE-Load
         description: New York ISO genese load
         frequency: 5 minutes
         unit: MW
@@ -645,7 +645,7 @@ request_groups:
         value_column: GENESE
     - unique_id: electricity_hud vl_load_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-HUD VL-Load-5min
+        name: NYISO-NYISO-HUD VL-Load
         description: New York ISO hud vl load
         frequency: 5 minutes
         unit: MW
@@ -657,7 +657,7 @@ request_groups:
         value_column: HUD VL
     - unique_id: electricity_longil_load_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-LONGIL-Load-5min
+        name: NYISO-NYISO-LONGIL-Load
         description: New York ISO longil load
         frequency: 5 minutes
         unit: MW
@@ -669,7 +669,7 @@ request_groups:
         value_column: LONGIL
     - unique_id: electricity_mhk vl_load_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-MHK VL-Load-5min
+        name: NYISO-NYISO-MHK VL-Load
         description: New York ISO mhk vl load
         frequency: 5 minutes
         unit: MW
@@ -681,7 +681,7 @@ request_groups:
         value_column: MHK VL
     - unique_id: electricity_millwd_load_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-MILLWD-Load-5min
+        name: NYISO-NYISO-MILLWD-Load
         description: New York ISO millwd load
         frequency: 5 minutes
         unit: MW
@@ -693,7 +693,7 @@ request_groups:
         value_column: MILLWD
     - unique_id: electricity_n.y.c._load_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-N.Y.C.-Load-5min
+        name: NYISO-NYISO-N.Y.C.-Load
         description: New York ISO n.y.c. load
         frequency: 5 minutes
         unit: MW
@@ -705,7 +705,7 @@ request_groups:
         value_column: N.Y.C.
     - unique_id: electricity_net_consumption_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-Load-5min
+        name: NYISO-NYISO-Load
         description: New York ISO net electricity consumption
         frequency: 5 minutes
         unit: MW
@@ -717,7 +717,7 @@ request_groups:
         value_column: Load
     - unique_id: electricity_north_load_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-NORTH-Load-5min
+        name: NYISO-NYISO-NORTH-Load
         description: New York ISO north load
         frequency: 5 minutes
         unit: MW
@@ -729,7 +729,7 @@ request_groups:
         value_column: NORTH
     - unique_id: electricity_west_load_ISO_NYISO_5min
       metadata:
-        name: NYISO-NYISO-WEST-Load-5min
+        name: NYISO-NYISO-WEST-Load
         description: New York ISO west load
         frequency: 5 minutes
         unit: MW
@@ -750,7 +750,7 @@ request_groups:
     timeseries:
     - unique_id: electricity_lmp_congestion_Zone_CENTRL_5min
       metadata:
-        name: NYISO-CENTRL-LMP-Congestion-5min
+        name: NYISO-CENTRL-LMP-Congestion
         description: New York ISO Central zone LMP congestion component
         frequency: 5 minutes
         unit: $/MWh
@@ -764,7 +764,7 @@ request_groups:
         filter_value: CENTRL
     - unique_id: electricity_lmp_congestion_Zone_LONGIL_5min
       metadata:
-        name: NYISO-LONGIL-LMP-Congestion-5min
+        name: NYISO-LONGIL-LMP-Congestion
         description: New York ISO Long Island zone LMP congestion component
         frequency: 5 minutes
         unit: $/MWh
@@ -778,7 +778,7 @@ request_groups:
         filter_value: LONGIL
     - unique_id: electricity_lmp_congestion_Zone_O H_5min
       metadata:
-        name: NYISO-O H-LMP-Congestion-5min
+        name: NYISO-O H-LMP-Congestion
         description: New York ISO Ontario Hydro zone LMP congestion component
         frequency: 5 minutes
         unit: $/MWh
@@ -792,7 +792,7 @@ request_groups:
         filter_value: O H
     - unique_id: electricity_lmp_congestion_Zone_PJM_5min
       metadata:
-        name: NYISO-PJM-LMP-Congestion-5min
+        name: NYISO-PJM-LMP-Congestion
         description: New York ISO PJM zone LMP congestion component
         frequency: 5 minutes
         unit: $/MWh
@@ -806,7 +806,7 @@ request_groups:
         filter_value: PJM
     - unique_id: electricity_lmp_congestion_Zone_WEST_5min
       metadata:
-        name: NYISO-WEST-LMP-Congestion-5min
+        name: NYISO-WEST-LMP-Congestion
         description: New York ISO West zone LMP congestion component
         frequency: 5 minutes
         unit: $/MWh
@@ -820,7 +820,7 @@ request_groups:
         filter_value: WEST
     - unique_id: electricity_lmp_energy_Zone_CAPITL_5min
       metadata:
-        name: NYISO-CAPITL-LMP-Energy-5min
+        name: NYISO-CAPITL-LMP-Energy
         description: New York ISO Capital zone LMP energy component
         frequency: 5 minutes
         unit: $/MWh
@@ -834,7 +834,7 @@ request_groups:
         filter_value: CAPITL
     - unique_id: electricity_lmp_energy_Zone_CENTRL_5min
       metadata:
-        name: NYISO-CENTRL-LMP-Energy-5min
+        name: NYISO-CENTRL-LMP-Energy
         description: New York ISO Central zone LMP energy component
         frequency: 5 minutes
         unit: $/MWh
@@ -848,7 +848,7 @@ request_groups:
         filter_value: CENTRL
     - unique_id: electricity_lmp_energy_Zone_DUNWOD_5min
       metadata:
-        name: NYISO-DUNWOD-LMP-Energy-5min
+        name: NYISO-DUNWOD-LMP-Energy
         description: New York ISO Dunwoodie zone LMP energy component
         frequency: 5 minutes
         unit: $/MWh
@@ -862,7 +862,7 @@ request_groups:
         filter_value: DUNWOD
     - unique_id: electricity_lmp_energy_Zone_GENESE_5min
       metadata:
-        name: NYISO-GENESE-LMP-Energy-5min
+        name: NYISO-GENESE-LMP-Energy
         description: New York ISO Genesee zone LMP energy component
         frequency: 5 minutes
         unit: $/MWh
@@ -876,7 +876,7 @@ request_groups:
         filter_value: GENESE
     - unique_id: electricity_lmp_energy_Zone_H Q_5min
       metadata:
-        name: NYISO-H Q-LMP-Energy-5min
+        name: NYISO-H Q-LMP-Energy
         description: New York ISO Hydro-Quebec zone LMP energy component
         frequency: 5 minutes
         unit: $/MWh
@@ -890,7 +890,7 @@ request_groups:
         filter_value: H Q
     - unique_id: electricity_lmp_energy_Zone_HUD VL_5min
       metadata:
-        name: NYISO-HUD VL-LMP-Energy-5min
+        name: NYISO-HUD VL-LMP-Energy
         description: New York ISO Hudson Valley zone LMP energy component
         frequency: 5 minutes
         unit: $/MWh
@@ -904,7 +904,7 @@ request_groups:
         filter_value: HUD VL
     - unique_id: electricity_lmp_energy_Zone_LONGIL_5min
       metadata:
-        name: NYISO-LONGIL-LMP-Energy-5min
+        name: NYISO-LONGIL-LMP-Energy
         description: New York ISO Long Island zone LMP energy component
         frequency: 5 minutes
         unit: $/MWh
@@ -918,7 +918,7 @@ request_groups:
         filter_value: LONGIL
     - unique_id: electricity_lmp_energy_Zone_MHK VL_5min
       metadata:
-        name: NYISO-MHK VL-LMP-Energy-5min
+        name: NYISO-MHK VL-LMP-Energy
         description: New York ISO Mohawk Valley zone LMP energy component
         frequency: 5 minutes
         unit: $/MWh
@@ -932,7 +932,7 @@ request_groups:
         filter_value: MHK VL
     - unique_id: electricity_lmp_energy_Zone_MILLWD_5min
       metadata:
-        name: NYISO-MILLWD-LMP-Energy-5min
+        name: NYISO-MILLWD-LMP-Energy
         description: New York ISO Millwood zone LMP energy component
         frequency: 5 minutes
         unit: $/MWh
@@ -946,7 +946,7 @@ request_groups:
         filter_value: MILLWD
     - unique_id: electricity_lmp_energy_Zone_N.Y.C._5min
       metadata:
-        name: NYISO-N.Y.C.-LMP-Energy-5min
+        name: NYISO-N.Y.C.-LMP-Energy
         description: New York ISO New York City zone LMP energy component
         frequency: 5 minutes
         unit: $/MWh
@@ -960,7 +960,7 @@ request_groups:
         filter_value: N.Y.C.
     - unique_id: electricity_lmp_energy_Zone_NORTH_5min
       metadata:
-        name: NYISO-NORTH-LMP-Energy-5min
+        name: NYISO-NORTH-LMP-Energy
         description: New York ISO North zone LMP energy component
         frequency: 5 minutes
         unit: $/MWh
@@ -974,7 +974,7 @@ request_groups:
         filter_value: NORTH
     - unique_id: electricity_lmp_energy_Zone_NPX_5min
       metadata:
-        name: NYISO-NPX-LMP-Energy-5min
+        name: NYISO-NPX-LMP-Energy
         description: New York ISO NPX zone LMP energy component
         frequency: 5 minutes
         unit: $/MWh
@@ -988,7 +988,7 @@ request_groups:
         filter_value: NPX
     - unique_id: electricity_lmp_energy_Zone_O H_5min
       metadata:
-        name: NYISO-O H-LMP-Energy-5min
+        name: NYISO-O H-LMP-Energy
         description: New York ISO Ontario Hydro zone LMP energy component
         frequency: 5 minutes
         unit: $/MWh
@@ -1002,7 +1002,7 @@ request_groups:
         filter_value: O H
     - unique_id: electricity_lmp_energy_Zone_PJM_5min
       metadata:
-        name: NYISO-PJM-LMP-Energy-5min
+        name: NYISO-PJM-LMP-Energy
         description: New York ISO PJM zone LMP energy component
         frequency: 5 minutes
         unit: $/MWh
@@ -1016,7 +1016,7 @@ request_groups:
         filter_value: PJM
     - unique_id: electricity_lmp_energy_Zone_WEST_5min
       metadata:
-        name: NYISO-WEST-LMP-Energy-5min
+        name: NYISO-WEST-LMP-Energy
         description: New York ISO West zone LMP energy component
         frequency: 5 minutes
         unit: $/MWh
@@ -1030,7 +1030,7 @@ request_groups:
         filter_value: WEST
     - unique_id: electricity_lmp_loss_Zone_CAPITL_5min
       metadata:
-        name: NYISO-CAPITL-LMP-Loss-5min
+        name: NYISO-CAPITL-LMP-Loss
         description: New York ISO Capital zone LMP loss component
         frequency: 5 minutes
         unit: $/MWh
@@ -1044,7 +1044,7 @@ request_groups:
         filter_value: CAPITL
     - unique_id: electricity_lmp_loss_Zone_CENTRL_5min
       metadata:
-        name: NYISO-CENTRL-LMP-Loss-5min
+        name: NYISO-CENTRL-LMP-Loss
         description: New York ISO Central zone LMP loss component
         frequency: 5 minutes
         unit: $/MWh
@@ -1058,7 +1058,7 @@ request_groups:
         filter_value: CENTRL
     - unique_id: electricity_lmp_loss_Zone_DUNWOD_5min
       metadata:
-        name: NYISO-DUNWOD-LMP-Loss-5min
+        name: NYISO-DUNWOD-LMP-Loss
         description: New York ISO Dunwoodie zone LMP loss component
         frequency: 5 minutes
         unit: $/MWh
@@ -1072,7 +1072,7 @@ request_groups:
         filter_value: DUNWOD
     - unique_id: electricity_lmp_loss_Zone_GENESE_5min
       metadata:
-        name: NYISO-GENESE-LMP-Loss-5min
+        name: NYISO-GENESE-LMP-Loss
         description: New York ISO Genesee zone LMP loss component
         frequency: 5 minutes
         unit: $/MWh
@@ -1086,7 +1086,7 @@ request_groups:
         filter_value: GENESE
     - unique_id: electricity_lmp_loss_Zone_H Q_5min
       metadata:
-        name: NYISO-H Q-LMP-Loss-5min
+        name: NYISO-H Q-LMP-Loss
         description: New York ISO Hydro-Quebec zone LMP loss component
         frequency: 5 minutes
         unit: $/MWh
@@ -1100,7 +1100,7 @@ request_groups:
         filter_value: H Q
     - unique_id: electricity_lmp_loss_Zone_HUD VL_5min
       metadata:
-        name: NYISO-HUD VL-LMP-Loss-5min
+        name: NYISO-HUD VL-LMP-Loss
         description: New York ISO Hudson Valley zone LMP loss component
         frequency: 5 minutes
         unit: $/MWh
@@ -1114,7 +1114,7 @@ request_groups:
         filter_value: HUD VL
     - unique_id: electricity_lmp_loss_Zone_LONGIL_5min
       metadata:
-        name: NYISO-LONGIL-LMP-Loss-5min
+        name: NYISO-LONGIL-LMP-Loss
         description: New York ISO Long Island zone LMP loss component
         frequency: 5 minutes
         unit: $/MWh
@@ -1128,7 +1128,7 @@ request_groups:
         filter_value: LONGIL
     - unique_id: electricity_lmp_loss_Zone_MHK VL_5min
       metadata:
-        name: NYISO-MHK VL-LMP-Loss-5min
+        name: NYISO-MHK VL-LMP-Loss
         description: New York ISO Mohawk Valley zone LMP loss component
         frequency: 5 minutes
         unit: $/MWh
@@ -1142,7 +1142,7 @@ request_groups:
         filter_value: MHK VL
     - unique_id: electricity_lmp_loss_Zone_MILLWD_5min
       metadata:
-        name: NYISO-MILLWD-LMP-Loss-5min
+        name: NYISO-MILLWD-LMP-Loss
         description: New York ISO Millwood zone LMP loss component
         frequency: 5 minutes
         unit: $/MWh
@@ -1156,7 +1156,7 @@ request_groups:
         filter_value: MILLWD
     - unique_id: electricity_lmp_loss_Zone_N.Y.C._5min
       metadata:
-        name: NYISO-N.Y.C.-LMP-Loss-5min
+        name: NYISO-N.Y.C.-LMP-Loss
         description: New York ISO New York City zone LMP loss component
         frequency: 5 minutes
         unit: $/MWh
@@ -1170,7 +1170,7 @@ request_groups:
         filter_value: N.Y.C.
     - unique_id: electricity_lmp_loss_Zone_NORTH_5min
       metadata:
-        name: NYISO-NORTH-LMP-Loss-5min
+        name: NYISO-NORTH-LMP-Loss
         description: New York ISO North zone LMP loss component
         frequency: 5 minutes
         unit: $/MWh
@@ -1184,7 +1184,7 @@ request_groups:
         filter_value: NORTH
     - unique_id: electricity_lmp_loss_Zone_NPX_5min
       metadata:
-        name: NYISO-NPX-LMP-Loss-5min
+        name: NYISO-NPX-LMP-Loss
         description: New York ISO NPX zone LMP loss component
         frequency: 5 minutes
         unit: $/MWh
@@ -1198,7 +1198,7 @@ request_groups:
         filter_value: NPX
     - unique_id: electricity_lmp_loss_Zone_O H_5min
       metadata:
-        name: NYISO-O H-LMP-Loss-5min
+        name: NYISO-O H-LMP-Loss
         description: New York ISO Ontario Hydro zone LMP loss component
         frequency: 5 minutes
         unit: $/MWh
@@ -1212,7 +1212,7 @@ request_groups:
         filter_value: O H
     - unique_id: electricity_lmp_loss_Zone_PJM_5min
       metadata:
-        name: NYISO-PJM-LMP-Loss-5min
+        name: NYISO-PJM-LMP-Loss
         description: New York ISO PJM zone LMP loss component
         frequency: 5 minutes
         unit: $/MWh
@@ -1226,7 +1226,7 @@ request_groups:
         filter_value: PJM
     - unique_id: electricity_lmp_loss_Zone_WEST_5min
       metadata:
-        name: NYISO-WEST-LMP-Loss-5min
+        name: NYISO-WEST-LMP-Loss
         description: New York ISO West zone LMP loss component
         frequency: 5 minutes
         unit: $/MWh
@@ -1240,7 +1240,7 @@ request_groups:
         filter_value: WEST
     - unique_id: electricity_market_price_Zone_CAPITL_5min
       metadata:
-        name: NYISO-CAPITL-MarketPrice-5min
+        name: NYISO-CAPITL-MarketPrice
         description: New York ISO Capital zone total market price
         frequency: 5 minutes
         unit: $/MWh
@@ -1254,7 +1254,7 @@ request_groups:
         filter_value: CAPITL
     - unique_id: electricity_market_price_Zone_CENTRL_5min
       metadata:
-        name: NYISO-CENTRL-MarketPrice-5min
+        name: NYISO-CENTRL-MarketPrice
         description: New York ISO Central zone total market price
         frequency: 5 minutes
         unit: $/MWh
@@ -1268,7 +1268,7 @@ request_groups:
         filter_value: CENTRL
     - unique_id: electricity_market_price_Zone_DUNWOD_5min
       metadata:
-        name: NYISO-DUNWOD-MarketPrice-5min
+        name: NYISO-DUNWOD-MarketPrice
         description: New York ISO Dunwoodie zone total market price
         frequency: 5 minutes
         unit: $/MWh
@@ -1282,7 +1282,7 @@ request_groups:
         filter_value: DUNWOD
     - unique_id: electricity_market_price_Zone_GENESE_5min
       metadata:
-        name: NYISO-GENESE-MarketPrice-5min
+        name: NYISO-GENESE-MarketPrice
         description: New York ISO Genesee zone total market price
         frequency: 5 minutes
         unit: $/MWh
@@ -1296,7 +1296,7 @@ request_groups:
         filter_value: GENESE
     - unique_id: electricity_market_price_Zone_H Q_5min
       metadata:
-        name: NYISO-H Q-MarketPrice-5min
+        name: NYISO-H Q-MarketPrice
         description: New York ISO Hydro-Quebec zone total market price
         frequency: 5 minutes
         unit: $/MWh
@@ -1310,7 +1310,7 @@ request_groups:
         filter_value: H Q
     - unique_id: electricity_market_price_Zone_HUD VL_5min
       metadata:
-        name: NYISO-HUD VL-MarketPrice-5min
+        name: NYISO-HUD VL-MarketPrice
         description: New York ISO Hudson Valley zone total market price
         frequency: 5 minutes
         unit: $/MWh
@@ -1324,7 +1324,7 @@ request_groups:
         filter_value: HUD VL
     - unique_id: electricity_market_price_Zone_LONGIL_5min
       metadata:
-        name: NYISO-LONGIL-MarketPrice-5min
+        name: NYISO-LONGIL-MarketPrice
         description: New York ISO Long Island zone total market price
         frequency: 5 minutes
         unit: $/MWh
@@ -1338,7 +1338,7 @@ request_groups:
         filter_value: LONGIL
     - unique_id: electricity_market_price_Zone_MHK VL_5min
       metadata:
-        name: NYISO-MHK VL-MarketPrice-5min
+        name: NYISO-MHK VL-MarketPrice
         description: New York ISO Mohawk Valley zone total market price
         frequency: 5 minutes
         unit: $/MWh
@@ -1352,7 +1352,7 @@ request_groups:
         filter_value: MHK VL
     - unique_id: electricity_market_price_Zone_MILLWD_5min
       metadata:
-        name: NYISO-MILLWD-MarketPrice-5min
+        name: NYISO-MILLWD-MarketPrice
         description: New York ISO Millwood zone total market price
         frequency: 5 minutes
         unit: $/MWh
@@ -1366,7 +1366,7 @@ request_groups:
         filter_value: MILLWD
     - unique_id: electricity_market_price_Zone_N.Y.C._5min
       metadata:
-        name: NYISO-N.Y.C.-MarketPrice-5min
+        name: NYISO-N.Y.C.-MarketPrice
         description: New York ISO New York City zone total market price
         frequency: 5 minutes
         unit: $/MWh
@@ -1380,7 +1380,7 @@ request_groups:
         filter_value: N.Y.C.
     - unique_id: electricity_market_price_Zone_NORTH_5min
       metadata:
-        name: NYISO-NORTH-MarketPrice-5min
+        name: NYISO-NORTH-MarketPrice
         description: New York ISO North zone total market price
         frequency: 5 minutes
         unit: $/MWh
@@ -1394,7 +1394,7 @@ request_groups:
         filter_value: NORTH
     - unique_id: electricity_market_price_Zone_NPX_5min
       metadata:
-        name: NYISO-NPX-MarketPrice-5min
+        name: NYISO-NPX-MarketPrice
         description: New York ISO NPX zone total market price
         frequency: 5 minutes
         unit: $/MWh
@@ -1408,7 +1408,7 @@ request_groups:
         filter_value: NPX
     - unique_id: electricity_market_price_Zone_O H_5min
       metadata:
-        name: NYISO-O H-MarketPrice-5min
+        name: NYISO-O H-MarketPrice
         description: New York ISO Ontario Hydro zone total market price
         frequency: 5 minutes
         unit: $/MWh
@@ -1422,7 +1422,7 @@ request_groups:
         filter_value: O H
     - unique_id: electricity_market_price_Zone_PJM_5min
       metadata:
-        name: NYISO-PJM-MarketPrice-5min
+        name: NYISO-PJM-MarketPrice
         description: New York ISO PJM zone total market price
         frequency: 5 minutes
         unit: $/MWh
@@ -1436,7 +1436,7 @@ request_groups:
         filter_value: PJM
     - unique_id: electricity_market_price_Zone_WEST_5min
       metadata:
-        name: NYISO-WEST-MarketPrice-5min
+        name: NYISO-WEST-MarketPrice
         description: New York ISO West zone total market price
         frequency: 5 minutes
         unit: $/MWh
@@ -1455,7 +1455,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Biomass AT quarterhour'
+      name: 'SMARD Generation: Biomass AT'
       description: 'SMARD - Generation: Biomass at aggregation level BZ:AT (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -1475,7 +1475,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Biomass DE-LU quarterhour'
+      name: 'SMARD Generation: Biomass DE-LU'
       description: 'SMARD - Generation: Biomass at aggregation level BZ:DE-LU (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -1495,7 +1495,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Biomass DE quarterhour'
+      name: 'SMARD Generation: Biomass DE'
       description: 'SMARD - Generation: Biomass at aggregation level Country:DE (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -1515,7 +1515,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Biomass LU quarterhour'
+      name: 'SMARD Generation: Biomass LU'
       description: 'SMARD - Generation: Biomass at aggregation level Country:LU (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -1535,7 +1535,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Biomass 50Hertz quarterhour'
+      name: 'SMARD Generation: Biomass 50Hertz'
       description: 'SMARD - Generation: Biomass at aggregation level TSO:50Hertz (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -1555,7 +1555,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Biomass APG quarterhour'
+      name: 'SMARD Generation: Biomass APG'
       description: 'SMARD - Generation: Biomass at aggregation level TSO:APG (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -1575,7 +1575,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Biomass Amprion quarterhour'
+      name: 'SMARD Generation: Biomass Amprion'
       description: 'SMARD - Generation: Biomass at aggregation level TSO:Amprion (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -1595,7 +1595,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Biomass Creos quarterhour'
+      name: 'SMARD Generation: Biomass Creos'
       description: 'SMARD - Generation: Biomass at aggregation level TSO:Creos (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -1615,7 +1615,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Biomass TenneT quarterhour'
+      name: 'SMARD Generation: Biomass TenneT'
       description: 'SMARD - Generation: Biomass at aggregation level TSO:TenneT (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -1635,7 +1635,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Biomass TransnetBW quarterhour'
+      name: 'SMARD Generation: Biomass TransnetBW'
       description: 'SMARD - Generation: Biomass at aggregation level TSO:TransnetBW
         (quarterhour)'
       frequency: 15 minutes
@@ -1656,7 +1656,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Lignite DE-LU quarterhour'
+      name: 'SMARD Generation: Lignite DE-LU'
       description: 'SMARD - Generation: Lignite at aggregation level BZ:DE-LU (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -1676,7 +1676,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Lignite DE quarterhour'
+      name: 'SMARD Generation: Lignite DE'
       description: 'SMARD - Generation: Lignite at aggregation level Country:DE (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -1696,7 +1696,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Lignite 50Hertz quarterhour'
+      name: 'SMARD Generation: Lignite 50Hertz'
       description: 'SMARD - Generation: Lignite at aggregation level TSO:50Hertz (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -1716,7 +1716,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Lignite Amprion quarterhour'
+      name: 'SMARD Generation: Lignite Amprion'
       description: 'SMARD - Generation: Lignite at aggregation level TSO:Amprion (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -1736,7 +1736,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Hard Coal AT quarterhour'
+      name: 'SMARD Generation: Hard Coal AT'
       description: 'SMARD - Generation: Hard Coal at aggregation level BZ:AT (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -1756,7 +1756,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Hard Coal DE-LU quarterhour'
+      name: 'SMARD Generation: Hard Coal DE-LU'
       description: 'SMARD - Generation: Hard Coal at aggregation level BZ:DE-LU (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -1776,7 +1776,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Hard Coal DE quarterhour'
+      name: 'SMARD Generation: Hard Coal DE'
       description: 'SMARD - Generation: Hard Coal at aggregation level Country:DE
         (quarterhour)'
       frequency: 15 minutes
@@ -1797,7 +1797,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Hard Coal 50Hertz quarterhour'
+      name: 'SMARD Generation: Hard Coal 50Hertz'
       description: 'SMARD - Generation: Hard Coal at aggregation level TSO:50Hertz
         (quarterhour)'
       frequency: 15 minutes
@@ -1818,7 +1818,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Hard Coal Amprion quarterhour'
+      name: 'SMARD Generation: Hard Coal Amprion'
       description: 'SMARD - Generation: Hard Coal at aggregation level TSO:Amprion
         (quarterhour)'
       frequency: 15 minutes
@@ -1839,7 +1839,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Hard Coal TenneT quarterhour'
+      name: 'SMARD Generation: Hard Coal TenneT'
       description: 'SMARD - Generation: Hard Coal at aggregation level TSO:TenneT
         (quarterhour)'
       frequency: 15 minutes
@@ -1860,7 +1860,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Hard Coal TransnetBW quarterhour'
+      name: 'SMARD Generation: Hard Coal TransnetBW'
       description: 'SMARD - Generation: Hard Coal at aggregation level TSO:TransnetBW
         (quarterhour)'
       frequency: 15 minutes
@@ -1881,7 +1881,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Hydropower AT quarterhour'
+      name: 'SMARD Generation: Hydropower AT'
       description: 'SMARD - Generation: Hydropower at aggregation level BZ:AT (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -1901,7 +1901,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Hydropower DE-LU quarterhour'
+      name: 'SMARD Generation: Hydropower DE-LU'
       description: 'SMARD - Generation: Hydropower at aggregation level BZ:DE-LU (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -1921,7 +1921,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Hydropower DE quarterhour'
+      name: 'SMARD Generation: Hydropower DE'
       description: 'SMARD - Generation: Hydropower at aggregation level Country:DE
         (quarterhour)'
       frequency: 15 minutes
@@ -1942,7 +1942,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Hydropower LU quarterhour'
+      name: 'SMARD Generation: Hydropower LU'
       description: 'SMARD - Generation: Hydropower at aggregation level Country:LU
         (quarterhour)'
       frequency: 15 minutes
@@ -1963,7 +1963,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Hydropower 50Hertz quarterhour'
+      name: 'SMARD Generation: Hydropower 50Hertz'
       description: 'SMARD - Generation: Hydropower at aggregation level TSO:50Hertz
         (quarterhour)'
       frequency: 15 minutes
@@ -1984,7 +1984,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Hydropower APG quarterhour'
+      name: 'SMARD Generation: Hydropower APG'
       description: 'SMARD - Generation: Hydropower at aggregation level TSO:APG (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -2004,7 +2004,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Hydropower Amprion quarterhour'
+      name: 'SMARD Generation: Hydropower Amprion'
       description: 'SMARD - Generation: Hydropower at aggregation level TSO:Amprion
         (quarterhour)'
       frequency: 15 minutes
@@ -2025,7 +2025,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Hydropower Creos quarterhour'
+      name: 'SMARD Generation: Hydropower Creos'
       description: 'SMARD - Generation: Hydropower at aggregation level TSO:Creos
         (quarterhour)'
       frequency: 15 minutes
@@ -2046,7 +2046,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Hydropower TenneT quarterhour'
+      name: 'SMARD Generation: Hydropower TenneT'
       description: 'SMARD - Generation: Hydropower at aggregation level TSO:TenneT
         (quarterhour)'
       frequency: 15 minutes
@@ -2067,7 +2067,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Hydropower TransnetBW quarterhour'
+      name: 'SMARD Generation: Hydropower TransnetBW'
       description: 'SMARD - Generation: Hydropower at aggregation level TSO:TransnetBW
         (quarterhour)'
       frequency: 15 minutes
@@ -2088,7 +2088,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Market Price: Austria AT quarterhour'
+      name: 'SMARD Market Price: Austria AT'
       description: 'SMARD - Market Price: Austria at aggregation level BZ:AT (quarterhour)'
       frequency: 15 minutes
       unit: Euro
@@ -2108,7 +2108,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Market Price: Belgium BE quarterhour'
+      name: 'SMARD Market Price: Belgium BE'
       description: 'SMARD - Market Price: Belgium at aggregation level BZ:BE (quarterhour)'
       frequency: 15 minutes
       unit: Euro
@@ -2128,7 +2128,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Market Price: Switzerland CH quarterhour'
+      name: 'SMARD Market Price: Switzerland CH'
       description: 'SMARD - Market Price: Switzerland at aggregation level BZ:CH (quarterhour)'
       frequency: 15 minutes
       unit: Euro
@@ -2148,7 +2148,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Market Price: Czech Republic CZ quarterhour'
+      name: 'SMARD Market Price: Czech Republic CZ'
       description: 'SMARD - Market Price: Czech Republic at aggregation level BZ:CZ
         (quarterhour)'
       frequency: 15 minutes
@@ -2169,7 +2169,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Market Price: Neighbors DE/LU DE-LU_neighbors quarterhour'
+      name: 'SMARD Market Price: Neighbors DE/LU DE-LU_neighbors'
       description: 'SMARD - Market Price: Neighbors DE/LU at aggregation level BZ:DE-LU_neighbors
         (quarterhour)'
       frequency: 15 minutes
@@ -2190,7 +2190,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Market Price: Germany/Luxembourg DE-LU quarterhour'
+      name: 'SMARD Market Price: Germany/Luxembourg DE-LU'
       description: 'SMARD - Market Price: Germany/Luxembourg at aggregation level
         BZ:DE-LU (quarterhour)'
       frequency: 15 minutes
@@ -2211,7 +2211,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Market Price: Denmark 1 DK1 quarterhour'
+      name: 'SMARD Market Price: Denmark 1 DK1'
       description: 'SMARD - Market Price: Denmark 1 at aggregation level BZ:DK1 (quarterhour)'
       frequency: 15 minutes
       unit: Euro
@@ -2231,7 +2231,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Market Price: Denmark 2 DK2 quarterhour'
+      name: 'SMARD Market Price: Denmark 2 DK2'
       description: 'SMARD - Market Price: Denmark 2 at aggregation level BZ:DK2 (quarterhour)'
       frequency: 15 minutes
       unit: Euro
@@ -2251,7 +2251,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Market Price: France FR quarterhour'
+      name: 'SMARD Market Price: France FR'
       description: 'SMARD - Market Price: France at aggregation level BZ:FR (quarterhour)'
       frequency: 15 minutes
       unit: Euro
@@ -2271,7 +2271,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Market Price: Hungary HU quarterhour'
+      name: 'SMARD Market Price: Hungary HU'
       description: 'SMARD - Market Price: Hungary at aggregation level BZ:HU (quarterhour)'
       frequency: 15 minutes
       unit: Euro
@@ -2291,7 +2291,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Market Price: Italy (North) IT-NORTH quarterhour'
+      name: 'SMARD Market Price: Italy (North) IT-NORTH'
       description: 'SMARD - Market Price: Italy (North) at aggregation level BZ:IT-NORTH
         (quarterhour)'
       frequency: 15 minutes
@@ -2312,7 +2312,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Market Price: Netherlands NL quarterhour'
+      name: 'SMARD Market Price: Netherlands NL'
       description: 'SMARD - Market Price: Netherlands at aggregation level BZ:NL (quarterhour)'
       frequency: 15 minutes
       unit: Euro
@@ -2332,7 +2332,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Market Price: Norway 2 NO2 quarterhour'
+      name: 'SMARD Market Price: Norway 2 NO2'
       description: 'SMARD - Market Price: Norway 2 at aggregation level BZ:NO2 (quarterhour)'
       frequency: 15 minutes
       unit: Euro
@@ -2352,7 +2352,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Market Price: Poland PL quarterhour'
+      name: 'SMARD Market Price: Poland PL'
       description: 'SMARD - Market Price: Poland at aggregation level BZ:PL (quarterhour)'
       frequency: 15 minutes
       unit: Euro
@@ -2372,7 +2372,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Market Price: Slovenia SI quarterhour'
+      name: 'SMARD Market Price: Slovenia SI'
       description: 'SMARD - Market Price: Slovenia at aggregation level BZ:SI (quarterhour)'
       frequency: 15 minutes
       unit: Euro
@@ -2392,7 +2392,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Natural Gas AT quarterhour'
+      name: 'SMARD Generation: Natural Gas AT'
       description: 'SMARD - Generation: Natural Gas at aggregation level BZ:AT (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -2412,7 +2412,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Natural Gas DE-LU quarterhour'
+      name: 'SMARD Generation: Natural Gas DE-LU'
       description: 'SMARD - Generation: Natural Gas at aggregation level BZ:DE-LU
         (quarterhour)'
       frequency: 15 minutes
@@ -2433,7 +2433,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Natural Gas DE quarterhour'
+      name: 'SMARD Generation: Natural Gas DE'
       description: 'SMARD - Generation: Natural Gas at aggregation level Country:DE
         (quarterhour)'
       frequency: 15 minutes
@@ -2454,7 +2454,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Natural Gas LU quarterhour'
+      name: 'SMARD Generation: Natural Gas LU'
       description: 'SMARD - Generation: Natural Gas at aggregation level Country:LU
         (quarterhour)'
       frequency: 15 minutes
@@ -2475,7 +2475,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Natural Gas 50Hertz quarterhour'
+      name: 'SMARD Generation: Natural Gas 50Hertz'
       description: 'SMARD - Generation: Natural Gas at aggregation level TSO:50Hertz
         (quarterhour)'
       frequency: 15 minutes
@@ -2496,7 +2496,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Natural Gas Amprion quarterhour'
+      name: 'SMARD Generation: Natural Gas Amprion'
       description: 'SMARD - Generation: Natural Gas at aggregation level TSO:Amprion
         (quarterhour)'
       frequency: 15 minutes
@@ -2517,7 +2517,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Natural Gas Creos quarterhour'
+      name: 'SMARD Generation: Natural Gas Creos'
       description: 'SMARD - Generation: Natural Gas at aggregation level TSO:Creos
         (quarterhour)'
       frequency: 15 minutes
@@ -2538,7 +2538,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Natural Gas TenneT quarterhour'
+      name: 'SMARD Generation: Natural Gas TenneT'
       description: 'SMARD - Generation: Natural Gas at aggregation level TSO:TenneT
         (quarterhour)'
       frequency: 15 minutes
@@ -2559,7 +2559,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Total (Grid Load) AT quarterhour'
+      name: 'SMARD Consumption: Total (Grid Load) AT'
       description: 'SMARD - Consumption: Total (Grid Load) at aggregation level BZ:AT
         (quarterhour)'
       frequency: 15 minutes
@@ -2580,7 +2580,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Total (Grid Load) DE-LU quarterhour'
+      name: 'SMARD Consumption: Total (Grid Load) DE-LU'
       description: 'SMARD - Consumption: Total (Grid Load) at aggregation level BZ:DE-LU
         (quarterhour)'
       frequency: 15 minutes
@@ -2601,7 +2601,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Total (Grid Load) DE quarterhour'
+      name: 'SMARD Consumption: Total (Grid Load) DE'
       description: 'SMARD - Consumption: Total (Grid Load) at aggregation level Country:DE
         (quarterhour)'
       frequency: 15 minutes
@@ -2622,7 +2622,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Total (Grid Load) LU quarterhour'
+      name: 'SMARD Consumption: Total (Grid Load) LU'
       description: 'SMARD - Consumption: Total (Grid Load) at aggregation level Country:LU
         (quarterhour)'
       frequency: 15 minutes
@@ -2643,7 +2643,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Total (Grid Load) 50Hertz quarterhour'
+      name: 'SMARD Consumption: Total (Grid Load) 50Hertz'
       description: 'SMARD - Consumption: Total (Grid Load) at aggregation level TSO:50Hertz
         (quarterhour)'
       frequency: 15 minutes
@@ -2664,7 +2664,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Total (Grid Load) APG quarterhour'
+      name: 'SMARD Consumption: Total (Grid Load) APG'
       description: 'SMARD - Consumption: Total (Grid Load) at aggregation level TSO:APG
         (quarterhour)'
       frequency: 15 minutes
@@ -2685,7 +2685,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Total (Grid Load) Amprion quarterhour'
+      name: 'SMARD Consumption: Total (Grid Load) Amprion'
       description: 'SMARD - Consumption: Total (Grid Load) at aggregation level TSO:Amprion
         (quarterhour)'
       frequency: 15 minutes
@@ -2706,7 +2706,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Total (Grid Load) Creos quarterhour'
+      name: 'SMARD Consumption: Total (Grid Load) Creos'
       description: 'SMARD - Consumption: Total (Grid Load) at aggregation level TSO:Creos
         (quarterhour)'
       frequency: 15 minutes
@@ -2727,7 +2727,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Total (Grid Load) TenneT quarterhour'
+      name: 'SMARD Consumption: Total (Grid Load) TenneT'
       description: 'SMARD - Consumption: Total (Grid Load) at aggregation level TSO:TenneT
         (quarterhour)'
       frequency: 15 minutes
@@ -2748,7 +2748,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Total (Grid Load) TransnetBW quarterhour'
+      name: 'SMARD Consumption: Total (Grid Load) TransnetBW'
       description: 'SMARD - Consumption: Total (Grid Load) at aggregation level TSO:TransnetBW
         (quarterhour)'
       frequency: 15 minutes
@@ -2769,7 +2769,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Other Conventional AT quarterhour'
+      name: 'SMARD Generation: Other Conventional AT'
       description: 'SMARD - Generation: Other Conventional at aggregation level BZ:AT
         (quarterhour)'
       frequency: 15 minutes
@@ -2790,7 +2790,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Other Conventional DE-LU quarterhour'
+      name: 'SMARD Generation: Other Conventional DE-LU'
       description: 'SMARD - Generation: Other Conventional at aggregation level BZ:DE-LU
         (quarterhour)'
       frequency: 15 minutes
@@ -2811,7 +2811,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Other Conventional DE quarterhour'
+      name: 'SMARD Generation: Other Conventional DE'
       description: 'SMARD - Generation: Other Conventional at aggregation level Country:DE
         (quarterhour)'
       frequency: 15 minutes
@@ -2832,7 +2832,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Other Conventional LU quarterhour'
+      name: 'SMARD Generation: Other Conventional LU'
       description: 'SMARD - Generation: Other Conventional at aggregation level Country:LU
         (quarterhour)'
       frequency: 15 minutes
@@ -2853,7 +2853,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Other Conventional 50Hertz quarterhour'
+      name: 'SMARD Generation: Other Conventional 50Hertz'
       description: 'SMARD - Generation: Other Conventional at aggregation level TSO:50Hertz
         (quarterhour)'
       frequency: 15 minutes
@@ -2874,7 +2874,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Other Conventional APG quarterhour'
+      name: 'SMARD Generation: Other Conventional APG'
       description: 'SMARD - Generation: Other Conventional at aggregation level TSO:APG
         (quarterhour)'
       frequency: 15 minutes
@@ -2895,7 +2895,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Other Conventional Amprion quarterhour'
+      name: 'SMARD Generation: Other Conventional Amprion'
       description: 'SMARD - Generation: Other Conventional at aggregation level TSO:Amprion
         (quarterhour)'
       frequency: 15 minutes
@@ -2916,7 +2916,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Other Conventional Creos quarterhour'
+      name: 'SMARD Generation: Other Conventional Creos'
       description: 'SMARD - Generation: Other Conventional at aggregation level TSO:Creos
         (quarterhour)'
       frequency: 15 minutes
@@ -2937,7 +2937,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Other Conventional TenneT quarterhour'
+      name: 'SMARD Generation: Other Conventional TenneT'
       description: 'SMARD - Generation: Other Conventional at aggregation level TSO:TenneT
         (quarterhour)'
       frequency: 15 minutes
@@ -2958,7 +2958,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Other Conventional TransnetBW quarterhour'
+      name: 'SMARD Generation: Other Conventional TransnetBW'
       description: 'SMARD - Generation: Other Conventional at aggregation level TSO:TransnetBW
         (quarterhour)'
       frequency: 15 minutes
@@ -2979,7 +2979,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Other Renewables AT quarterhour'
+      name: 'SMARD Generation: Other Renewables AT'
       description: 'SMARD - Generation: Other Renewables at aggregation level BZ:AT
         (quarterhour)'
       frequency: 15 minutes
@@ -3000,7 +3000,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Other Renewables DE-LU quarterhour'
+      name: 'SMARD Generation: Other Renewables DE-LU'
       description: 'SMARD - Generation: Other Renewables at aggregation level BZ:DE-LU
         (quarterhour)'
       frequency: 15 minutes
@@ -3021,7 +3021,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Other Renewables DE quarterhour'
+      name: 'SMARD Generation: Other Renewables DE'
       description: 'SMARD - Generation: Other Renewables at aggregation level Country:DE
         (quarterhour)'
       frequency: 15 minutes
@@ -3042,7 +3042,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Other Renewables 50Hertz quarterhour'
+      name: 'SMARD Generation: Other Renewables 50Hertz'
       description: 'SMARD - Generation: Other Renewables at aggregation level TSO:50Hertz
         (quarterhour)'
       frequency: 15 minutes
@@ -3063,7 +3063,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Other Renewables APG quarterhour'
+      name: 'SMARD Generation: Other Renewables APG'
       description: 'SMARD - Generation: Other Renewables at aggregation level TSO:APG
         (quarterhour)'
       frequency: 15 minutes
@@ -3084,7 +3084,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Other Renewables Amprion quarterhour'
+      name: 'SMARD Generation: Other Renewables Amprion'
       description: 'SMARD - Generation: Other Renewables at aggregation level TSO:Amprion
         (quarterhour)'
       frequency: 15 minutes
@@ -3105,7 +3105,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Other Renewables TenneT quarterhour'
+      name: 'SMARD Generation: Other Renewables TenneT'
       description: 'SMARD - Generation: Other Renewables at aggregation level TSO:TenneT
         (quarterhour)'
       frequency: 15 minutes
@@ -3126,7 +3126,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Other Renewables TransnetBW quarterhour'
+      name: 'SMARD Generation: Other Renewables TransnetBW'
       description: 'SMARD - Generation: Other Renewables at aggregation level TSO:TransnetBW
         (quarterhour)'
       frequency: 15 minutes
@@ -3147,7 +3147,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Photovoltaic AT quarterhour'
+      name: 'SMARD Generation: Photovoltaic AT'
       description: 'SMARD - Generation: Photovoltaic at aggregation level BZ:AT (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -3167,7 +3167,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Photovoltaic DE-LU quarterhour'
+      name: 'SMARD Generation: Photovoltaic DE-LU'
       description: 'SMARD - Generation: Photovoltaic at aggregation level BZ:DE-LU
         (quarterhour)'
       frequency: 15 minutes
@@ -3188,7 +3188,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Photovoltaic DE quarterhour'
+      name: 'SMARD Generation: Photovoltaic DE'
       description: 'SMARD - Generation: Photovoltaic at aggregation level Country:DE
         (quarterhour)'
       frequency: 15 minutes
@@ -3209,7 +3209,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Photovoltaic LU quarterhour'
+      name: 'SMARD Generation: Photovoltaic LU'
       description: 'SMARD - Generation: Photovoltaic at aggregation level Country:LU
         (quarterhour)'
       frequency: 15 minutes
@@ -3230,7 +3230,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Photovoltaic 50Hertz quarterhour'
+      name: 'SMARD Generation: Photovoltaic 50Hertz'
       description: 'SMARD - Generation: Photovoltaic at aggregation level TSO:50Hertz
         (quarterhour)'
       frequency: 15 minutes
@@ -3251,7 +3251,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Photovoltaic APG quarterhour'
+      name: 'SMARD Generation: Photovoltaic APG'
       description: 'SMARD - Generation: Photovoltaic at aggregation level TSO:APG
         (quarterhour)'
       frequency: 15 minutes
@@ -3272,7 +3272,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Photovoltaic Amprion quarterhour'
+      name: 'SMARD Generation: Photovoltaic Amprion'
       description: 'SMARD - Generation: Photovoltaic at aggregation level TSO:Amprion
         (quarterhour)'
       frequency: 15 minutes
@@ -3293,7 +3293,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Photovoltaic Creos quarterhour'
+      name: 'SMARD Generation: Photovoltaic Creos'
       description: 'SMARD - Generation: Photovoltaic at aggregation level TSO:Creos
         (quarterhour)'
       frequency: 15 minutes
@@ -3314,7 +3314,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Photovoltaic TenneT quarterhour'
+      name: 'SMARD Generation: Photovoltaic TenneT'
       description: 'SMARD - Generation: Photovoltaic at aggregation level TSO:TenneT
         (quarterhour)'
       frequency: 15 minutes
@@ -3335,7 +3335,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Photovoltaic TransnetBW quarterhour'
+      name: 'SMARD Generation: Photovoltaic TransnetBW'
       description: 'SMARD - Generation: Photovoltaic at aggregation level TSO:TransnetBW
         (quarterhour)'
       frequency: 15 minutes
@@ -3356,7 +3356,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Pumped Storage AT quarterhour'
+      name: 'SMARD Consumption: Pumped Storage AT'
       description: 'SMARD - Consumption: Pumped Storage at aggregation level BZ:AT
         (quarterhour)'
       frequency: 15 minutes
@@ -3377,7 +3377,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Pumped Storage DE-LU quarterhour'
+      name: 'SMARD Consumption: Pumped Storage DE-LU'
       description: 'SMARD - Consumption: Pumped Storage at aggregation level BZ:DE-LU
         (quarterhour)'
       frequency: 15 minutes
@@ -3398,7 +3398,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Pumped Storage DE quarterhour'
+      name: 'SMARD Consumption: Pumped Storage DE'
       description: 'SMARD - Consumption: Pumped Storage at aggregation level Country:DE
         (quarterhour)'
       frequency: 15 minutes
@@ -3419,7 +3419,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Pumped Storage 50Hertz quarterhour'
+      name: 'SMARD Consumption: Pumped Storage 50Hertz'
       description: 'SMARD - Consumption: Pumped Storage at aggregation level TSO:50Hertz
         (quarterhour)'
       frequency: 15 minutes
@@ -3440,7 +3440,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Pumped Storage APG quarterhour'
+      name: 'SMARD Consumption: Pumped Storage APG'
       description: 'SMARD - Consumption: Pumped Storage at aggregation level TSO:APG
         (quarterhour)'
       frequency: 15 minutes
@@ -3461,7 +3461,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Pumped Storage Amprion quarterhour'
+      name: 'SMARD Consumption: Pumped Storage Amprion'
       description: 'SMARD - Consumption: Pumped Storage at aggregation level TSO:Amprion
         (quarterhour)'
       frequency: 15 minutes
@@ -3482,7 +3482,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Pumped Storage TenneT quarterhour'
+      name: 'SMARD Consumption: Pumped Storage TenneT'
       description: 'SMARD - Consumption: Pumped Storage at aggregation level TSO:TenneT
         (quarterhour)'
       frequency: 15 minutes
@@ -3503,7 +3503,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Pumped Storage TransnetBW quarterhour'
+      name: 'SMARD Consumption: Pumped Storage TransnetBW'
       description: 'SMARD - Consumption: Pumped Storage at aggregation level TSO:TransnetBW
         (quarterhour)'
       frequency: 15 minutes
@@ -3524,7 +3524,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Pumped Storage AT quarterhour'
+      name: 'SMARD Generation: Pumped Storage AT'
       description: 'SMARD - Generation: Pumped Storage at aggregation level BZ:AT
         (quarterhour)'
       frequency: 15 minutes
@@ -3545,7 +3545,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Pumped Storage DE-LU quarterhour'
+      name: 'SMARD Generation: Pumped Storage DE-LU'
       description: 'SMARD - Generation: Pumped Storage at aggregation level BZ:DE-LU
         (quarterhour)'
       frequency: 15 minutes
@@ -3566,7 +3566,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Pumped Storage DE quarterhour'
+      name: 'SMARD Generation: Pumped Storage DE'
       description: 'SMARD - Generation: Pumped Storage at aggregation level Country:DE
         (quarterhour)'
       frequency: 15 minutes
@@ -3587,7 +3587,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Pumped Storage 50Hertz quarterhour'
+      name: 'SMARD Generation: Pumped Storage 50Hertz'
       description: 'SMARD - Generation: Pumped Storage at aggregation level TSO:50Hertz
         (quarterhour)'
       frequency: 15 minutes
@@ -3608,7 +3608,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Pumped Storage APG quarterhour'
+      name: 'SMARD Generation: Pumped Storage APG'
       description: 'SMARD - Generation: Pumped Storage at aggregation level TSO:APG
         (quarterhour)'
       frequency: 15 minutes
@@ -3629,7 +3629,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Pumped Storage Amprion quarterhour'
+      name: 'SMARD Generation: Pumped Storage Amprion'
       description: 'SMARD - Generation: Pumped Storage at aggregation level TSO:Amprion
         (quarterhour)'
       frequency: 15 minutes
@@ -3650,7 +3650,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Pumped Storage TenneT quarterhour'
+      name: 'SMARD Generation: Pumped Storage TenneT'
       description: 'SMARD - Generation: Pumped Storage at aggregation level TSO:TenneT
         (quarterhour)'
       frequency: 15 minutes
@@ -3671,7 +3671,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Pumped Storage TransnetBW quarterhour'
+      name: 'SMARD Generation: Pumped Storage TransnetBW'
       description: 'SMARD - Generation: Pumped Storage at aggregation level TSO:TransnetBW
         (quarterhour)'
       frequency: 15 minutes
@@ -3692,7 +3692,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Residual Load AT quarterhour'
+      name: 'SMARD Consumption: Residual Load AT'
       description: 'SMARD - Consumption: Residual Load at aggregation level BZ:AT
         (quarterhour)'
       frequency: 15 minutes
@@ -3713,7 +3713,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Residual Load DE-LU quarterhour'
+      name: 'SMARD Consumption: Residual Load DE-LU'
       description: 'SMARD - Consumption: Residual Load at aggregation level BZ:DE-LU
         (quarterhour)'
       frequency: 15 minutes
@@ -3734,7 +3734,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Residual Load DE quarterhour'
+      name: 'SMARD Consumption: Residual Load DE'
       description: 'SMARD - Consumption: Residual Load at aggregation level Country:DE
         (quarterhour)'
       frequency: 15 minutes
@@ -3755,7 +3755,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Residual Load LU quarterhour'
+      name: 'SMARD Consumption: Residual Load LU'
       description: 'SMARD - Consumption: Residual Load at aggregation level Country:LU
         (quarterhour)'
       frequency: 15 minutes
@@ -3776,7 +3776,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Residual Load 50Hertz quarterhour'
+      name: 'SMARD Consumption: Residual Load 50Hertz'
       description: 'SMARD - Consumption: Residual Load at aggregation level TSO:50Hertz
         (quarterhour)'
       frequency: 15 minutes
@@ -3797,7 +3797,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Residual Load APG quarterhour'
+      name: 'SMARD Consumption: Residual Load APG'
       description: 'SMARD - Consumption: Residual Load at aggregation level TSO:APG
         (quarterhour)'
       frequency: 15 minutes
@@ -3818,7 +3818,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Residual Load Amprion quarterhour'
+      name: 'SMARD Consumption: Residual Load Amprion'
       description: 'SMARD - Consumption: Residual Load at aggregation level TSO:Amprion
         (quarterhour)'
       frequency: 15 minutes
@@ -3839,7 +3839,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Residual Load Creos quarterhour'
+      name: 'SMARD Consumption: Residual Load Creos'
       description: 'SMARD - Consumption: Residual Load at aggregation level TSO:Creos
         (quarterhour)'
       frequency: 15 minutes
@@ -3860,7 +3860,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Residual Load TenneT quarterhour'
+      name: 'SMARD Consumption: Residual Load TenneT'
       description: 'SMARD - Consumption: Residual Load at aggregation level TSO:TenneT
         (quarterhour)'
       frequency: 15 minutes
@@ -3881,7 +3881,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Consumption: Residual Load TransnetBW quarterhour'
+      name: 'SMARD Consumption: Residual Load TransnetBW'
       description: 'SMARD - Consumption: Residual Load at aggregation level TSO:TransnetBW
         (quarterhour)'
       frequency: 15 minutes
@@ -3902,7 +3902,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Wind Offshore DE-LU quarterhour'
+      name: 'SMARD Generation: Wind Offshore DE-LU'
       description: 'SMARD - Generation: Wind Offshore at aggregation level BZ:DE-LU
         (quarterhour)'
       frequency: 15 minutes
@@ -3923,7 +3923,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Wind Offshore DE quarterhour'
+      name: 'SMARD Generation: Wind Offshore DE'
       description: 'SMARD - Generation: Wind Offshore at aggregation level Country:DE
         (quarterhour)'
       frequency: 15 minutes
@@ -3944,7 +3944,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Wind Offshore 50Hertz quarterhour'
+      name: 'SMARD Generation: Wind Offshore 50Hertz'
       description: 'SMARD - Generation: Wind Offshore at aggregation level TSO:50Hertz
         (quarterhour)'
       frequency: 15 minutes
@@ -3965,7 +3965,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Wind Offshore TenneT quarterhour'
+      name: 'SMARD Generation: Wind Offshore TenneT'
       description: 'SMARD - Generation: Wind Offshore at aggregation level TSO:TenneT
         (quarterhour)'
       frequency: 15 minutes
@@ -3986,7 +3986,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Wind Onshore AT quarterhour'
+      name: 'SMARD Generation: Wind Onshore AT'
       description: 'SMARD - Generation: Wind Onshore at aggregation level BZ:AT (quarterhour)'
       frequency: 15 minutes
       unit: MWh
@@ -4006,7 +4006,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Wind Onshore DE-LU quarterhour'
+      name: 'SMARD Generation: Wind Onshore DE-LU'
       description: 'SMARD - Generation: Wind Onshore at aggregation level BZ:DE-LU
         (quarterhour)'
       frequency: 15 minutes
@@ -4027,7 +4027,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Wind Onshore DE quarterhour'
+      name: 'SMARD Generation: Wind Onshore DE'
       description: 'SMARD - Generation: Wind Onshore at aggregation level Country:DE
         (quarterhour)'
       frequency: 15 minutes
@@ -4048,7 +4048,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Wind Onshore LU quarterhour'
+      name: 'SMARD Generation: Wind Onshore LU'
       description: 'SMARD - Generation: Wind Onshore at aggregation level Country:LU
         (quarterhour)'
       frequency: 15 minutes
@@ -4069,7 +4069,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Wind Onshore 50Hertz quarterhour'
+      name: 'SMARD Generation: Wind Onshore 50Hertz'
       description: 'SMARD - Generation: Wind Onshore at aggregation level TSO:50Hertz
         (quarterhour)'
       frequency: 15 minutes
@@ -4090,7 +4090,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Wind Onshore APG quarterhour'
+      name: 'SMARD Generation: Wind Onshore APG'
       description: 'SMARD - Generation: Wind Onshore at aggregation level TSO:APG
         (quarterhour)'
       frequency: 15 minutes
@@ -4111,7 +4111,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Wind Onshore Amprion quarterhour'
+      name: 'SMARD Generation: Wind Onshore Amprion'
       description: 'SMARD - Generation: Wind Onshore at aggregation level TSO:Amprion
         (quarterhour)'
       frequency: 15 minutes
@@ -4132,7 +4132,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Wind Onshore Creos quarterhour'
+      name: 'SMARD Generation: Wind Onshore Creos'
       description: 'SMARD - Generation: Wind Onshore at aggregation level TSO:Creos
         (quarterhour)'
       frequency: 15 minutes
@@ -4153,7 +4153,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Wind Onshore TenneT quarterhour'
+      name: 'SMARD Generation: Wind Onshore TenneT'
       description: 'SMARD - Generation: Wind Onshore at aggregation level TSO:TenneT
         (quarterhour)'
       frequency: 15 minutes
@@ -4174,7 +4174,7 @@ timeseries:
     module: src.plugins.data_sources.smard_plugin
     class: SmardDataSourcePlugin
     metadata:
-      name: 'SMARD Generation: Wind Onshore TransnetBW quarterhour'
+      name: 'SMARD Generation: Wind Onshore TransnetBW'
       description: 'SMARD - Generation: Wind Onshore at aggregation level TSO:TransnetBW
         (quarterhour)'
       frequency: 15 minutes
