@@ -354,11 +354,19 @@ class RoundRepository:
                     cs.rmse,
                     RANK() OVER (PARTITION BY cs.series_id ORDER BY cs.mase ASC NULLS LAST) as rank
                 FROM forecasts.scores cs
+                JOIN challenges.rounds cr ON cr.id = cs.round_id
                 JOIN models.model_info mi ON mi.id = cs.model_id
                 LEFT JOIN data_portal.time_series ts ON ts.series_id = cs.series_id
                 WHERE cs.round_id = %s
                     AND cs.final_evaluation = TRUE
                     AND cs.mase IS NOT NULL
+                    -- Exclude series marked as excluded in definition_series_scd2
+                    AND NOT EXISTS (
+                        SELECT 1 FROM challenges.definition_series_scd2 ds
+                        WHERE ds.definition_id = cr.definition_id 
+                          AND ds.series_id = cs.series_id
+                          AND ds.is_excluded = TRUE
+                    )
                 ORDER BY cs.series_id ASC, rank ASC, mi.name ASC
                 """,
                 (round_id,)

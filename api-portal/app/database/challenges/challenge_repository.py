@@ -144,6 +144,67 @@ class ChallengeDefinitionRepository:
         )
         return result.scalars().all()
 
+    async def close_out_removed_series(
+        self, 
+        definition_id: int, 
+        active_series_ids: List[int]
+    ) -> int:
+        """
+        Closes out SCD2 entries for series that are no longer in the YAML.
+        Sets valid_to = now() and is_current = False.
+        Returns the number of closed entries.
+        """
+        from datetime import datetime, timezone
+        from sqlalchemy import update
+        
+        now = datetime.now(timezone.utc)
+        
+        # Find and close series that are current but not in active_series_ids
+        stmt = (
+            update(ChallengeDefinitionSeriesScd2)
+            .where(
+                ChallengeDefinitionSeriesScd2.definition_id == definition_id,
+                ChallengeDefinitionSeriesScd2.is_current == True,
+                ~ChallengeDefinitionSeriesScd2.series_id.in_(active_series_ids) if active_series_ids else True
+            )
+            .values(
+                valid_to=now,
+                is_current=False
+            )
+        )
+        result = await self.session.execute(stmt)
+        if result.rowcount > 0:
+            await self.session.commit()
+            logger.info(f"Closed {result.rowcount} series assignments for definition {definition_id}")
+        return result.rowcount
+
+    async def mark_series_excluded(
+        self,
+        definition_id: int,
+        series_id: int,
+        excluded: bool = True
+    ) -> bool:
+        """
+        Marks a series as excluded (or not) from rankings/ELO.
+        Updates ALL SCD2 entries for this definition/series combination.
+        Returns True if any rows were updated.
+        """
+        from sqlalchemy import update
+        
+        stmt = (
+            update(ChallengeDefinitionSeriesScd2)
+            .where(
+                ChallengeDefinitionSeriesScd2.definition_id == definition_id,
+                ChallengeDefinitionSeriesScd2.series_id == series_id
+            )
+            .values(is_excluded=excluded)
+        )
+        result = await self.session.execute(stmt)
+        if result.rowcount > 0:
+            await self.session.commit()
+            logger.info(f"Marked series {series_id} as {'excluded' if excluded else 'included'} for definition {definition_id}")
+        return result.rowcount > 0
+
 
 class ChallengeRoundRepository:
     """Repository for challenge round operations."""

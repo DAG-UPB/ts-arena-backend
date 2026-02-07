@@ -52,6 +52,7 @@ class ChallengeDefinitionSeriesScd2(Base):
     definition_id = Column(Integer, ForeignKey('challenges.definitions.id', ondelete="CASCADE"), nullable=False)
     series_id = Column(Integer, ForeignKey('data_portal.time_series.series_id', ondelete="CASCADE"), nullable=False)
     is_required = Column(Boolean, default=True, nullable=False)
+    is_excluded = Column(Boolean, default=False, nullable=False)  # Exclude from rankings/ELO
     valid_from = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     valid_to = Column(DateTime(timezone=True))
     is_current = Column(Boolean, default=True, nullable=False)

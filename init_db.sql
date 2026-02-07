@@ -288,6 +288,7 @@ CREATE TABLE challenges.definition_series_scd2 (
     definition_id INTEGER NOT NULL REFERENCES challenges.definitions(id) ON DELETE CASCADE,
     series_id INTEGER NOT NULL REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
     is_required BOOLEAN NOT NULL DEFAULT TRUE,  -- Required series vs optional pool
+    is_excluded BOOLEAN NOT NULL DEFAULT FALSE, -- Exclude from rankings/ELO
     valid_from TIMESTAMPTZ NOT NULL DEFAULT now(),
     valid_to TIMESTAMPTZ,                       -- NULL = currently active
     is_current BOOLEAN NOT NULL DEFAULT TRUE,
@@ -309,6 +310,10 @@ and a new record is created.';
 
 COMMENT ON COLUMN challenges.definition_series_scd2.is_required IS 
 'TRUE = required series that must be included. FALSE = part of optional random selection pool.';
+
+COMMENT ON COLUMN challenges.definition_series_scd2.is_excluded IS 
+'When TRUE, this series is excluded from all rankings and ELO calculations, 
+even for historical rounds. Use this to mark series with unsuitable data.';
 
 -- ==========================================================
 -- Challenge Rounds (individual instances of challenge definitions)
@@ -669,9 +674,17 @@ WHERE cs.mase IS NOT NULL
   AND cs.mase != 'NaN'
   AND cs.mase != 'Infinity'
   AND cs.mase != '-Infinity'
-  AND cs.final_evaluation;
+  AND cs.final_evaluation
+  -- Exclude series marked as excluded in definition_series_scd2
+  AND NOT EXISTS (
+      SELECT 1 FROM challenges.definition_series_scd2 ds
+      WHERE ds.definition_id = cr.definition_id 
+        AND ds.series_id = cs.series_id
+        AND ds.is_excluded = TRUE
+  );
 COMMENT ON VIEW forecasts.v_ranking_base IS 
-'Base view for model rankings with all filter dimensions. Filters out invalid MASE values (NULL, NaN, Infinity).';
+'Base view for model rankings with all filter dimensions. 
+Filters out invalid MASE values (NULL, NaN, Infinity) and excluded series.';
 
 -- ==========================================================
 -- 9) Indexes for Ranking Performance

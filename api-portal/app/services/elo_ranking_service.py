@@ -361,6 +361,13 @@ class EloRankingService:
               AND fs.mase != 'NaN'
               AND fs.mase != 'Infinity'
               AND fs.mase != '-Infinity'
+              -- Exclude series marked as excluded in definition_series_scd2
+              AND NOT EXISTS (
+                  SELECT 1 FROM challenges.definition_series_scd2 ds
+                  WHERE ds.definition_id = cr.definition_id 
+                    AND ds.series_id = fs.series_id
+                    AND ds.is_excluded = TRUE
+              )
         """
         
         params = {}

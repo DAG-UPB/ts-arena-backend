@@ -108,11 +108,14 @@ class ChallengeService:
         
         # Sync series assignments using unique_ids from YAML
         required_unique_ids = params.get("required_time_series", [])
+        yaml_series_ids = set()
+        
         if required_unique_ids:
             for unique_id in required_unique_ids:
                 # Look up series_id by unique_id
                 series = await self.time_series_repository.get_time_series_by_unique_id(unique_id)
                 if series:
+                    yaml_series_ids.add(series.series_id)
                     await self.definition_repository.upsert_series_assignment(
                         definition_id=definition.id,
                         series_id=series.series_id,
@@ -121,7 +124,15 @@ class ChallengeService:
                 else:
                     logger.warning(f"Time series with unique_id '{unique_id}' not found for definition '{schedule_id}'")
         
-        logger.info(f"Synced definition '{schedule_id}' (ID: {definition.id}) with {len(required_unique_ids)} required series")
+        # Close out series that are no longer in the YAML
+        closed_count = await self.definition_repository.close_out_removed_series(
+            definition_id=definition.id,
+            active_series_ids=list(yaml_series_ids)
+        )
+        if closed_count > 0:
+            logger.info(f"Closed {closed_count} series assignments no longer in YAML for definition '{schedule_id}'")
+        
+        logger.info(f"Synced definition '{schedule_id}' (ID: {definition.id}) with {len(yaml_series_ids)} required series")
         return definition.id
     
     async def get_definition(self, definition_id: int) -> Optional[ChallengeDefinitionResponse]:
