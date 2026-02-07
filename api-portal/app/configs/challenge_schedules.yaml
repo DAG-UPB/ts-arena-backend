@@ -296,15 +296,15 @@ schedules:
     - electricity_large_hydropower_power_plant_generation_ISO_CAISO_5min
     - electricity_natural_gas_power_plant_generation_ISO_CAISO_5min
     - electricity_natural_gas_power_plant_generation_ISO_NYISO_5min
-    - electricity_nuclear_power_plant_generation_ISO_CAISO_5min
-    - electricity_nuclear_power_plant_generation_ISO_NYISO_5min
-    - electricity_other_fossil_fuels_power_plant_generation_ISO_NYISO_5min
+    # - electricity_nuclear_power_plant_generation_ISO_CAISO_5min
+    # - electricity_nuclear_power_plant_generation_ISO_NYISO_5min
+    # - electricity_other_fossil_fuels_power_plant_generation_ISO_NYISO_5min
     - electricity_other_renewable_power_plant_generation_ISO_NYISO_5min
     - electricity_photovoltaic_power_plant_generation_ISO_CAISO_5min
     - electricity_small_hydropower_power_plant_generation_ISO_CAISO_5min
     - electricity_wind_onshore_power_plant_generation_ISO_CAISO_5min
     - electricity_wind_onshore_power_plant_generation_ISO_NYISO_5min
-    n_time_series: 17
+    n_time_series: 14
     frequency: 15 minutes
     context_length: 1000
     forecast_horizon: 1 day
@@ -398,15 +398,15 @@ schedules:
     - electricity_large_hydropower_power_plant_generation_ISO_CAISO_5min
     - electricity_natural_gas_power_plant_generation_ISO_CAISO_5min
     - electricity_natural_gas_power_plant_generation_ISO_NYISO_5min
-    - electricity_nuclear_power_plant_generation_ISO_CAISO_5min
-    - electricity_nuclear_power_plant_generation_ISO_NYISO_5min
-    - electricity_other_fossil_fuels_power_plant_generation_ISO_NYISO_5min
+    # - electricity_nuclear_power_plant_generation_ISO_CAISO_5min
+    # - electricity_nuclear_power_plant_generation_ISO_NYISO_5min
+    # - electricity_other_fossil_fuels_power_plant_generation_ISO_NYISO_5min
     - electricity_other_renewable_power_plant_generation_ISO_NYISO_5min
     - electricity_photovoltaic_power_plant_generation_ISO_CAISO_5min
     - electricity_small_hydropower_power_plant_generation_ISO_CAISO_5min
     - electricity_wind_onshore_power_plant_generation_ISO_CAISO_5min
     - electricity_wind_onshore_power_plant_generation_ISO_NYISO_5min
-    n_time_series: 17
+    n_time_series: 14
     frequency: 1 hour
     context_length: 1000
     forecast_horizon: 3 days
@@ -432,9 +432,9 @@ schedules:
     - electricity_industrial_cogeneration_power_plant_generation_TSO_Fingrid_3min_202
     - electricity_net_consumption_TSO_Fingrid_3min_193
     - electricity_non_fossil_generation_share_TSO_Fingrid_15min_395
-    - electricity_nuclear_power_plant_generation_TSO_Fingrid_3min_188
+    # - electricity_nuclear_power_plant_generation_TSO_Fingrid_3min_188
     - electricity_wind_onshore_power_plant_generation_TSO_Fingrid_3min_181
-    n_time_series: 10
+    n_time_series: 9
     frequency: 15 minutes
     context_length: 1000
     forecast_horizon: 1 day
@@ -459,7 +459,7 @@ schedules:
     - electricity_industrial_cogeneration_power_plant_generation_TSO_Fingrid_3min_202
     - electricity_net_consumption_TSO_Fingrid_3min_193
     - electricity_non_fossil_generation_share_TSO_Fingrid_15min_395
-    - electricity_nuclear_power_plant_generation_TSO_Fingrid_3min_188
+    # - electricity_nuclear_power_plant_generation_TSO_Fingrid_3min_188
     - electricity_wind_onshore_power_plant_generation_TSO_Fingrid_3min_181
     n_time_series: 10
     frequency: 1 hour
