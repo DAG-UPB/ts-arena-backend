@@ -113,7 +113,7 @@ class ModelRepository:
     
     def get_filtered_rankings(
         self,
-        scope_type: str = "global",
+        scope_type: Optional[str] = None,
         scope_id: Optional[str] = None,
         calculation_date = None,
         limit: int = 100
@@ -149,7 +149,7 @@ class ModelRepository:
                 rank_position,
                 avg_mase,
                 mase_std,
-                evaluated_count_cumulative,
+                evaluated_count,
                 calculation_date
             FROM forecasts.v_monthly_and_latest_rankings
             WHERE 1=1
