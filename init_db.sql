@@ -1025,7 +1025,36 @@ WHERE s.mase IS NOT NULL
         AND ds.series_id = s.series_id
         AND ds.is_excluded = TRUE
   )
-GROUP BY r.id, r.registration_start::date, s.model_id, r.definition_id;
+GROUP BY r.id, r.registration_start::date, s.model_id, r.definition_id
+
+UNION ALL
+
+-- Frequency+Horizon Scope
+SELECT
+    r.id as round_id,
+    r.registration_start::date as round_date,
+    s.model_id,
+    'frequency_horizon' as scope_type,
+    CONCAT(d.frequency::text, '::', d.horizon::text) as scope_id,
+    SUM(s.mase) as sum_mase,
+    SUM(s.mase * s.mase) as sum_mase_sq,
+    SUM(s.rmse) as sum_rmse,
+    COUNT(*) as num_scores
+FROM forecasts.scores s
+JOIN challenges.rounds r ON s.round_id = r.id
+JOIN challenges.definitions d ON r.definition_id = d.id
+WHERE s.mase IS NOT NULL
+  AND s.mase != 'NaN'::double precision
+  AND s.mase != 'Infinity'::double precision
+  AND s.mase != '-Infinity'::double precision
+  AND s.final_evaluation = TRUE
+  AND NOT EXISTS (
+      SELECT 1 FROM challenges.definition_series_scd2 ds
+      WHERE ds.definition_id = r.definition_id 
+        AND ds.series_id = s.series_id
+        AND ds.is_excluded = TRUE
+  )
+GROUP BY r.id, r.registration_start::date, s.model_id, d.frequency, d.horizon;
 
 -- Unique index for concurrent refresh
 CREATE UNIQUE INDEX IF NOT EXISTS idx_round_scores_unique 
