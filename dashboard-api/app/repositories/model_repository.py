@@ -169,7 +169,7 @@ class ModelRepository:
         
         # Filter by scope_id based on scope_type
         if scope_type == "definition" and scope_id:
-            query += " AND definition_schedule_id = %s"
+            query += " AND definition_id = %s"
             params.append(scope_id)
         elif scope_type == "frequency_horizon" and scope_id:
             query += " AND scope_id = %s"
