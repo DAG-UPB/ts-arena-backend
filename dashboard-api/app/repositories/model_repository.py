@@ -136,11 +136,11 @@ class ModelRepository:
         # Build the base query
         query = """
             SELECT 
-                model_id, -
-                model_name, -
+                model_id,
+                model_name,
                 architecture,
                 model_size,
-                organization_name, -
+                organization_name,
                 elo_rating_median,
                 elo_ci_lower,
                 elo_ci_upper,
