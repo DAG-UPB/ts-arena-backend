@@ -249,10 +249,11 @@ class ChallengeService:
                 categories=definition.categories or [],
                 subcategories=definition.subcategories or [],
                 frequency=isodate.duration_isoformat(definition.frequency),
+                frequency_timedelta=definition.frequency,
+                horizon=definition.horizon,
                 required_series_ids=required_series_ids,
                 n_time_series=definition.n_time_series,
                 context_length=definition.context_length,
-                before_time=round_obj.start_time
             )
 
         except Exception as e:
@@ -267,10 +268,11 @@ class ChallengeService:
         categories: List[str],
         subcategories: List[str],
         frequency: str,
+        frequency_timedelta: timedelta,
+        horizon: timedelta,
         required_series_ids: List[int],
         n_time_series: int,
         context_length: int,
-        before_time: datetime
     ) -> None:
         """
         Selects time series and copies their context data to the round.
@@ -278,6 +280,8 @@ class ChallengeService:
         Logic:
         - If required_series_ids is provided and non-empty: use ONLY those series
         - If required_series_ids is empty: select n_time_series random series
+        - Context data is copied up to the maximum available timestamp (no cutoff)
+        - Round's start_time and end_time are updated based on: max_context_ts + frequency
         """
         try:
             # Simple logic: use required series OR random series, never mix
@@ -341,12 +345,13 @@ class ChallengeService:
             resolution = self._frequency_to_resolution(frequency)
             logger.info(f"Copying {context_length} context points for {len(series_mapping)} series (resolution: {resolution})")
             
+            # Copy context data WITHOUT before_time cutoff - gets all available data up to max timestamp
             copy_result = await self.time_series_repository.copy_bulk_to_challenge_by_resolution(
                 series_mapping=series_mapping,
                 round_id=round_id,
                 n=context_length,
                 resolution=resolution,
-                before_time=before_time
+                before_time=None  # No cutoff - include all available data
             )
             
             total_copied = sum(copy_result.values())
@@ -372,6 +377,32 @@ class ChallengeService:
 
             if pseudo_entries:
                 await self.round_repository.upsert_series_pseudo(pseudo_entries)
+            
+            # Determine the global max timestamp across all series in context
+            # This becomes the basis for forecast_start = max_ts + 1 frequency step
+            all_max_ts = [
+                entry["max_ts"] for entry in pseudo_entries 
+                if entry.get("max_ts") is not None
+            ]
+            
+            if all_max_ts:
+                global_max_ts = max(all_max_ts)
+                new_start_time = global_max_ts + frequency_timedelta
+                new_end_time = new_start_time + horizon
+                
+                # Update round's start_time and end_time
+                await self.round_repository.update_round_times(
+                    round_id=round_id,
+                    start_time=new_start_time,
+                    end_time=new_end_time
+                )
+                logger.info(
+                    f"Updated round {round_id} forecast window: "
+                    f"max_context_ts={global_max_ts}, "
+                    f"start_time={new_start_time}, end_time={new_end_time}"
+                )
+            else:
+                logger.warning(f"No max_ts found for round {round_id}, cannot update forecast times")
             
             await self.db_session.commit()
                 

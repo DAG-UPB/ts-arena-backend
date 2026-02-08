@@ -279,6 +279,36 @@ class ChallengeRoundRepository:
         await self.session.refresh(round_obj)
         return round_obj
 
+    async def update_round_times(
+        self,
+        round_id: int,
+        start_time: 'datetime',
+        end_time: 'datetime'
+    ) -> Optional[ChallengeRound]:
+        """
+        Updates a round's forecast window (start_time and end_time).
+        
+        This is called after context data is prepared to set the actual forecast
+        window based on the maximum available context timestamp.
+        
+        Args:
+            round_id: The round ID to update
+            start_time: New start_time (forecast begins)
+            end_time: New end_time (forecast ends)
+            
+        Returns:
+            Updated round object or None if not found
+        """
+        round_obj = await self.get_by_id(round_id)
+        if not round_obj:
+            return None
+        
+        round_obj.start_time = start_time
+        round_obj.end_time = end_time
+        await self.session.commit()
+        await self.session.refresh(round_obj)
+        logger.info(f"Updated round {round_id} times: start_time={start_time}, end_time={end_time}")
+        return round_obj
 
 
     async def get_context_data(
