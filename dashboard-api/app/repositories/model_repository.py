@@ -334,16 +334,21 @@ class ModelRepository:
             
             scopes_dict = {}
             for row in rows:
-                # Use composite key since definition_id can be 0 or NULL
+                # Use scope_type and scope_id as composite key (scope_id is always defined)
                 scope_key = (row['scope_type'], row['scope_id'])
                 if scope_key not in scopes_dict:
-                    scopes_dict[scope_key] = {
-                        'definition_id': row['definition_id'],
-                        'definition_name': row['definition_name'],
+                    scope_entry = {
                         'scope_type': row['scope_type'],
                         'scope_id': row['scope_id'],
                         'daily_rankings': []
                     }
+                    # Add definition_id and definition_name only if they are not NULL
+                    if row['definition_id'] is not None:
+                        scope_entry['definition_id'] = row['definition_id']
+                    if row['definition_name'] is not None:
+                        scope_entry['definition_name'] = row['definition_name']
+                    
+                    scopes_dict[scope_key] = scope_entry
                 
                 # Add daily ranking entry
                 scopes_dict[scope_key]['daily_rankings'].append({
