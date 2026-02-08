@@ -149,7 +149,7 @@ class ModelRepository:
                 rank_position,
                 avg_mase,
                 mase_std,
-                evaluation_count_in_month,
+                evaluated_count_in_month,
                 calculation_date
             FROM forecasts.v_monthly_and_latest_rankings
             WHERE 1=1

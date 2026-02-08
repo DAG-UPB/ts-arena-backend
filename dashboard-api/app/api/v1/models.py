@@ -86,7 +86,7 @@ async def get_filtered_rankings(
           "rank_position": 1,
           "avg_mase": 0.85,
           "mase_std": 0.12,
-          "evaluation_count_in_month": 156,
+          "evaluated_count_in_month": 156,
           "calculation_date": "2025-12-31"
         }
       ],
@@ -117,7 +117,7 @@ async def get_filtered_rankings(
     *MASE Metrics:*
     - `avg_mase`: Average MASE score across all evaluations in the month
     - `mase_std`: Standard deviation of MASE scores
-    - `evaluation_count_in_month`: Number of evaluations in the calculation month
+    - `evaluated_count_in_month`: Number of evaluations in the calculation month
     
     *Metadata:*
     - `calculation_date`: Date of the ranking calculation
