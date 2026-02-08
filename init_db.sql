@@ -978,6 +978,10 @@ SELECT
     AVG(s.rmse) as avg_rmse,
     COUNT(*) as num_scores
 FROM forecasts.scores s
+WHERE s.mase IS NOT NULL
+  AND s.mase != 'NaN'::double precision
+  AND s.mase != 'Infinity'::double precision
+  AND s.mase != '-Infinity'::double precision
 GROUP BY 1, 2, 3, 4
 
 UNION ALL
@@ -993,6 +997,10 @@ SELECT
     COUNT(*)
 FROM forecasts.scores s
 JOIN challenges.rounds r ON s.round_id = r.id
+WHERE s.mase IS NOT NULL
+  AND s.mase != 'NaN'::double precision
+  AND s.mase != 'Infinity'::double precision
+  AND s.mase != '-Infinity'::double precision
 GROUP BY 1, 2, 3, 4;
 
 -- Unique index for concurrent refresh and fast lookups

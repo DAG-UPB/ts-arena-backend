@@ -65,7 +65,7 @@ schedules:
   cron: 0 20 * * *
   run_on_startup: false
   params:
-    description: 'SMARDGeneration Challenge: All generation types, 24h horizon, 15-min
+    description: 'SMARD Generation Challenge: All generation types, 24h horizon, 15-min
       frequency'
     domains:
     - energy
@@ -108,7 +108,7 @@ schedules:
   cron: 0 15 * * *
   run_on_startup: false
   params:
-    description: 'SMARDDay-Ahead Market Price Challenge: 72h horizon, 1h frequency'
+    description: 'SMARD Day-Ahead Market Price Challenge: 72h horizon, 1h frequency'
     domains:
     - energy
     subdomains:
@@ -278,7 +278,7 @@ schedules:
   cron: 0 20 * * *
   run_on_startup: false
   params:
-    description: 'GridstatusGeneration Challenge: All generation types ISO, 24h horizon, 15-min
+    description: 'Gridstatus Generation Challenge: All generation types ISO, 24h horizon, 15-min
       frequency'
     domains:
     - energy
@@ -380,7 +380,7 @@ schedules:
   cron: 0 21 * * *
   run_on_startup: false
   params:
-    description: 'GridstatusGeneration Challenge: All generation types ISO, 72h horizon, 1h
+    description: 'Gridstatus Generation Challenge: All generation types ISO, 72h horizon, 1h
       frequency'
     domains:
     - energy
