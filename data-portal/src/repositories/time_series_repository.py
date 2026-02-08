@@ -82,33 +82,24 @@ class TimeSeriesDataRepository:
     ) -> int:
         """
         Get existing series_id or create new time series metadata entry.
+        Updates metadata if the series already exists (UPSERT).
         
         Args:
             name: Name of the time series
             unique_id: Unique unique id
             description: Description
-            frequency: Data frequency as ISO 8601 (e.g., 'PT1H', 'PT15M') or PostgreSQL format (e.g., '1 hour', '15 minutes')
+            frequency: Data frequency as ISO 8601 (e.g., 'PT1H', 'PT15M') or PostgreSQL format
             unit: Unit of measurement
             domain: Domain category
             category: Category
-            category: Category
             subcategory: Subcategory
             imputation_policy: Imputation policy (e.g., 'linear', 'ffill')
-            update_frequency: How often data is updated, as ISO 8601 or PostgreSQL format
+            update_frequency: How often data is updated
             
         Returns:
             series_id
         """
         domain_category_id = await self._get_or_create_domain_category_id(domain, category, subcategory)
-        
-        query = text("""
-            SELECT series_id FROM data_portal.time_series WHERE unique_id = :unique_id
-        """)
-        result = await self.session.execute(query, {"unique_id": unique_id})
-        row = result.fetchone()
-        
-        if row:
-            return row[0]
         
         try:
             frequency_iso = validate_and_normalize_interval(frequency)
@@ -117,14 +108,13 @@ class TimeSeriesDataRepository:
                 frequency_dt = frequency_dt.totimedelta(start=datetime.now())
             
             update_frequency_iso = validate_and_normalize_interval(update_frequency)
-            update_frequency_dt = isodate.parse_duration(update_frequency_iso)
-            if not isinstance(update_frequency_dt, timedelta):
-                update_frequency_dt = update_frequency_dt.totimedelta(start=datetime.now())
+            # We don't need update_frequency_dt here as we pass the string to DB
         except ValueError as e:
             logger.error(f"Failed to parse interval for series '{name}': {e}")
             raise
         
-        insert_query = text("""
+        # Use UPSERT to modify existing records if they exist
+        upsert_query = text("""
             INSERT INTO data_portal.time_series (
                 name, description, frequency, unit, update_frequency, 
                 imputation_policy, domain_category_id, unique_id
@@ -133,20 +123,26 @@ class TimeSeriesDataRepository:
                 :name, :description, :frequency, :unit, :update_frequency,
                 :imputation_policy, :domain_category_id, :unique_id
             )
+            ON CONFLICT (unique_id) DO UPDATE SET
+                name = EXCLUDED.name,
+                description = EXCLUDED.description,
+                frequency = EXCLUDED.frequency,
+                unit = EXCLUDED.unit,
+                update_frequency = EXCLUDED.update_frequency,
+                imputation_policy = EXCLUDED.imputation_policy,
+                domain_category_id = EXCLUDED.domain_category_id
             RETURNING series_id
         """)
         
         result = await self.session.execute(
-            insert_query,
+            upsert_query,
             {
                 "name": name,
                 "unique_id": unique_id,
                 "description": description,
                 "frequency": frequency_dt,  # Use timedelta directly
                 "unit": unit,
-                "update_frequency": update_frequency,
-                "unit": unit,
-                "update_frequency": update_frequency,
+                "update_frequency": update_frequency_iso, # Normalized string
                 "imputation_policy": imputation_policy,
                 "domain_category_id": domain_category_id
             }
@@ -157,9 +153,14 @@ class TimeSeriesDataRepository:
         series_id = row[0] if row else None
         
         if series_id is None:
-            raise ValueError(f"Failed to create time series for {name}")
+            query = text("SELECT series_id FROM data_portal.time_series WHERE unique_id = :unique_id")
+            result = await self.session.execute(query, {"unique_id": unique_id})
+            row = result.fetchone()
+            if row:
+                series_id = row[0]
+            else:
+                raise ValueError(f"Failed to upsert time series for {name}")
         
-        logger.info(f"Created new time series: {name} (series_id={series_id})")
         return series_id
     
     async def update_series_timezone(self, series_id: int, timezone: str) -> None:
