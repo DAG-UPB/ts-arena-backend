@@ -943,6 +943,8 @@ SELECT
     mi.readable_id,
     mi.model_family,
     mi.model_type,
+    mi.architecture, -- [NEW]
+    mi.model_size,   -- [NEW]
     -- User info
     u.username,
     o.name as organization_name,
@@ -975,6 +977,7 @@ SELECT
     'global' as scope_type,
     NULL as scope_id,
     AVG(s.mase) as avg_mase,
+    STDDEV(s.mase) as mase_std, -- [NEW]
     AVG(s.rmse) as avg_rmse,
     COUNT(*) as num_scores
 FROM forecasts.scores s
@@ -993,6 +996,7 @@ SELECT
     'definition',
     CAST(r.definition_id AS TEXT),
     AVG(s.mase),
+    STDDEV(s.mase) as mase_std, -- [NEW]
     AVG(s.rmse),
     COUNT(*)
 FROM forecasts.scores s
@@ -1057,6 +1061,8 @@ SELECT
     dr.readable_id,
     dr.model_family,
     dr.model_type,
+    dr.architecture, -- [NEW]
+    dr.model_size,   -- [NEW]
     dr.username,
     dr.organization_name,
     dr.definition_name,
@@ -1065,6 +1071,7 @@ SELECT
     -- Aggregated Metrics from Materialized View
     -- We join on month_start. For a daily ranking on 2024-02-08, we join on 2024-02-01.
     ms.avg_mase,
+    ms.mase_std, -- [NEW]
     ms.avg_rmse,
     ms.num_scores as evaluated_count_in_month
 
