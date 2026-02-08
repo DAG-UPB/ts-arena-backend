@@ -236,13 +236,14 @@ async def get_model_rankings(
     conn = Depends(get_db_connection)
 ):
     """
-    Get ELO rankings for a model across all definitions it participated in.
+    Get ELO rankings for a model across all scopes it participated in.
     
-    Returns daily ELO rankings for the last 30 days (from today back to 30 days ago).
-    For each definition and date, provides:
-    - ELO score (median)
+    Returns monthly ELO rankings and the most recent one.
+    For each scope (definition, frequency/horizon, or global) and date, provides:
+    - ELO score
     - ELO confidence interval (lower and upper bounds)
     - Rank position
+    - Scope information (type and ID)
     
     **Response Example:**
     ```json
@@ -253,6 +254,8 @@ async def get_model_rankings(
         {
           "definition_id": 1,
           "definition_name": "Day-Ahead Power Forecast",
+          "scope_type": "definition",
+          "scope_id": "1",
           "daily_rankings": [
             {
               "calculation_date": "2025-01-08",
@@ -278,9 +281,12 @@ async def get_model_rankings(
     - X-API-Key: Valid API key required
     
     **Notes:**
-    - Only includes definitions where the model has ELO rankings in the last 30 days
+    - Includes all scopes (definitions, frequency/horizon combinations, global) where the model has rankings
+    - Returns monthly snapshots and the latest ranking for each scope
     - Daily rankings are sorted by date (ascending)
-    - ELO scores are based on bootstrapped comparisons from the daily ranking calculations
+    - ELO scores are based on bootstrapped comparisons from the ranking calculations
+    - scope_type can be 'definition', 'frequency_horizon', or 'global'
+    - definition_id may be 0 or null for non-definition scopes (use scope_type/scope_id instead)
     """
     repo = ModelRepository(conn)
     result = repo.get_model_rankings_by_definition(model_id)

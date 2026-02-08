@@ -290,101 +290,75 @@ class ModelRepository:
     def get_model_rankings_by_definition(
         self,
         model_id: int
-    ) -> Dict[str, Any]:
+    ) -> Optional[Dict[str, Any]]:
         """
         Get ELO rankings for a model across all definitions it participated in.
-        Returns daily ELO rankings for the last 30 days.
+        Returns monthly ELO rankings and the most recent one.
         
         Args:
             model_id: The model ID
             
         Returns:
-            Dict with model info and ELO rankings grouped by definition for the last 30 days
+            Dict with model info and ELO rankings grouped by definition for the last 30 days,
+            or None if model not found
         """
-        from datetime import date
-        
-        # Calculate date range: today and last 30 days
-        today = date.today()
-        start_date = today - timedelta(days=30)
         
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            # Get model name
-            cur.execute(
-                """
-                SELECT id, name
-                FROM models.model_info
-                WHERE id = %s
-                """,
-                (model_id,)
-            )
-            model_row = cur.fetchone()
-            if not model_row:
+            # Get all rankings for the model from the last 30 days
+            query = """ 
+            SELECT 
+                model_id,
+                model_name,
+                definition_id,
+                definition_name,
+                calculation_date,
+                elo_rating_median,
+                elo_ci_lower,
+                elo_ci_upper,
+                rank_position,
+                scope_type,
+                scope_id
+            FROM forecasts.v_monthly_and_latest_rankings
+            WHERE model_id = %s
+            """
+            cur.execute(query, (model_id,))
+            rows = [dict(r) for r in cur.fetchall()]
+            
+            # If no data found, return None
+            if not rows:
                 return None
             
-            model_name = model_row['name']
+            # Group by scope (using scope_type and scope_id as composite key)
+            model_id = rows[0]['model_id']
+            model_name = rows[0]['model_name']
             
-            # Get all definitions the model has ELO rankings for in the last 30 days
-            cur.execute(
-                """
-                SELECT DISTINCT 
-                    dr.scope_id,
-                    cd.id as definition_id,
-                    cd.name as definition_name
-                FROM forecasts.daily_rankings dr
-                JOIN challenges.v_active_definitions cd ON cd.id = CAST(dr.scope_id AS INTEGER)
-                WHERE dr.model_id = %s
-                  AND dr.scope_type = 'definition'
-                  AND dr.calculation_date BETWEEN %s AND %s
-                ORDER BY cd.name
-                """,
-                (model_id, start_date, today)
-            )
-            definitions = [dict(row) for row in cur.fetchall()]
-            
-            # For each definition, get daily ELO rankings for the last 30 days
-            definition_rankings = []
-            for definition in definitions:
-                definition_id = definition['definition_id']
-                definition_name = definition['definition_name']
+            scopes_dict = {}
+            for row in rows:
+                # Use composite key since definition_id can be 0 or NULL
+                scope_key = (row['scope_type'], row['scope_id'])
+                if scope_key not in scopes_dict:
+                    scopes_dict[scope_key] = {
+                        'definition_id': row['definition_id'],
+                        'definition_name': row['definition_name'],
+                        'scope_type': row['scope_type'],
+                        'scope_id': row['scope_id'],
+                        'daily_rankings': []
+                    }
                 
-                # Get all daily rankings for this definition in the last 30 days
-                cur.execute(
-                    """
-                    SELECT
-                        dr.calculation_date,
-                        dr.elo_rating_median as elo_score,
-                        dr.elo_ci_lower,
-                        dr.elo_ci_upper,
-                        dr.rank_position
-                    FROM forecasts.daily_rankings dr
-                    WHERE dr.model_id = %s
-                      AND dr.scope_type = 'definition'
-                      AND dr.scope_id = %s
-                      AND dr.calculation_date BETWEEN %s AND %s
-                    ORDER BY dr.calculation_date ASC
-                    """,
-                    (model_id, str(definition_id), start_date, today)
-                )
-                
-                daily_rankings = []
-                for row in cur.fetchall():
-                    ranking_dict = dict(row)
-                    # Sanitize float values
-                    for key, value in ranking_dict.items():
-                        ranking_dict[key] = sanitize_float(value)
-                    daily_rankings.append(ranking_dict)
-                
-                definition_rankings.append({
-                    "definition_id": definition_id,
-                    "definition_name": definition_name,
-                    "daily_rankings": daily_rankings
+                # Add daily ranking entry
+                scopes_dict[scope_key]['daily_rankings'].append({
+                    'calculation_date': row['calculation_date'].isoformat() if row['calculation_date'] else None,
+                    'elo_score': sanitize_float(row['elo_rating_median']),
+                    'elo_ci_lower': sanitize_float(row['elo_ci_lower']),
+                    'elo_ci_upper': sanitize_float(row['elo_ci_upper']),
+                    'rank_position': row['rank_position']
                 })
             
             return {
-                "model_id": model_id,
-                "model_name": model_name,
-                "definition_rankings": definition_rankings
-            }
+                'model_id': model_id,
+                'model_name': model_name,
+                'definition_rankings': list(scopes_dict.values())
+            } 
 
     def get_model_series_by_definition(self, model_id: int) -> Optional[Dict[str, Any]]:
         """
