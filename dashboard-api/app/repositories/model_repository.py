@@ -119,117 +119,75 @@ class ModelRepository:
         limit: int = 100
     ) -> List[Dict[str, Any]]:
         """
-        Get model rankings from daily_rankings based on scope, enriched with MASE statistics.
+        Get model rankings from v_monthly_and_latest_rankings view.
         
         Args:
             scope_type: One of 'global', 'definition', or 'frequency_horizon'
             scope_id: The scope identifier:
                 - None for 'global'
-                - Definition ID as string for 'definition'
+                - Definition schedule_id (string) for 'definition'
                 - Frequency::horizon string for 'frequency_horizon' (e.g., '00:15:00::1 day')
-            calculation_date: Date object for filtering rankings (defaults to today if None)
+            calculation_date: Date object for specific date, or None for latest rankings
             limit: Max. number of results
         
         Returns:
-            List of dicts with ranking information including ELO scores, MASE statistics, and metadata
+            List of dicts with ranking information from the view
         """
-        # Default to today if no calculation_date provided
-        if calculation_date is None:
-            from datetime import date
-            calculation_date = date.today()
-        
-        # Build scope filter conditions
-        scope_filter = "er.scope_type = %s"
-        params = [scope_type]
-        
-        # global scope has no additional filter
-        if scope_type == "definition":
-            scope_filter += " AND er.scope_id = %s"
-            params.append(scope_id)
-        elif scope_type == "frequency_horizon":
-            scope_filter += " AND er.scope_id = %s"
-            params.append(scope_id)
-        
-        # Build the query with CTEs
-        query = f"""
-            WITH scope_elo AS (
-                SELECT DISTINCT ON (er.model_id)
-                    er.model_id,
-                    mi.name AS model_name,
-                    mi.readable_id,
-                    mi.architecture,
-                    mi.model_size,
-                    u.username,
-                    o.name AS organization_name,
-                    er.elo_rating_median AS elo_score,
-                    er.elo_ci_lower,
-                    er.elo_ci_upper,
-                    (er.elo_rating_median - er.elo_ci_lower) AS elo_ci_lower_diff,
-                    (er.elo_ci_upper - er.elo_rating_median) AS elo_ci_upper_diff,
-                    er.matches_played AS n_matches,
-                    er.n_bootstraps,
-                    er.calculated_at,
-                    er.calculation_date,
-                    er.rank_position
-                FROM forecasts.daily_rankings er
-                JOIN models.model_info mi ON er.model_id = mi.id
-                JOIN auth.users u ON mi.user_id = u.id
-                LEFT JOIN auth.organizations o ON mi.organization_id = o.id
-                WHERE {scope_filter}
-                  AND er.calculation_date = %s
-                ORDER BY er.model_id, er.calculation_date DESC
-            ),
-            scope_mase AS (
-                SELECT 
-                    fs.model_id,
-                    AVG(fs.mase) AS mase_avg,
-                    STDDEV(fs.mase) AS mase_std,
-                    COUNT(*) AS n_evaluations
-                FROM forecasts.scores fs
-                JOIN challenges.rounds cr ON fs.round_id = cr.id
-                WHERE fs.final_evaluation = TRUE
-                  AND fs.mase IS NOT NULL
-                  AND fs.mase != 'NaN'
-                  AND fs.mase != 'Infinity'
-                  AND fs.mase != '-Infinity'
-                  AND cr.end_time <= %s
-                  -- Exclude series marked as excluded in definition_series_scd2
-                  AND NOT EXISTS (
-                      SELECT 1 FROM challenges.definition_series_scd2 ds
-                      WHERE ds.definition_id = cr.definition_id 
-                        AND ds.series_id = fs.series_id
-                        AND ds.is_excluded = TRUE
-                  )
-                GROUP BY fs.model_id
-            )
+        # Build the base query
+        query = """
             SELECT 
-                se.model_id,
-                se.model_name,
-                se.readable_id,
-                se.architecture,
-                se.model_size,
-                se.username,
-                se.organization_name,
-                se.elo_score,
-                se.elo_ci_lower,
-                se.elo_ci_upper,
-                se.elo_ci_lower_diff,
-                se.elo_ci_upper_diff,
-                se.n_matches,
-                se.n_bootstraps,
-                se.rank_position,
-                sm.mase_avg,
-                sm.mase_std,
-                sm.n_evaluations,
-                se.calculated_at,
-                se.calculation_date
-            FROM scope_elo se
-            LEFT JOIN scope_mase sm ON se.model_id = sm.model_id
-            ORDER BY se.rank_position ASC
-            LIMIT %s;
+                model_id,
+                model_name,
+                architecture,
+                model_size,
+                username,
+                organization_name,
+                elo_score,
+                elo_ci_lower,
+                elo_ci_upper,
+                elo_ci_lower_diff,
+                elo_ci_upper_diff,
+                n_matches,
+                n_bootstraps,
+                rank_position,
+                mase_avg,
+                mase_std,
+                n_evaluations,
+                calculation_date
+            FROM forecasts.v_monthly_and_latest_rankings
+            WHERE 1=1
         """
+        params = []
         
-        params.extend([calculation_date, calculation_date, limit])
+        # Filter by calculation date or get latest
+        if calculation_date is None:
+            query += " AND is_latest = TRUE"
+        else:
+            query += " AND calculation_date = %s"
+            params.append(calculation_date)
+        
+        # Filter by scope type
+        query += " AND scope_type = %s"
+        params.append(scope_type)
+        
+        # Filter by scope_id based on scope_type
+        if scope_type == "definition" and scope_id:
+            query += " AND definition_schedule_id = %s"
+            params.append(scope_id)
+        elif scope_type == "frequency_horizon" and scope_id:
+            query += " AND scope_id = %s"
+            params.append(scope_id)
+        # For 'global', no additional scope_id filter needed
+        
+        # Order by rank position (and scope for multi-scope results)
+        if scope_type is not None:
+            query += " ORDER BY rank_position"
+        else:
+            query += " ORDER BY scope_type, scope_id, rank_position"
+        
+        # Apply limit
+        query += " LIMIT %s;"
+        params.append(limit)
         
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(query, tuple(params))
@@ -290,7 +248,7 @@ class ModelRepository:
         Returns all available filter values for the rankings endpoint.
         
         Returns:
-            Dict with definitions and frequency_horizons
+            Dict with definitions, frequency_horizons, and calculation_dates
         """
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             # Get unique challenge definitions with IDs and names
@@ -312,9 +270,24 @@ class ModelRepository:
             """)
             frequency_horizons = [row['scope_id'] for row in cur.fetchall()]
             
+            # Get available calculation dates from monthly and latest rankings
+            cur.execute("""
+                SELECT DISTINCT calculation_date, is_month_end
+                FROM forecasts.v_monthly_and_latest_rankings
+                ORDER BY calculation_date DESC;
+            """)
+            calculation_dates = [
+                {
+                    'calculation_date': row['calculation_date'].isoformat() if row['calculation_date'] else None,
+                    'is_month_end': row['is_month_end']
+                }
+                for row in cur.fetchall()
+            ]
+            
             return {
                 "definitions": definitions,
-                "frequency_horizons": frequency_horizons
+                "frequency_horizons": frequency_horizons,
+                "calculation_dates": calculation_dates
             }
     
     def get_model_rankings_by_definition(
