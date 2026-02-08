@@ -461,7 +461,7 @@ schedules:
     - electricity_non_fossil_generation_share_TSO_Fingrid_15min_395
     # - electricity_nuclear_power_plant_generation_TSO_Fingrid_3min_188
     - electricity_wind_onshore_power_plant_generation_TSO_Fingrid_3min_181
-    n_time_series: 10
+    n_time_series: 9
     frequency: 1 hour
     context_length: 1000
     forecast_horizon: 3 days

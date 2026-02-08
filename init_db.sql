@@ -920,6 +920,7 @@ COMMENT ON COLUMN forecasts.daily_rankings.elo_rating_median IS
 'Median ELO rating from N bootstrap iterations. Higher is better. Base rating is 1000.';
 
 -- View: Daily Rankings Leaderboard with model and definition info
+-- View: Daily Rankings Leaderboard with model and definition info
 CREATE OR REPLACE VIEW forecasts.v_daily_rankings_leaderboard AS
 SELECT 
     dr.id,
@@ -934,6 +935,8 @@ SELECT
     dr.calculated_at,
     dr.scope_type,
     dr.scope_id,
+    -- Flag for most recent ranking in this scope
+    (dr.calculation_date = MAX(dr.calculation_date) OVER (PARTITION BY dr.scope_type, dr.scope_id)) AS is_latest,
     -- Model info
     mi.id as model_id,
     mi.name as model_name,
@@ -955,7 +958,123 @@ ORDER BY dr.calculation_date DESC, dr.scope_type, dr.scope_id NULLS FIRST, dr.el
 
 COMMENT ON VIEW forecasts.v_daily_rankings_leaderboard IS 
 'Leaderboard view combining daily rankings with model metadata. 
-Query by calculation_date and scope_type/scope_id for specific leaderboards.';
+Includes is_latest flag to easily filter for the most recent ranking per scope.';
+
+-- ==========================================================
+-- 12) Monthly & Latest Rankings System
+-- ==========================================================
+
+-- Materialized View: Monthly Model Scores
+-- Aggregates raw scores by month and scope for performance.
+-- Includes the current (incomplete) month to support "recent" rankings.
+CREATE MATERIALIZED VIEW IF NOT EXISTS forecasts.monthly_model_scores AS
+SELECT
+    date_trunc('month', s.calculated_at)::date as month_start,
+    s.model_id,
+    -- Global Scope
+    'global' as scope_type,
+    NULL as scope_id,
+    AVG(s.mase) as avg_mase,
+    AVG(s.rmse) as avg_rmse,
+    COUNT(*) as num_scores
+FROM forecasts.scores s
+GROUP BY 1, 2, 3, 4
+
+UNION ALL
+
+-- Definition Scope
+SELECT
+    date_trunc('month', s.calculated_at)::date,
+    s.model_id,
+    'definition',
+    CAST(r.definition_id AS TEXT),
+    AVG(s.mase),
+    AVG(s.rmse),
+    COUNT(*)
+FROM forecasts.scores s
+JOIN challenges.rounds r ON s.round_id = r.id
+GROUP BY 1, 2, 3, 4;
+
+-- Unique index for concurrent refresh and fast lookups
+CREATE UNIQUE INDEX IF NOT EXISTS idx_monthly_scores_unique 
+ON forecasts.monthly_model_scores(model_id, scope_type, scope_id, month_start);
+
+-- Refresh Policy (via TimescaleDB job scheduler)
+-- Refresh every hour to keep "current month" data reasonably fresh
+-- We use a custom user-defined action if needed, or standard refresh if supported
+-- Since this is standard PG MV, we use a custom job to refresh it.
+DO $$
+BEGIN
+    -- Only create the job if it doesn't exist (check by job_name if possible, or just add_job returns id)
+    -- Simplest approach for init script: add_job if not exists logic is tricky in one line.
+    -- We'll assume this runs on init. 
+    -- NOTE: 'refresh_materialized_view' is not a built-in job action. We need a stored proc.
+    NULL;
+END $$;
+
+CREATE OR REPLACE PROCEDURE forecasts.refresh_monthly_scores()
+AS $$
+BEGIN
+    REFRESH MATERIALIZED VIEW CONCURRENTLY forecasts.monthly_model_scores;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Schedule the refresh job (every 1 hour)
+-- Note: standard add_job does not support if_not_exists, strict init implies it's new
+SELECT add_job('forecasts.refresh_monthly_scores', '1 hour');
+
+
+-- View: Monthly and Latest Rankings (The final user-facing view)
+-- Combines Daily ELO + Aggregated Monthly Scores
+CREATE OR REPLACE VIEW forecasts.v_monthly_and_latest_rankings AS
+SELECT 
+    dr.id,
+    dr.calculation_date,
+    dr.elo_rating_median,
+    dr.elo_ci_lower,
+    dr.elo_ci_upper,
+    dr.matches_played,
+    dr.rank_position,
+    dr.n_bootstraps,
+    dr.scope_type,
+    dr.scope_id,
+    dr.is_latest,
+    
+    -- Date flags for filtering
+    (dr.calculation_date = (date_trunc('month', dr.calculation_date) + interval '1 month - 1 day')::date) as is_month_end,
+    
+    -- Model info
+    dr.model_id,
+    dr.model_name,
+    dr.readable_id,
+    dr.model_family,
+    dr.model_type,
+    dr.username,
+    dr.organization_name,
+    dr.definition_name,
+    dr.definition_schedule_id,
+
+    -- Aggregated Metrics from Materialized View
+    -- We join on month_start. For a daily ranking on 2024-02-08, we join on 2024-02-01.
+    ms.avg_mase,
+    ms.avg_rmse,
+    ms.num_scores as evaluated_count_in_month
+
+FROM forecasts.v_daily_rankings_leaderboard dr
+LEFT JOIN forecasts.monthly_model_scores ms
+    ON ms.scope_type = dr.scope_type
+    AND ms.scope_id IS NOT DISTINCT FROM dr.scope_id
+    AND ms.model_id = dr.model_id
+    AND ms.month_start = date_trunc('month', dr.calculation_date)::date
+WHERE 
+    dr.is_latest = TRUE 
+    OR 
+    (dr.calculation_date = (date_trunc('month', dr.calculation_date) + interval '1 month - 1 day')::date);
+
+COMMENT ON VIEW forecasts.v_monthly_and_latest_rankings IS 
+'Rankings filtered for "Latest" (today/recent) and "End of Month" snapshots.
+Includes ELO (from daily_rankings) and aggregated MASE/RMSE (from monthly_model_scores MV).
+Note: MASE/RMSE are averages over the entire month of the ranking date.';
 
 -- ==========================================================
 -- Final message
