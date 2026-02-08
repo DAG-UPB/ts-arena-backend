@@ -575,6 +575,7 @@ class EloRankingService:
     ) -> int:
         """
         Store ELO ratings using INSERT ... ON CONFLICT DO UPDATE.
+        Also computes and stores cumulative MASE/RMSE from round_model_scores.
         
         Returns:
             Number of rows affected
@@ -586,15 +587,26 @@ class EloRankingService:
         sorted_ratings = sorted(ratings, key=lambda x: x.elo_score, reverse=True)
         rank_map = {r.model_id: idx + 1 for idx, r in enumerate(sorted_ratings)}
         
+        # Get cumulative MASE/RMSE for all models in this scope up to calculation_date
+        model_ids = [r.model_id for r in ratings]
+        mase_stats = await self._get_cumulative_mase_stats(
+            model_ids=model_ids,
+            scope_type=scope_type,
+            scope_id=scope_id,
+            up_to_date=calculation_date
+        )
+        
         query = text("""
             INSERT INTO forecasts.daily_rankings 
                 (calculation_date, model_id, scope_type, scope_id,
                  elo_rating_median, elo_ci_lower, elo_ci_upper,
-                 matches_played, rank_position, n_bootstraps, calculation_duration_ms, calculated_at)
+                 matches_played, rank_position, n_bootstraps, calculation_duration_ms,
+                 avg_mase, mase_std, avg_rmse, evaluated_count, calculated_at)
             VALUES 
                 (:calculation_date, :model_id, :scope_type, :scope_id,
                  :elo_rating_median, :elo_ci_lower, :elo_ci_upper,
-                 :matches_played, :rank_position, :n_bootstraps, :calculation_duration_ms, NOW())
+                 :matches_played, :rank_position, :n_bootstraps, :calculation_duration_ms,
+                 :avg_mase, :mase_std, :avg_rmse, :evaluated_count, NOW())
             ON CONFLICT (calculation_date, model_id, scope_type, COALESCE(scope_id, ''))
             DO UPDATE SET
                 elo_rating_median = EXCLUDED.elo_rating_median,
@@ -604,10 +616,15 @@ class EloRankingService:
                 rank_position = EXCLUDED.rank_position,
                 n_bootstraps = EXCLUDED.n_bootstraps,
                 calculation_duration_ms = EXCLUDED.calculation_duration_ms,
+                avg_mase = EXCLUDED.avg_mase,
+                mase_std = EXCLUDED.mase_std,
+                avg_rmse = EXCLUDED.avg_rmse,
+                evaluated_count = EXCLUDED.evaluated_count,
                 calculated_at = NOW()
         """)
         
         for rating in ratings:
+            stats = mase_stats.get(rating.model_id, {})
             params = {
                 "calculation_date": calculation_date,
                 "model_id": rating.model_id,
@@ -619,12 +636,82 @@ class EloRankingService:
                 "matches_played": rating.n_matches,
                 "rank_position": rank_map.get(rating.model_id),
                 "n_bootstraps": rating.n_bootstraps,
-                "calculation_duration_ms": rating.calculation_duration_ms
+                "calculation_duration_ms": rating.calculation_duration_ms,
+                "avg_mase": stats.get("avg_mase"),
+                "mase_std": stats.get("mase_std"),
+                "avg_rmse": stats.get("avg_rmse"),
+                "evaluated_count": stats.get("evaluated_count", 0)
             }
             await self.session.execute(query, params)
         
         await self.session.commit()
         return len(ratings)
+    
+    async def _get_cumulative_mase_stats(
+        self,
+        model_ids: List[int],
+        scope_type: str,
+        scope_id: Optional[str],
+        up_to_date: date
+    ) -> Dict[int, Dict[str, Any]]:
+        """
+        Get cumulative MASE/RMSE stats for models up to a given date.
+        
+        Returns:
+            Dict mapping model_id -> {avg_mase, mase_std, avg_rmse, evaluated_count}
+        """
+        if not model_ids:
+            return {}
+        
+        # Query cumulative sums from round_model_scores
+        query = text("""
+            SELECT 
+                model_id,
+                SUM(sum_mase) as total_mase,
+                SUM(sum_mase_sq) as total_mase_sq,
+                SUM(sum_rmse) as total_rmse,
+                SUM(num_scores) as total_scores
+            FROM forecasts.round_model_scores
+            WHERE model_id = ANY(:model_ids)
+              AND scope_type = :scope_type
+              AND scope_id IS NOT DISTINCT FROM :scope_id
+              AND round_date <= :up_to_date
+            GROUP BY model_id
+        """)
+        
+        result = await self.session.execute(query, {
+            "model_ids": model_ids,
+            "scope_type": scope_type,
+            "scope_id": scope_id,
+            "up_to_date": up_to_date
+        })
+        
+        stats = {}
+        for row in result.fetchall():
+            model_id, total_mase, total_mase_sq, total_rmse, total_scores = row
+            
+            avg_mase = None
+            mase_std = None
+            avg_rmse = None
+            
+            if total_scores and total_scores > 0:
+                avg_mase = total_mase / total_scores
+                avg_rmse = total_rmse / total_scores
+                
+                if total_scores > 1:
+                    # Standard deviation: sqrt(E[X^2] - E[X]^2)
+                    variance = (total_mase_sq / total_scores) - (avg_mase ** 2)
+                    if variance > 0:
+                        mase_std = variance ** 0.5
+            
+            stats[model_id] = {
+                "avg_mase": avg_mase,
+                "mase_std": mase_std,
+                "avg_rmse": avg_rmse,
+                "evaluated_count": int(total_scores) if total_scores else 0
+            }
+        
+        return stats
 
     
     async def has_calculated_today(self) -> bool:

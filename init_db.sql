@@ -303,6 +303,11 @@ WHERE is_current = TRUE;
 CREATE INDEX idx_def_series_definition ON challenges.definition_series_scd2(definition_id);
 CREATE INDEX idx_def_series_series ON challenges.definition_series_scd2(series_id);
 
+-- Partial index for fast NOT EXISTS lookups filtering excluded series
+CREATE INDEX IF NOT EXISTS idx_def_series_excluded 
+ON challenges.definition_series_scd2(definition_id, series_id) 
+WHERE is_excluded = TRUE;
+
 COMMENT ON TABLE challenges.definition_series_scd2 IS 
 'SCD Type 2 table tracking which time series are assigned to each challenge definition over time.
 When a series is added or removed, the previous record is closed (valid_to set, is_current=FALSE) 
@@ -884,7 +889,13 @@ CREATE TABLE IF NOT EXISTS forecasts.daily_rankings (
     rank_position INTEGER,
     n_bootstraps INTEGER DEFAULT 500,
     calculation_duration_ms INTEGER,
-    calculated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    calculated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    
+    -- Cumulative MASE/RMSE snapshot (computed at calculation time)
+    avg_mase DOUBLE PRECISION,
+    mase_std DOUBLE PRECISION,
+    avg_rmse DOUBLE PRECISION,
+    evaluated_count INTEGER DEFAULT 0
 );
 
 -- Unique constraint: one row per model per scope per day
@@ -920,7 +931,6 @@ COMMENT ON COLUMN forecasts.daily_rankings.elo_rating_median IS
 'Median ELO rating from N bootstrap iterations. Higher is better. Base rating is 1000.';
 
 -- View: Daily Rankings Leaderboard with model and definition info
--- View: Daily Rankings Leaderboard with model and definition info
 CREATE OR REPLACE VIEW forecasts.v_daily_rankings_leaderboard AS
 SELECT 
     dr.id,
@@ -935,6 +945,11 @@ SELECT
     dr.calculated_at,
     dr.scope_type,
     dr.scope_id,
+    -- Pre-computed MASE/RMSE from snapshot
+    dr.avg_mase,
+    dr.mase_std,
+    dr.avg_rmse,
+    dr.evaluated_count,
     -- Flag for most recent ranking in this scope
     (dr.calculation_date = MAX(dr.calculation_date) OVER (PARTITION BY dr.scope_type, dr.scope_id)) AS is_latest,
     -- Model info
@@ -960,7 +975,8 @@ LEFT JOIN challenges.definitions cd ON dr.scope_type = 'definition' AND dr.scope
 ORDER BY dr.calculation_date DESC, dr.scope_type, dr.scope_id NULLS FIRST, dr.elo_rating_median DESC;
 
 COMMENT ON VIEW forecasts.v_daily_rankings_leaderboard IS 
-'Leaderboard view combining daily rankings with model metadata. 
+'Leaderboard view combining daily rankings with model metadata.
+Includes pre-computed avg_mase, mase_std, avg_rmse from snapshot.
 Includes is_latest flag to easily filter for the most recent ranking per scope.';
 
 -- ==========================================================
@@ -1082,100 +1098,21 @@ $$ LANGUAGE plpgsql;
 SELECT add_job('forecasts.refresh_round_scores', '1 hour');
 
 
--- View: Monthly and Latest Rankings (The final user-facing view)
--- Combines Daily ELO + Cumulative Aggregated Scores from round-level MV
+-- View: Monthly and Latest Rankings (simplified - uses pre-computed snapshots)
 CREATE OR REPLACE VIEW forecasts.v_monthly_and_latest_rankings AS
-WITH cumulative_scores AS (
-    -- Calculate cumulative sums for all scores up to each round_date
-    SELECT 
-        model_id,
-        scope_type,
-        scope_id,
-        round_date,
-        -- Running totals ordered by round_date
-        SUM(sum_mase) OVER w as cum_sum_mase,
-        SUM(sum_mase_sq) OVER w as cum_sum_mase_sq,
-        SUM(sum_rmse) OVER w as cum_sum_rmse,
-        SUM(num_scores) OVER w as cum_num_scores
-    FROM forecasts.round_model_scores
-    WINDOW w AS (
-        PARTITION BY model_id, scope_type, scope_id 
-        ORDER BY round_date 
-        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    )
-),
--- Get the latest cumulative score up to each calculation_date
-latest_cumulative AS (
-    SELECT DISTINCT ON (cs.model_id, cs.scope_type, cs.scope_id, dr.calculation_date)
-        cs.model_id,
-        cs.scope_type,
-        cs.scope_id,
-        dr.calculation_date as calc_date,
-        cs.cum_sum_mase,
-        cs.cum_sum_mase_sq,
-        cs.cum_sum_rmse,
-        cs.cum_num_scores
-    FROM forecasts.v_daily_rankings_leaderboard dr
-    JOIN cumulative_scores cs
-        ON cs.model_id = dr.model_id
-        AND cs.scope_type = dr.scope_type
-        AND cs.scope_id IS NOT DISTINCT FROM dr.scope_id
-        AND cs.round_date <= dr.calculation_date
-    ORDER BY cs.model_id, cs.scope_type, cs.scope_id, dr.calculation_date, cs.round_date DESC
-)
 SELECT 
-    dr.id,
-    dr.calculation_date,
-    dr.elo_rating_median,
-    dr.elo_ci_lower,
-    dr.elo_ci_upper,
-    dr.matches_played,
-    dr.rank_position,
-    dr.n_bootstraps,
-    dr.scope_type,
-    dr.scope_id,
-    dr.is_latest,
-    
+    dr.*,
     -- Date flags for filtering
-    (dr.calculation_date = (date_trunc('month', dr.calculation_date) + interval '1 month - 1 day')::date) as is_month_end,
-    
-    -- Model info
-    dr.model_id,
-    dr.model_name,
-    dr.readable_id,
-    dr.model_family,
-    dr.model_type,
-    dr.architecture,
-    dr.model_size,
-    dr.username,
-    dr.organization_name,
-    dr.definition_id,
-    dr.definition_name,
-    dr.definition_schedule_id,
-
-    -- Cumulative MASE/RMSE up to calculation_date
-    CASE WHEN lc.cum_num_scores > 0 THEN lc.cum_sum_mase / lc.cum_num_scores END as avg_mase,
-    CASE WHEN lc.cum_num_scores > 1 THEN 
-        SQRT((lc.cum_sum_mase_sq / lc.cum_num_scores) - POWER(lc.cum_sum_mase / lc.cum_num_scores, 2))
-    END as mase_std,
-    CASE WHEN lc.cum_num_scores > 0 THEN lc.cum_sum_rmse / lc.cum_num_scores END as avg_rmse,
-    lc.cum_num_scores as evaluated_count_cumulative
-
+    (dr.calculation_date = (date_trunc('month', dr.calculation_date) + interval '1 month - 1 day')::date) as is_month_end
 FROM forecasts.v_daily_rankings_leaderboard dr
-LEFT JOIN latest_cumulative lc
-    ON lc.model_id = dr.model_id
-    AND lc.scope_type = dr.scope_type
-    AND lc.scope_id IS NOT DISTINCT FROM dr.scope_id
-    AND lc.calc_date = dr.calculation_date
 WHERE 
     dr.is_latest = TRUE 
     OR (dr.calculation_date = (date_trunc('month', dr.calculation_date) + interval '1 month - 1 day')::date);
 
 COMMENT ON VIEW forecasts.v_monthly_and_latest_rankings IS 
-'Rankings filtered for "Latest" (today/recent) and "End of Month" snapshots.
-Includes ELO (from daily_rankings) and CUMULATIVE aggregated MASE/RMSE.
-MASE/RMSE are cumulative averages computed from all rounds up to and including
-the calculation_date, using round-level granularity for accuracy.';
+'Rankings filtered for "Latest" (most recent) and "End of Month" snapshots.
+MASE/RMSE are pre-computed at ELO calculation time (no on-the-fly computation).
+Much faster than the previous CTE-based approach.';
 
 -- ==========================================================
 -- Final message
