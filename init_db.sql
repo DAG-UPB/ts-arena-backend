@@ -943,12 +943,13 @@ SELECT
     mi.readable_id,
     mi.model_family,
     mi.model_type,
-    mi.architecture, -- [NEW]
-    mi.model_size,   -- [NEW]
+    mi.architecture,
+    mi.model_size, 
     -- User info
     u.username,
     o.name as organization_name,
     -- Definition info (only for scope_type='definition')
+    CASE WHEN dr.scope_type = 'definition' THEN cd.id END as definition_id,
     CASE WHEN dr.scope_type = 'definition' THEN cd.name END as definition_name,
     CASE WHEN dr.scope_type = 'definition' THEN cd.schedule_id END as definition_schedule_id
 FROM forecasts.daily_rankings dr
@@ -1065,6 +1066,7 @@ SELECT
     dr.model_size,   -- [NEW]
     dr.username,
     dr.organization_name,
+    dr.definition_id, -- [NEW]
     dr.definition_name,
     dr.definition_schedule_id,
 
