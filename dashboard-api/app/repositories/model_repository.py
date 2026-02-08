@@ -136,23 +136,20 @@ class ModelRepository:
         # Build the base query
         query = """
             SELECT 
-                model_id,
-                model_name,
+                model_id, -
+                model_name, -
                 architecture,
                 model_size,
-                username,
-                organization_name,
-                elo_score,
+                organization_name, -
+                elo_rating_median,
                 elo_ci_lower,
                 elo_ci_upper,
-                elo_ci_lower_diff,
-                elo_ci_upper_diff,
-                n_matches,
+                matches_played,
                 n_bootstraps,
                 rank_position,
-                mase_avg,
+                avg_mase,
                 mase_std,
-                n_evaluations,
+                evaluation_count_in_month,
                 calculation_date
             FROM forecasts.v_monthly_and_latest_rankings
             WHERE 1=1
