@@ -380,8 +380,8 @@ class EloRankingService:
             base_query += """
                 AND cr.definition_id IN (
                     SELECT id FROM challenges.definitions 
-                    WHERE frequency = :frequency::interval 
-                      AND horizon = :horizon::interval
+                    WHERE frequency = CAST(:frequency AS interval) 
+                      AND horizon = CAST(:horizon AS interval)
                 )
             """
             params["frequency"] = frequency

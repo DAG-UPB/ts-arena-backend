@@ -964,82 +964,136 @@ COMMENT ON VIEW forecasts.v_daily_rankings_leaderboard IS
 Includes is_latest flag to easily filter for the most recent ranking per scope.';
 
 -- ==========================================================
--- 12) Monthly & Latest Rankings System
+-- 12) Round-Level Model Scores & Latest Rankings System
 -- ==========================================================
 
--- Materialized View: Monthly Model Scores
--- Aggregates raw scores by month and scope for performance.
--- Includes the current (incomplete) month to support "recent" rankings.
-CREATE MATERIALIZED VIEW IF NOT EXISTS forecasts.monthly_model_scores AS
+-- Materialized View: Round Model Scores
+-- Aggregates raw scores by round (based on round registration_start) and scope.
+-- Stores SUMS to allow cumulative calculations in the final view.
+-- Granularity: per-round (= per-day since rounds occur once daily)
+CREATE MATERIALIZED VIEW IF NOT EXISTS forecasts.round_model_scores AS
+-- Global Scope
 SELECT
-    date_trunc('month', s.calculated_at)::date as month_start,
+    r.id as round_id,
+    r.registration_start::date as round_date,
     s.model_id,
-    -- Global Scope
     'global' as scope_type,
-    NULL as scope_id,
-    AVG(s.mase) as avg_mase,
-    STDDEV(s.mase) as mase_std, -- [NEW]
-    AVG(s.rmse) as avg_rmse,
+    CAST(NULL AS TEXT) as scope_id,
+    SUM(s.mase) as sum_mase,
+    SUM(s.mase * s.mase) as sum_mase_sq,
+    SUM(s.rmse) as sum_rmse,
     COUNT(*) as num_scores
-FROM forecasts.scores s
-WHERE s.mase IS NOT NULL
-  AND s.mase != 'NaN'::double precision
-  AND s.mase != 'Infinity'::double precision
-  AND s.mase != '-Infinity'::double precision
-GROUP BY 1, 2, 3, 4
-
-UNION ALL
-
--- Definition Scope
-SELECT
-    date_trunc('month', s.calculated_at)::date,
-    s.model_id,
-    'definition',
-    CAST(r.definition_id AS TEXT),
-    AVG(s.mase),
-    STDDEV(s.mase) as mase_std, -- [NEW]
-    AVG(s.rmse),
-    COUNT(*)
 FROM forecasts.scores s
 JOIN challenges.rounds r ON s.round_id = r.id
 WHERE s.mase IS NOT NULL
   AND s.mase != 'NaN'::double precision
   AND s.mase != 'Infinity'::double precision
   AND s.mase != '-Infinity'::double precision
-GROUP BY 1, 2, 3, 4;
+  AND s.final_evaluation = TRUE
+  -- Exclude series marked as excluded in definition_series_scd2
+  AND NOT EXISTS (
+      SELECT 1 FROM challenges.definition_series_scd2 ds
+      WHERE ds.definition_id = r.definition_id 
+        AND ds.series_id = s.series_id
+        AND ds.is_excluded = TRUE
+  )
+GROUP BY r.id, r.registration_start::date, s.model_id
 
--- Unique index for concurrent refresh and fast lookups
-CREATE UNIQUE INDEX IF NOT EXISTS idx_monthly_scores_unique 
-ON forecasts.monthly_model_scores(model_id, scope_type, scope_id, month_start);
+UNION ALL
 
--- Refresh Policy (via TimescaleDB job scheduler)
--- Refresh every hour to keep "current month" data reasonably fresh
--- We use a custom user-defined action if needed, or standard refresh if supported
--- Since this is standard PG MV, we use a custom job to refresh it.
-DO $$
-BEGIN
-    -- Only create the job if it doesn't exist (check by job_name if possible, or just add_job returns id)
-    -- Simplest approach for init script: add_job if not exists logic is tricky in one line.
-    -- We'll assume this runs on init. 
-    -- NOTE: 'refresh_materialized_view' is not a built-in job action. We need a stored proc.
-    NULL;
-END $$;
+-- Definition Scope
+SELECT
+    r.id as round_id,
+    r.registration_start::date as round_date,
+    s.model_id,
+    'definition' as scope_type,
+    CAST(r.definition_id AS TEXT) as scope_id,
+    SUM(s.mase) as sum_mase,
+    SUM(s.mase * s.mase) as sum_mase_sq,
+    SUM(s.rmse) as sum_rmse,
+    COUNT(*) as num_scores
+FROM forecasts.scores s
+JOIN challenges.rounds r ON s.round_id = r.id
+WHERE s.mase IS NOT NULL
+  AND s.mase != 'NaN'::double precision
+  AND s.mase != 'Infinity'::double precision
+  AND s.mase != '-Infinity'::double precision
+  AND s.final_evaluation = TRUE
+  AND NOT EXISTS (
+      SELECT 1 FROM challenges.definition_series_scd2 ds
+      WHERE ds.definition_id = r.definition_id 
+        AND ds.series_id = s.series_id
+        AND ds.is_excluded = TRUE
+  )
+GROUP BY r.id, r.registration_start::date, s.model_id, r.definition_id;
 
-CREATE OR REPLACE PROCEDURE forecasts.refresh_monthly_scores()
+-- Unique index for concurrent refresh
+CREATE UNIQUE INDEX IF NOT EXISTS idx_round_scores_unique 
+ON forecasts.round_model_scores(round_id, model_id, scope_type, COALESCE(scope_id, ''));
+
+-- Additional indexes for query performance
+CREATE INDEX IF NOT EXISTS idx_round_scores_date ON forecasts.round_model_scores(round_date);
+CREATE INDEX IF NOT EXISTS idx_round_scores_model ON forecasts.round_model_scores(model_id);
+CREATE INDEX IF NOT EXISTS idx_round_scores_scope ON forecasts.round_model_scores(scope_type, scope_id);
+
+COMMENT ON MATERIALIZED VIEW forecasts.round_model_scores IS 
+'Round-level aggregated model scores. Stores per-round MASE/RMSE sums for computing
+cumulative metrics up to any calculation_date. Granularity is per-round (= per-day).
+Filters: final_evaluation=TRUE, excludes problematic series, excludes invalid MASE values.';
+
+-- Refresh Procedure for Round Scores
+CREATE OR REPLACE PROCEDURE forecasts.refresh_round_scores()
 AS $$
 BEGIN
-    REFRESH MATERIALIZED VIEW CONCURRENTLY forecasts.monthly_model_scores;
+    REFRESH MATERIALIZED VIEW CONCURRENTLY forecasts.round_model_scores;
 END;
 $$ LANGUAGE plpgsql;
 
 -- Schedule the refresh job (every 1 hour)
--- Note: standard add_job does not support if_not_exists, strict init implies it's new
-SELECT add_job('forecasts.refresh_monthly_scores', '1 hour');
+SELECT add_job('forecasts.refresh_round_scores', '1 hour');
 
 
 -- View: Monthly and Latest Rankings (The final user-facing view)
--- Combines Daily ELO + Aggregated Monthly Scores
+-- Combines Daily ELO + Cumulative Aggregated Scores from round-level MV
 CREATE OR REPLACE VIEW forecasts.v_monthly_and_latest_rankings AS
+WITH cumulative_scores AS (
+    -- Calculate cumulative sums for all scores up to each round_date
+    SELECT 
+        model_id,
+        scope_type,
+        scope_id,
+        round_date,
+        -- Running totals ordered by round_date
+        SUM(sum_mase) OVER w as cum_sum_mase,
+        SUM(sum_mase_sq) OVER w as cum_sum_mase_sq,
+        SUM(sum_rmse) OVER w as cum_sum_rmse,
+        SUM(num_scores) OVER w as cum_num_scores
+    FROM forecasts.round_model_scores
+    WINDOW w AS (
+        PARTITION BY model_id, scope_type, scope_id 
+        ORDER BY round_date 
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    )
+),
+-- Get the latest cumulative score up to each calculation_date
+latest_cumulative AS (
+    SELECT DISTINCT ON (cs.model_id, cs.scope_type, cs.scope_id, dr.calculation_date)
+        cs.model_id,
+        cs.scope_type,
+        cs.scope_id,
+        dr.calculation_date as calc_date,
+        cs.cum_sum_mase,
+        cs.cum_sum_mase_sq,
+        cs.cum_sum_rmse,
+        cs.cum_num_scores
+    FROM forecasts.v_daily_rankings_leaderboard dr
+    JOIN cumulative_scores cs
+        ON cs.model_id = dr.model_id
+        AND cs.scope_type = dr.scope_type
+        AND cs.scope_id IS NOT DISTINCT FROM dr.scope_id
+        AND cs.round_date <= dr.calculation_date
+    ORDER BY cs.model_id, cs.scope_type, cs.scope_id, dr.calculation_date, cs.round_date DESC
+)
 SELECT 
     dr.id,
     dr.calculation_date,
@@ -1062,36 +1116,37 @@ SELECT
     dr.readable_id,
     dr.model_family,
     dr.model_type,
-    dr.architecture, -- [NEW]
-    dr.model_size,   -- [NEW]
+    dr.architecture,
+    dr.model_size,
     dr.username,
     dr.organization_name,
-    dr.definition_id, -- [NEW]
+    dr.definition_id,
     dr.definition_name,
     dr.definition_schedule_id,
 
-    -- Aggregated Metrics from Materialized View
-    -- We join on month_start. For a daily ranking on 2024-02-08, we join on 2024-02-01.
-    ms.avg_mase,
-    ms.mase_std, -- [NEW]
-    ms.avg_rmse,
-    ms.num_scores as evaluated_count_in_month
+    -- Cumulative MASE/RMSE up to calculation_date
+    CASE WHEN lc.cum_num_scores > 0 THEN lc.cum_sum_mase / lc.cum_num_scores END as avg_mase,
+    CASE WHEN lc.cum_num_scores > 1 THEN 
+        SQRT((lc.cum_sum_mase_sq / lc.cum_num_scores) - POWER(lc.cum_sum_mase / lc.cum_num_scores, 2))
+    END as mase_std,
+    CASE WHEN lc.cum_num_scores > 0 THEN lc.cum_sum_rmse / lc.cum_num_scores END as avg_rmse,
+    lc.cum_num_scores as evaluated_count_cumulative
 
 FROM forecasts.v_daily_rankings_leaderboard dr
-LEFT JOIN forecasts.monthly_model_scores ms
-    ON ms.scope_type = dr.scope_type
-    AND ms.scope_id IS NOT DISTINCT FROM dr.scope_id
-    AND ms.model_id = dr.model_id
-    AND ms.month_start = date_trunc('month', dr.calculation_date)::date
+LEFT JOIN latest_cumulative lc
+    ON lc.model_id = dr.model_id
+    AND lc.scope_type = dr.scope_type
+    AND lc.scope_id IS NOT DISTINCT FROM dr.scope_id
+    AND lc.calc_date = dr.calculation_date
 WHERE 
     dr.is_latest = TRUE 
-    OR 
-    (dr.calculation_date = (date_trunc('month', dr.calculation_date) + interval '1 month - 1 day')::date);
+    OR (dr.calculation_date = (date_trunc('month', dr.calculation_date) + interval '1 month - 1 day')::date);
 
 COMMENT ON VIEW forecasts.v_monthly_and_latest_rankings IS 
 'Rankings filtered for "Latest" (today/recent) and "End of Month" snapshots.
-Includes ELO (from daily_rankings) and aggregated MASE/RMSE (from monthly_model_scores MV).
-Note: MASE/RMSE are averages over the entire month of the ranking date.';
+Includes ELO (from daily_rankings) and CUMULATIVE aggregated MASE/RMSE.
+MASE/RMSE are cumulative averages computed from all rounds up to and including
+the calculation_date, using round-level granularity for accuracy.';
 
 -- ==========================================================
 -- Final message
