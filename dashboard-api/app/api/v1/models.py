@@ -46,7 +46,8 @@ async def get_filtered_rankings(
     """
     Model Rankings with Scope-Based Filtering.
     
-    This endpoint returns model rankings based on ELO scores from the daily rankings.
+    This endpoint returns model rankings based on ELO scores from monthly snapshots 
+    and the latest daily rankings.
     
     **Scope Types:**
     - **Global** (default): No filter parameters - returns global ELO rankings
@@ -62,9 +63,10 @@ async def get_filtered_rankings(
     - Horizon examples: `1 day`, `7 days`
     
     **Calculation Date:**
-    - Filter rankings by specific calculation date (format: YYYY-MM-DD)
-    - If not provided, defaults to today's date
-    - Only returns rankings calculated on the specified date
+    - If not provided: returns the latest rankings (most recent calculation)
+    - If provided (format: YYYY-MM-DD): returns rankings for that specific date
+    - Use `/models/ranking-filters` endpoint to see available calculation dates
+    - Only month-end dates and the latest date are stored
     
     **Response:**
     ```json
@@ -89,7 +91,6 @@ async def get_filtered_rankings(
           "mase_avg": 0.85,
           "mase_std": 0.12,
           "n_evaluations": 156,
-          "calculated_at": "2025-12-31T23:59:59Z",
           "calculation_date": "2025-12-31"
         }
       ],
@@ -127,7 +128,6 @@ async def get_filtered_rankings(
     - `n_evaluations`: Number of evaluations used for MASE calculation
     
     *Metadata:*
-    - `calculated_at`: Timestamp when ELO was calculated
     - `calculation_date`: Date of the ranking calculation
     
     **Headers:**
@@ -151,18 +151,17 @@ async def get_filtered_rankings(
         scope_type = "global"
         scope_id = None
     
-    # Parse calculation_date or default to today
-    from datetime import date
+    # Parse calculation_date or use None for latest
+    calc_date = None
     if calculation_date:
         try:
+            from datetime import date
             calc_date = date.fromisoformat(calculation_date)
         except ValueError:
             raise HTTPException(
                 status_code=400,
                 detail="Invalid calculation_date format. Use YYYY-MM-DD."
             )
-    else:
-        calc_date = date.today()
     
     # Get filtered rankings
     repo = ModelRepository(conn)
