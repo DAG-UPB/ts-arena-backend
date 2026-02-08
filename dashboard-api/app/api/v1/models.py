@@ -197,7 +197,11 @@ async def get_ranking_filters(
     ```json
     {
       "definitions": [{"id": 1, "name": "Day-Ahead Power"}, {"id": 2, "name": "Week-Ahead Power"}],
-      "frequency_horizons": ["00:15:00::1 day", "01:00:00::1 day", "01:00:00::7 days"]
+      "frequency_horizons": ["00:15:00::1 day", "01:00:00::1 day", "01:00:00::7 days"],
+      "calculation_dates": [
+        {"calculation_date": "2026-01-31", "is_month_end": true},
+        {"calculation_date": "2026-02-07", "is_month_end": false}
+      ]
     }
     ```
     
@@ -205,6 +209,7 @@ async def get_ranking_filters(
     - Only values present in the database are returned
     - `definitions` contains available definition IDs and names for scope_type='definition'
     - `frequency_horizons` contains available frequency::horizon combinations for scope_type='frequency_horizon'
+    - `calculation_dates` contains available calculation dates with month-end indicator, sorted by date descending
     
     **Headers:**
     - X-API-Key: Valid API key required

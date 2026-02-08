@@ -290,7 +290,7 @@ class ModelRepository:
         Returns all available filter values for the rankings endpoint.
         
         Returns:
-            Dict with definitions and frequency_horizons
+            Dict with definitions, frequency_horizons, and calculation_dates
         """
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             # Get unique challenge definitions with IDs and names
@@ -312,9 +312,24 @@ class ModelRepository:
             """)
             frequency_horizons = [row['scope_id'] for row in cur.fetchall()]
             
+            # Get available calculation dates from monthly and latest rankings
+            cur.execute("""
+                SELECT DISTINCT calculation_date, is_month_end
+                FROM forecasts.v_monthly_and_latest_rankings
+                ORDER BY calculation_date DESC;
+            """)
+            calculation_dates = [
+                {
+                    'calculation_date': row['calculation_date'].isoformat() if row['calculation_date'] else None,
+                    'is_month_end': row['is_month_end']
+                }
+                for row in cur.fetchall()
+            ]
+            
             return {
                 "definitions": definitions,
-                "frequency_horizons": frequency_horizons
+                "frequency_horizons": frequency_horizons,
+                "calculation_dates": calculation_dates
             }
     
     def get_model_rankings_by_definition(
