@@ -84,10 +84,10 @@ class RoundRepository:
                     mi.architecture,
                     mi.pretraining_data,
                     mi.publishing_date
-                FROM forecasts.v_ranking_base vrb
-                JOIN models.model_info mi ON mi.id = vrb.model_id
+                FROM forecasts.forecasts f
+                JOIN models.model_info mi ON mi.id = f.model_id
                 JOIN auth.users u ON u.id = mi.user_id
-                WHERE vrb.round_id = %s
+                WHERE f.round_id = %s
                 ORDER BY 1;
                 """,
                 (round_id,),
