@@ -167,16 +167,24 @@ class SmardDataSourcePlugin(BasePlugin):
         self.region = self._defaults.get("region", "DE")
         self.resolution = self._defaults.get("resolution", "hour")
 
+    def get_detected_timezone(self) -> Optional[str]:
+        return "Europe/Berlin"
+
     async def get_historical_data(
         self,
         start_date: str,
-        end_date: str,
+        end_date: Optional[str] = None,
         metrics: Optional[List[str]] = None
     ) -> Dict[str, Any]:
-        """Fetch historical data from SMARD API"""
+        """
+        Fetch historical data from SMARD API.
+        
+        SMARD API does not require an end_date - it returns data up to the latest available.
+        """
         # Convert date strings to Timestamp objects and remove timezone information
         start_dt = pd.Timestamp(start_date).tz_localize(
             None) if start_date else None
+        # end_date is optional, SMARD will return up to latest if not provided
         end_dt = pd.Timestamp(end_date).tz_localize(None) if end_date else None
         
         # Call processed history

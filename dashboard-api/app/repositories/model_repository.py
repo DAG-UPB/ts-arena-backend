@@ -21,30 +21,23 @@ class ModelRepository:
     def __init__(self, conn):
         self.conn = conn
     
-    def list_models_for_challenge(self, challenge_id: int) -> List[Dict[str, Any]]:
-        """List of all models for a challenge."""
+
+    def get_model_details(self, model_id: int) -> Optional[Dict[str, Any]]:
+        """Get detailed model info and stats."""
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT DISTINCT
-                    mi.readable_id,
-                    COALESCE(mi.name, 'model') AS name,
-                    mi.model_family,
-                    mi.model_size,
-                    mi.hosting,
-                    mi.architecture,
-                    mi.pretraining_data,
-                    mi.publishing_date
-                FROM forecasts.forecasts f
-                JOIN models.model_info mi ON mi.id = f.model_id
-                JOIN auth.users u ON u.id = mi.user_id
-                WHERE f.challenge_id = %s
-                ORDER BY 1;
+                SELECT
+                    mi.*,
+                    (SELECT COUNT(DISTINCT round_id) FROM forecasts.scores WHERE model_id = mi.id) as challenges_participated,
+                    (SELECT COALESCE(SUM(forecast_count), 0) FROM forecasts.scores WHERE model_id = mi.id) as forecasts_made
+                FROM models.model_info mi
+                WHERE mi.id = %s
                 """,
-                (challenge_id,),
+                (model_id,),
             )
-            rows = [dict(r) for r in cur.fetchall()]
-            return rows
+            row = cur.fetchone()
+            return dict(row) if row else None
     
     def get_global_rankings(
         self, 
@@ -93,10 +86,10 @@ class ModelRepository:
                         mi.name AS model_name,
                         COUNT(cs.challenge_id) AS n_completed,
                         AVG(cs.mase) AS avg_mase
-                    FROM forecasts.challenge_scores cs
+                    FROM forecasts.scores cs
                     JOIN models.model_info mi ON mi.id = cs.model_id
                     JOIN auth.users u ON u.id = mi.user_id
-                    JOIN challenges.challenges c ON c.id = cs.challenge_id
+                    JOIN challenges.rounds c ON c.id = cs.challenge_id
                     WHERE cs.mase IS NOT NULL
                 """
                 params = []
@@ -120,135 +113,87 @@ class ModelRepository:
     
     def get_filtered_rankings(
         self,
-        time_range: Optional[str] = None,
-        domains: Optional[List[str]] = None,
-        categories: Optional[List[str]] = None,
-        subcategories: Optional[List[str]] = None,
-        frequencies: Optional[List[str]] = None,
-        horizons: Optional[List[str]] = None,
-        min_challenges: int = 1,
+        scope_type: Optional[str] = None,
+        scope_id: Optional[str] = None,
+        calculation_date = None,
         limit: int = 100
     ) -> List[Dict[str, Any]]:
         """
-        Filtered rankings based on multiple dimensions.
+        Get model rankings from v_monthly_and_latest_rankings view.
         
         Args:
-            time_range: Time range (7d, 30d, 90d, 365d)
-            domains: List of domains (e.g. ["Energy", "Finance"])
-            categories: List of categories (e.g. ["Electricity", "Gas"])
-            subcategories: List of subcategories (e.g. ["Load", "Generation"])
-            frequencies: List of frequencies as ISO 8601 (e.g. ["PT1H", "P1D"])
-            horizons: List of horizons as ISO 8601 (e.g. ["PT6H", "P1D"])
-            min_challenges: Minimum number of participated challenges
+            scope_type: One of 'global', 'definition', or 'frequency_horizon'
+            scope_id: The scope identifier:
+                - None for 'global'
+                - Definition schedule_id (string) for 'definition'
+                - Frequency::horizon string for 'frequency_horizon' (e.g., '00:15:00::1 day')
+            calculation_date: Date object for specific date, or None for latest rankings
             limit: Max. number of results
         
         Returns:
-            List of dicts with ranking information
+            List of dicts with ranking information from the view
         """
+        # Build the base query
         query = """
-            SELECT
+            SELECT 
+                model_id,
                 model_name,
-                COUNT(DISTINCT challenge_id) AS challenges_participated,
-                AVG(mase) AS avg_mase,
-                STDDEV(mase) AS stddev_mase,
-                MIN(mase) AS min_mase,
-                MAX(mase) AS max_mase,
-                ARRAY_AGG(DISTINCT domain ORDER BY domain) FILTER (WHERE domain IS NOT NULL) AS domains_covered,
-                ARRAY_AGG(DISTINCT category ORDER BY category) FILTER (WHERE category IS NOT NULL) AS categories_covered,
-                ARRAY_AGG(DISTINCT frequency::INTERVAL ORDER BY frequency) FILTER (WHERE frequency IS NOT NULL) AS frequencies_covered,
-                ARRAY_AGG(DISTINCT horizon::INTERVAL ORDER BY horizon) FILTER (WHERE horizon IS NOT NULL) AS horizons_covered
-            FROM forecasts.v_ranking_base
+                architecture,
+                model_size,
+                organization_name,
+                elo_rating_median,
+                elo_ci_lower,
+                elo_ci_upper,
+                matches_played,
+                n_bootstraps,
+                rank_position,
+                avg_mase,
+                mase_std,
+                evaluated_count,
+                calculation_date
+            FROM forecasts.v_monthly_and_latest_rankings
             WHERE 1=1
         """
-        
         params = []
         
-        # Time range filter
-        if time_range:
-            now = datetime.utcnow()
-            range_mapping = {
-                "7d": timedelta(days=7),
-                "30d": timedelta(days=30),
-                "90d": timedelta(days=90),
-                "365d": timedelta(days=365),
-            }
-            delta = range_mapping.get(time_range)
-            if delta:
-                since = now - delta
-                query += " AND challenge_end_time >= %s"
-                params.append(since)
+        # Filter by calculation date or get latest
+        if calculation_date is None:
+            query += " AND is_latest = TRUE"
+        else:
+            query += " AND calculation_date = %s"
+            params.append(calculation_date)
         
-        # Domain filter
-        if domains and len(domains) > 0:
-            placeholders = ','.join(['%s'] * len(domains))
-            query += f" AND domain IN ({placeholders})"
-            params.extend(domains)
+        # Filter by scope type
+        query += " AND scope_type = %s"
+        params.append(scope_type)
         
-        # Category filter
-        if categories and len(categories) > 0:
-            placeholders = ','.join(['%s'] * len(categories))
-            query += f" AND category IN ({placeholders})"
-            params.extend(categories)
+        # Filter by scope_id based on scope_type
+        if scope_type == "definition" and scope_id:
+            query += " AND definition_id = %s"
+            params.append(scope_id)
+        elif scope_type == "frequency_horizon" and scope_id:
+            query += " AND scope_id = %s"
+            params.append(scope_id)
+        # For 'global', no additional scope_id filter needed
         
-        # Subcategory filter
-        if subcategories and len(subcategories) > 0:
-            placeholders = ','.join(['%s'] * len(subcategories))
-            query += f" AND subcategory IN ({placeholders})"
-            params.extend(subcategories)
+        # Order by rank position (and scope for multi-scope results)
+        if scope_type is not None:
+            query += " ORDER BY rank_position"
+        else:
+            query += " ORDER BY scope_type, scope_id, rank_position"
         
-        # Frequency filter (ISO 8601 → PostgreSQL INTERVAL)
-        if frequencies and len(frequencies) > 0:
-            interval_conditions = []
-            for freq_iso in frequencies:
-                try:
-                    duration = isodate.parse_duration(freq_iso)
-                    seconds = int(duration.total_seconds())
-                    interval_conditions.append(f"frequency = INTERVAL '{seconds} seconds'")
-                except Exception as e:
-                    # Skip invalid ISO 8601 strings
-                    print(f"Warning: Could not parse frequency '{freq_iso}': {e}", file=sys.stderr)
-                    continue
-            
-            if interval_conditions:
-                query += " AND (" + " OR ".join(interval_conditions) + ")"
-        
-        # Horizon filter (ISO 8601 → PostgreSQL INTERVAL)
-        if horizons and len(horizons) > 0:
-            interval_conditions = []
-            for horizon_iso in horizons:
-                try:
-                    duration = isodate.parse_duration(horizon_iso)
-                    seconds = int(duration.total_seconds())
-                    interval_conditions.append(f"horizon = INTERVAL '{seconds} seconds'")
-                except Exception as e:
-                    # Skip invalid ISO 8601 strings
-                    print(f"Warning: Could not parse horizon '{horizon_iso}': {e}", file=sys.stderr)
-                    continue
-            
-            if interval_conditions:
-                query += " AND (" + " OR ".join(interval_conditions) + ")"
-        
-        # Group and aggregate
-        query += """
-            GROUP BY model_name
-            HAVING COUNT(DISTINCT challenge_id) >= %s
-            ORDER BY avg_mase ASC NULLS LAST, challenges_participated DESC
-            LIMIT %s;
-        """
-        params.extend([min_challenges, limit])
+        # Apply limit
+        query += " LIMIT %s;"
+        params.append(limit)
         
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(query, tuple(params))
             rows = [dict(r) for r in cur.fetchall()]
             
-            # Clean up float values and convert INTERVAL to ISO 8601
+            # Clean up float values for JSON compatibility
             for row in rows:
                 for key, value in row.items():
-                    if key in ('frequencies_covered', 'horizons_covered') and value:
-                        # Convert PostgreSQL INTERVAL strings to ISO 8601
-                        row[key] = [self._interval_to_iso8601(iv) for iv in value]
-                    else:
-                        row[key] = sanitize_float(value)
+                    row[key] = sanitize_float(value)
             
             return rows
     
@@ -297,74 +242,193 @@ class ModelRepository:
     
     def get_available_filter_options(self) -> Dict[str, Any]:
         """
-        Returns all available filter values.
+        Returns all available filter values for the rankings endpoint.
         
         Returns:
-            Dict with domains, categories, subcategories, frequencies, horizons
+            Dict with definitions, frequency_horizons, and calculation_dates
         """
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            # Get unique domains
+            # Get unique challenge definitions with IDs and names
             cur.execute("""
-                SELECT DISTINCT domain
-                FROM forecasts.v_ranking_base
-                WHERE domain IS NOT NULL
-                ORDER BY domain;
+                SELECT id, name
+                FROM challenges.v_active_definitions
+                WHERE id IS NOT NULL
+                ORDER BY name
             """)
-            domains = [row['domain'] for row in cur.fetchall()]
+            definitions = [{'id': row['id'], 'name': row['name']} for row in cur.fetchall()]
             
-            # Get unique categories
+            # Get unique frequency_horizon combinations from daily_rankings
             cur.execute("""
-                SELECT DISTINCT category
-                FROM forecasts.v_ranking_base
-                WHERE category IS NOT NULL
-                ORDER BY category;
+                SELECT DISTINCT scope_id
+                FROM forecasts.daily_rankings
+                WHERE scope_type = 'frequency_horizon'
+                  AND scope_id IS NOT NULL
+                ORDER BY scope_id;
             """)
-            categories = [row['category'] for row in cur.fetchall()]
+            frequency_horizons = [row['scope_id'] for row in cur.fetchall()]
             
-            # Get unique subcategories
+            # Get available calculation dates from monthly and latest rankings
             cur.execute("""
-                SELECT DISTINCT subcategory
-                FROM forecasts.v_ranking_base
-                WHERE subcategory IS NOT NULL
-                ORDER BY subcategory;
+                SELECT DISTINCT calculation_date, is_month_end
+                FROM forecasts.v_monthly_and_latest_rankings
+                ORDER BY calculation_date DESC;
             """)
-            subcategories = [row['subcategory'] for row in cur.fetchall()]
-            
-            # Get unique frequencies (convert to ISO 8601)
-            cur.execute("""
-                SELECT DISTINCT frequency
-                FROM forecasts.v_ranking_base
-                WHERE frequency IS NOT NULL
-                ORDER BY frequency;
-            """)
-            frequencies = []
-            for row in cur.fetchall():
-                freq_interval = row['frequency']
-                # psycopg2 returns timedelta for INTERVAL
-                if isinstance(freq_interval, timedelta):
-                    iso_freq = isodate.duration_isoformat(freq_interval)
-                    frequencies.append(iso_freq)
-            
-            # Get unique horizons (convert to ISO 8601)
-            cur.execute("""
-                SELECT DISTINCT horizon
-                FROM forecasts.v_ranking_base
-                WHERE horizon IS NOT NULL
-                ORDER BY horizon;
-            """)
-            horizons = []
-            for row in cur.fetchall():
-                horizon_interval = row['horizon']
-                # psycopg2 returns timedelta for INTERVAL
-                if isinstance(horizon_interval, timedelta):
-                    iso_horizon = isodate.duration_isoformat(horizon_interval)
-                    horizons.append(iso_horizon)
+            calculation_dates = [
+                {
+                    'calculation_date': row['calculation_date'].isoformat() if row['calculation_date'] else None,
+                    'is_month_end': row['is_month_end']
+                }
+                for row in cur.fetchall()
+            ]
             
             return {
-                "domains": domains,
-                "categories": categories,
-                "subcategories": subcategories,
-                "frequencies": frequencies,
-                "horizons": horizons,
-                "time_ranges": ["7d", "30d", "90d", "365d"]
+                "definitions": definitions,
+                "frequency_horizons": frequency_horizons,
+                "calculation_dates": calculation_dates
             }
+    
+    def get_model_rankings_by_definition(
+        self,
+        model_id: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get ELO rankings for a model across all definitions it participated in.
+        Returns monthly ELO rankings and the most recent one.
+        
+        Args:
+            model_id: The model ID
+            
+        Returns:
+            Dict with model info and ELO rankings grouped by definition for the last 30 days,
+            or None if model not found
+        """
+        
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # Get all rankings for the model from the last 30 days
+            query = """ 
+            SELECT 
+                model_id,
+                model_name,
+                definition_id,
+                definition_name,
+                calculation_date,
+                elo_rating_median,
+                elo_ci_lower,
+                elo_ci_upper,
+                rank_position,
+                scope_type,
+                scope_id
+            FROM forecasts.v_monthly_and_latest_rankings
+            WHERE model_id = %s
+            """
+            cur.execute(query, (model_id,))
+            rows = [dict(r) for r in cur.fetchall()]
+            
+            # If no data found, return None
+            if not rows:
+                return None
+            
+            # Group by scope (using scope_type and scope_id as composite key)
+            model_id = rows[0]['model_id']
+            model_name = rows[0]['model_name']
+            
+            scopes_dict = {}
+            for row in rows:
+                # Use scope_type and scope_id as composite key (scope_id is always defined)
+                scope_key = (row['scope_type'], row['scope_id'])
+                if scope_key not in scopes_dict:
+                    scope_entry = {
+                        'scope_type': row['scope_type'],
+                        'scope_id': row['scope_id'],
+                        'daily_rankings': []
+                    }
+                    # Add definition_id and definition_name only if they are not NULL
+                    if row['definition_id'] is not None:
+                        scope_entry['definition_id'] = row['definition_id']
+                    if row['definition_name'] is not None:
+                        scope_entry['definition_name'] = row['definition_name']
+                    
+                    scopes_dict[scope_key] = scope_entry
+                
+                # Add daily ranking entry
+                scopes_dict[scope_key]['daily_rankings'].append({
+                    'calculation_date': row['calculation_date'].isoformat() if row['calculation_date'] else None,
+                    'elo_score': sanitize_float(row['elo_rating_median']),
+                    'elo_ci_lower': sanitize_float(row['elo_ci_lower']),
+                    'elo_ci_upper': sanitize_float(row['elo_ci_upper']),
+                    'rank_position': row['rank_position']
+                })
+            
+            return {
+                'model_id': model_id,
+                'model_name': model_name,
+                'definition_rankings': list(scopes_dict.values())
+            } 
+
+    def get_model_series_by_definition(self, model_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get all series grouped by definition for a specific model.
+        
+        Series that appear in multiple definitions will be listed under each definition.
+        Includes forecast counts and rounds participated for each series.
+        
+        Args:
+            model_id: The ID of the model
+            
+        Returns:
+            Dictionary with model info and definitions with their series,
+            or None if model not found
+        """
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # Get model info
+            cur.execute("""
+                SELECT id, readable_id, name
+                FROM models.model_info
+                WHERE id = %s
+            """, (model_id,))
+            model_row = cur.fetchone()
+            if not model_row:
+                return None
+            
+            # Get all series grouped by definition
+            # Using v_ranking_base (based on scores) for better performance than forecasts table
+            cur.execute("""
+                SELECT 
+                    vrb.definition_id,
+                    vrb.definition_name,
+                    vrb.series_id,
+                    vrb.series_name,
+                    vrb.unique_id,
+                    COUNT(DISTINCT vrb.round_id) as rounds_participated
+                FROM forecasts.v_ranking_base vrb
+                WHERE vrb.model_id = %s
+                GROUP BY vrb.definition_id, vrb.definition_name, vrb.series_id, vrb.series_name, vrb.unique_id
+                ORDER BY vrb.definition_name, vrb.series_name
+            """, (model_id,))
+            rows = [dict(r) for r in cur.fetchall()]
+            
+            # Group by definition
+            definitions_dict = {}
+            for row in rows:
+                def_id = row['definition_id']
+                if def_id not in definitions_dict:
+                    definitions_dict[def_id] = {
+                        'definition_id': def_id,
+                        'definition_name': row['definition_name'],
+                        'series': []
+                    }
+                
+                definitions_dict[def_id]['series'].append({
+                    'series_id': row['series_id'],
+                    'series_name': row['series_name'],
+                    'series_unique_id': row['unique_id'],
+                    'rounds_participated': row['rounds_participated']
+                })
+            
+            return {
+                'model_id': model_row['id'],
+                'model_readable_id': model_row['readable_id'],
+                'model_name': model_row['name'],
+                'definitions': list(definitions_dict.values())
+            }
+

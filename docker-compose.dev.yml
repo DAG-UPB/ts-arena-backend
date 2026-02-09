@@ -14,7 +14,12 @@ services:
   timescaledb:
     ports:
       - "5433:5432"
+    volumes:
+      - dbarena:/var/lib/postgresql/data
 
   cloudbeaver:
     ports:
       - "8980:8978"
+
+volumes:
+  dbarena:

@@ -1,7 +1,8 @@
 import sys
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import psycopg2.extras
+from cron_converter import Cron
 
 # Import utilities
 from app.core.utils import parse_iso8601_to_interval_list
@@ -13,39 +14,122 @@ class ChallengeRepository:
     def __init__(self, conn):
         self.conn = conn
     
-    def list_challenges(
+        
+    def list_definitions(self) -> List[Dict[str, Any]]:
+        """List all challenge definitions."""
+        query = """
+            SELECT 
+                id,
+                schedule_id,
+                name,
+                description,
+                domains,
+                categories,
+                subcategories,
+                frequency,
+                horizon,
+                created_at,
+                cron_schedule,
+                registration_duration
+            FROM challenges.v_active_definitions
+            ORDER BY name;
+        """
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(query)
+            results = []
+            for row in cur.fetchall():
+                row_dict = dict(row)
+                
+                # Calculate next registration dates from cron schedule
+                if row_dict.get('cron_schedule') and row_dict.get('registration_duration'):
+                    try:
+                        cron = Cron(row_dict['cron_schedule'])
+                        schedule = cron.schedule(datetime.now(timezone.utc))
+                        next_start = schedule.next()
+                        row_dict['next_registration_start'] = next_start
+                        row_dict['next_registration_end'] = next_start + row_dict['registration_duration']
+                    except (ValueError, KeyError):
+                        row_dict['next_registration_start'] = None
+                        row_dict['next_registration_end'] = None
+                else:
+                    row_dict['next_registration_start'] = None
+                    row_dict['next_registration_end'] = None
+                
+                results.append(row_dict)
+            
+            return results
+
+    def get_definition(self, definition_id: int) -> Optional[Dict[str, Any]]:
+        """Get a specific challenge definition."""
+        query = """
+            SELECT 
+                id,
+                schedule_id,
+                name,
+                description,
+                domains,
+                categories,
+                subcategories,
+                frequency,
+                horizon,
+                created_at
+            FROM challenges.v_active_definitions
+            WHERE id = %s;
+        """
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(query, (definition_id,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def get_definition_series(self, definition_id: int) -> List[Dict[str, Any]]:
+        """List all time series that have appeared in any round of this definition."""
+        query = """
+            SELECT DISTINCT
+                ts.series_id,
+                ts.name,
+                ts.description,
+                ts.frequency,
+                ts.unique_id,
+                dc.domain,
+                dc.category,
+                dc.subcategory
+            FROM challenges.rounds r
+            JOIN challenges.series_pseudo csp ON csp.round_id = r.id
+            JOIN data_portal.time_series ts ON ts.series_id = csp.series_id
+            LEFT JOIN data_portal.domain_category dc ON ts.domain_category_id = dc.id
+            WHERE r.definition_id = %s
+            ORDER BY ts.name;
+        """
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(query, (definition_id,))
+            return [dict(row) for row in cur.fetchall()]
+
+    def list_rounds(
         self,
         status: Optional[List[str]] = None,
         from_date: Optional[datetime] = None,
         to_date: Optional[datetime] = None,
-        # NEW: Filter parameters
         domains: Optional[List[str]] = None,
         categories: Optional[List[str]] = None,
         subcategories: Optional[List[str]] = None,
         frequencies: Optional[List[str]] = None,  # ISO 8601 Strings
         horizons: Optional[List[str]] = None,     # ISO 8601 Strings
-    ) -> List[Dict[str, Any]]:
+        definition_id: Optional[int] = None,
+        page: Optional[int] = None,
+        page_size: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """
-        List all challenges with optional filters.
+        List all challenge rounds with optional filters and pagination.
         
-        Args:
-            status: List of status values (e.g. ['active', 'completed'])
-            from_date: Challenges with end_time >= from_date
-            to_date: Challenges with end_time <= to_date
-            domains: List of domains (e.g. ['Energy', 'Finance'])
-            categories: List of categories
-            subcategories: List of subcategories
-            frequencies: List of frequencies as ISO 8601 (e.g. ['PT1H', 'P1D'])
-            horizons: List of horizons as ISO 8601
+        Returns:
+            Dict with 'items' (list of rounds) and 'total_count' (int)
         """
-        print(f"DEBUG: list_challenges(status={status}, from={from_date}, to={to_date}, "
-              f"domains={domains}, categories={categories}, subcategories={subcategories}, "
-              f"frequencies={frequencies}, horizons={horizons})", file=sys.stderr)
         
         # Use new view with challenge frequency
         query = """
             SELECT 
-                challenge_id,
+                round_id as id,
+                COALESCE(definition_id, 0) as definition_id,
                 name,
                 description,
                 registration_start,
@@ -56,7 +140,7 @@ class ChallengeRepository:
                 n_time_series,
                 context_length,
                 horizon,
-                frequency,  -- Challenge frequency
+                frequency,
                 created_at,
                 model_count,
                 forecast_count,
@@ -64,19 +148,22 @@ class ChallengeRepository:
                 domains,
                 categories,
                 subcategories
-            FROM challenges.v_challenges_with_metadata
+            FROM challenges.v_rounds_with_metadata
             WHERE 1=1
         """
         
         params = []
+
+        if definition_id:
+            query += " AND definition_id = %s"
+            params.append(definition_id)
         
-        # Filter by status
         if status and len(status) > 0:
+            # Use status column from view (computed dynamically, respects is_cancelled)
             placeholders = ','.join(['%s'] * len(status))
             query += f" AND status IN ({placeholders})"
             params.extend(status)
         
-        # Filter by date
         if from_date:
             query += " AND end_time >= %s"
             params.append(from_date)
@@ -85,19 +172,16 @@ class ChallengeRepository:
             query += " AND end_time <= %s"
             params.append(to_date)
         
-        # NEW: Filter by domain (Array-Overlap)
         if domains and len(domains) > 0:
             placeholders = ','.join(['%s'] * len(domains))
             query += f" AND domains && ARRAY[{placeholders}]::TEXT[]"
             params.extend(domains)
         
-        # NEW: Filter by category
         if categories and len(categories) > 0:
             placeholders = ','.join(['%s'] * len(categories))
             query += f" AND categories && ARRAY[{placeholders}]::TEXT[]"
             params.extend(categories)
         
-        # NEW: Filter by subcategory
         if subcategories and len(subcategories) > 0:
             placeholders = ','.join(['%s'] * len(subcategories))
             query += f" AND subcategories && ARRAY[{placeholders}]::TEXT[]"
@@ -115,7 +199,6 @@ class ChallengeRepository:
                 print(f"ERROR: Invalid frequency format: {e}", file=sys.stderr)
                 # Optional: raise HTTPException or ignore
         
-        # NEW: Filter by horizon (direct comparison, not an array)
         if horizons and len(horizons) > 0:
             try:
                 interval_strings = parse_iso8601_to_interval_list(horizons)
@@ -126,62 +209,43 @@ class ChallengeRepository:
             except ValueError as e:
                 print(f"ERROR: Invalid horizon format: {e}", file=sys.stderr)
         
-        # Sorting
-        query += """
+        # Build the ORDER BY clause
+        order_by = """
             ORDER BY
                 CASE status
                     WHEN 'active' THEN 0
                     WHEN 'registration' THEN 1
                     WHEN 'completed' THEN 2
-                    WHEN 'announced' THEN 3
                     ELSE 4
                 END,
-                created_at DESC;
+                created_at DESC
         """
         
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # First, get the total count (without pagination)
+            count_query = f"SELECT COUNT(*) as total FROM ({query}) as filtered_rounds"
+            cur.execute(count_query, tuple(params))
+            total_count = cur.fetchone()['total']
+            
+            # Now add ORDER BY and pagination to main query
+            query += order_by
+            
+            if page is not None and page_size is not None:
+                offset = (page - 1) * page_size
+                query += " LIMIT %s OFFSET %s"
+                params.extend([page_size, offset])
+            
             cur.execute(query, tuple(params))
             results = []
             for row in cur.fetchall():
                 row_dict = dict(row)
-                # Convert timedelta to ISO 8601 strings
-                from app.schemas.challenge import serialize_timedelta_to_iso8601
-                
-                # Convert challenge frequency timedelta to ISO 8601
-                if row_dict.get('frequency'):
-                    row_dict['frequency'] = serialize_timedelta_to_iso8601(row_dict['frequency'])
-                
-                # Convert horizon timedelta to ISO 8601
-                if row_dict.get('horizon'):
-                    row_dict['horizon'] = serialize_timedelta_to_iso8601(row_dict['horizon'])
-                
                 results.append(row_dict)
-            print(f"DEBUG: list_challenges found {len(results)} challenges.", file=sys.stderr)
-            return results
+            
+            return {
+                'items': results,
+                'total_count': total_count
+            }
     
-    def get_challenge_meta(self, challenge_id: int) -> Optional[Dict[str, Any]]:
-        """Fetch metadata for a challenge."""
-        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(
-                """
-                SELECT
-                    c.id as challenge_id,
-                    c.name,
-                    c.description,
-                    c.status,
-                    c.context_length,
-                    c.horizon,
-                    c.start_time,
-                    c.end_time,
-                    c.registration_start,
-                    c.registration_end
-                FROM challenges.v_challenges_with_status c 
-                WHERE c.id = %s
-                """,
-                (challenge_id,),
-            )
-            row = cur.fetchone()
-            return dict(row) if row else None
     
     def get_challenge_series(self, challenge_id: int) -> List[Dict[str, Any]]:
         """Time series for a challenge with domain information."""
@@ -194,26 +258,21 @@ class ChallengeRepository:
                     ts.description,
                     ts.frequency as frequency,
                     c.horizon,
-                    ts.endpoint_prefix,
+                    ts.unique_id,
                     c.start_time as start_time,
                     c.end_time as end_time,
                     c.registration_start as registration_start,
                     c.registration_end as registration_end,
-                    cdr.min_ts as context_start_time,
-                    cdr.max_ts as context_end_time,
-                    -- NEW: Domain information
+                    csp.min_ts as context_start_time,
+                    csp.max_ts as context_end_time,
                     dc.domain,
                     dc.category,
                     dc.subcategory
-                FROM challenges.challenge_series_pseudo csp
+                FROM challenges.series_pseudo csp
                 JOIN data_portal.time_series ts ON ts.series_id = csp.series_id
-                JOIN challenges.v_challenges_with_status c ON c.id = csp.challenge_id
-                JOIN challenges.v_challenge_context_data_range cdr 
-                    ON cdr.challenge_id = csp.challenge_id 
-                    AND cdr.series_id = csp.series_id
-                -- NEW: Domain join
+                JOIN challenges.v_rounds_with_status c ON c.id = csp.round_id
                 LEFT JOIN data_portal.domain_category dc ON ts.domain_category_id = dc.id
-                WHERE csp.challenge_id = %s
+                WHERE csp.round_id = %s
                 ORDER BY ts.name ASC;
                 """,
                 (challenge_id,),
@@ -237,7 +296,7 @@ class ChallengeRepository:
                     frequency,  -- Challenge frequency (direct, not unnested)
                     horizon,
                     status
-                FROM challenges.v_challenges_with_metadata
+                FROM challenges.v_rounds_with_metadata
             )
             SELECT
                 -- Aggregate unique values
@@ -304,7 +363,7 @@ class ChallengeRepository:
             cur.execute(
                 """
                 SELECT frequency
-                FROM challenges.challenges
+                FROM challenges.rounds
                 WHERE id = %s
                 """,
                 (challenge_id,),

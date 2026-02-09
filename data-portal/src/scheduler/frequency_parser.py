@@ -16,8 +16,8 @@ def parse_frequency(frequency: str) -> Dict[str, Any]:
     """
     frequency = frequency.lower().strip()
     
-    # Match patterns like "1 hour", "30 minutes", "1 day"
-    match = re.match(r'^(\d+)\s*(minute|hour|day|week)s?$', frequency)
+    # Match patterns like "1 hour", "30 minutes", "1 day", "30 seconds"
+    match = re.match(r'^(\d+)\s*(second|minute|hour|day|week)s?$', frequency)
     
     if not match:
         raise ValueError(f"Invalid frequency format: {frequency}. Expected format: '<number> <unit>' (e.g., '1 hour', '30 minutes')")
@@ -26,7 +26,9 @@ def parse_frequency(frequency: str) -> Dict[str, Any]:
     unit = match.group(2)
     
     # Convert to APScheduler interval parameters
-    if unit == 'minute':
+    if unit == 'second':
+        return {'seconds': value}
+    elif unit == 'minute':
         return {'minutes': value}
     elif unit == 'hour':
         return {'hours': value}
@@ -50,7 +52,9 @@ def get_interval_seconds(frequency: str) -> int:
     """
     params = parse_frequency(frequency)
     
-    if 'minutes' in params:
+    if 'seconds' in params:
+        return params['seconds']
+    elif 'minutes' in params:
         return params['minutes'] * 60
     elif 'hours' in params:
         return params['hours'] * 3600

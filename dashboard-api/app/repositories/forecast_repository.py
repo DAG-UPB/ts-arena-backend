@@ -18,140 +18,192 @@ class ForecastRepository:
     def __init__(self, conn):
         self.conn = conn
     
-    def _get_challenge_resolution(self, challenge_id: int) -> str:
-        """
-        Retrieves the challenge frequency and maps it to a resolution string.
-        
-        Returns:
-            Resolution string ("15min", "1h", "1d") or "raw" if not found
-        """
+    def _get_series_resolution(self, series_id: int, definition_id: int) -> str:
+        """Derive resolution from series frequency directly."""
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(
-                """
-                SELECT frequency
-                FROM challenges.challenges
-                WHERE id = %s
-                """,
-                (challenge_id,),
-            )
+            query = """
+                SELECT 
+                    d.frequency 
+                FROM challenges.definitions d
+                JOIN challenges.definition_series_scd2 dss on d.id = dss.definition_id
+                WHERE d.id = %s AND dss.series_id = %s;
+            """
+            cur.execute(query, (definition_id, series_id))
             row = cur.fetchone()
             if not row or not row.get('frequency'):
                 return "raw"
             
-            # frequency is a timedelta from psycopg2
-            frequency = row['frequency']
-            total_seconds = int(frequency.total_seconds())
-            
-            return self.FREQUENCY_RESOLUTION_MAP.get(total_seconds, "raw")
+            frequency = row['frequency'] # timedelta or str? psycopg returns timedelta usually for interval
+            if hasattr(frequency, 'total_seconds'):
+                total_seconds = int(frequency.total_seconds())
+                return self.FREQUENCY_RESOLUTION_MAP.get(total_seconds, "raw")
+            return "raw"
     
-    def get_series_forecasts(
-        self, 
-        challenge_id: int, 
-        series_id: int
-    ) -> Dict[str, Dict[str, Any]]:
+
+    def get_model_series_forecasts_across_rounds(
+        self,
+        model_id: int,
+        definition_id: int,
+        series_id: int,
+        start_time: str = None,
+        end_time: str = None
+    ) -> Dict[str, Any]:
         """
-        Forecasts for a series, grouped by model.
-        Resolution is auto-derived from challenge frequency.
-        Returns Dict: {model_label: {label, current_mase, data: [...]}}
-        """
-        # Auto-derive resolution from challenge frequency
-        resolution = self._get_challenge_resolution(challenge_id)
+        Get forecasts for a specific model and series across all rounds of a definition.
         
-        # Table mapping
+        Returns metadata about the model, series, definition, and a list of rounds with:
+        - Whether the series was part of each round
+        - Whether forecasts were submitted for each round
+        - The actual forecast data points if they exist
+        - Ground truth data for the series (filtered by date range if provided)
+        
+        This allows distinguishing between:
+        1. Series not part of the round (series_in_round=False)
+        2. Series part of the round but no forecast submitted (series_in_round=True, forecast_exists=False)
+        3. Series part of the round and forecast submitted (series_in_round=True, forecast_exists=True)
+        
+        Args:
+            start_time: Optional start date in YYYY-mm-dd format to filter forecasts and ground truth
+            end_time: Optional end date in YYYY-mm-dd format to filter forecasts and ground truth
+        """
+        # Determine which table to use for ground truth based on series frequency
+        resolution = self._get_series_resolution(series_id, definition_id)
         table_map = {
             "raw": "data_portal.time_series_data",
             "15min": "data_portal.time_series_15min",
             "1h": "data_portal.time_series_1h",
             "1d": "data_portal.time_series_1d",
         }
+        table_name = table_map.get(resolution, "data_portal.time_series_data")
         
-        table_name = table_map.get(resolution)
-        if not table_name:
-             print(f"WARNING: Unknown resolution '{resolution}' in get_series_forecasts, defaulting to raw.", file=sys.stderr)
-             table_name = "data_portal.time_series_data"
-
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            # We use f-string for table name (safe because validated via table_map)
-            query = f"""
-                SELECT
-                    f.id as forecast_id,
-                    f.created_at,
-                    mi.parameters,
-                    mi.readable_id,
-                    mi.name AS model_name,
-                    f.ts,
-                    f.predicted_value as value,
-                    f.probabilistic_values as confidence_intervals,
-                    ccd.latest_value as latest_observed_value,
-                    tsd.value::FLOAT as current_value
-                FROM forecasts.forecasts f
-                JOIN models.model_info mi ON mi.id = f.model_id
-                JOIN challenges.v_challenge_context_data_range as ccd ON ccd.challenge_id = f.challenge_id AND ccd.series_id = f.series_id
-                LEFT JOIN {table_name} tsd ON tsd.series_id = f.series_id AND tsd.ts = f.ts
-                WHERE f.challenge_id = %s AND f.series_id = %s
-                ORDER BY f.created_at ASC, f.ts ASC;
-            """
+            # Get model info
+            cur.execute("""
+                SELECT id, readable_id, name
+                FROM models.model_info
+                WHERE id = %s
+            """, (model_id,))
+            model_row = cur.fetchone()
+            if not model_row:
+                return None
             
-            cur.execute(query, (challenge_id, series_id))
-            rows = [dict(row) for row in cur.fetchall()]
+            # Get definition info
+            cur.execute("""
+                SELECT id, name
+                FROM challenges.v_active_definitions
+                WHERE id = %s
+            """, (definition_id,))
+            definition_row = cur.fetchone()
+            if not definition_row:
+                return None
             
-            if not rows:
-                return {}
+            # Get series info
+            cur.execute("""
+                SELECT series_id, name
+                FROM data_portal.time_series
+                WHERE series_id = %s
+            """, (series_id,))
+            series_row = cur.fetchone()
+            if not series_row:
+                return None
             
-            # Group by model
-            grouped: Dict[str, Dict[str, Any]] = {}
-            for r in rows:
-                key = self._format_model_readable_id(r)
-                label = self._format_model_label(r)
-                if key not in grouped:
-                    grouped[key] = {
-                        "label": label,
-                        "current_mase": None,
-                        "data": [],
-                        "_mae_model_sum": 0.0,
-                        "_mae_naive_sum": 0.0,
-                        "_mae_count": 0
-                    }
+            # Get all rounds for this definition
+            cur.execute("""
+                SELECT 
+                    r.id,
+                    r.name,
+                    r.start_time,
+                    r.end_time,
+                    EXISTS (
+                        SELECT 1 
+                        FROM challenges.series_pseudo sp 
+                        WHERE sp.round_id = r.id AND sp.series_id = %s
+                    ) as series_in_round
+                FROM challenges.rounds r
+                WHERE r.definition_id = %s
+                ORDER BY r.start_time ASC
+            """, (series_id, definition_id))
+            rounds = [dict(r) for r in cur.fetchall()]
+            
+            # For each round, check if forecasts exist and get them
+            result_rounds = []
+            for round_info in rounds:
+                round_id = round_info['id']
+                series_in_round = round_info['series_in_round']
                 
-                # Reformat for response     
-                grouped[key]["data"].append({
-                    "ts": r["ts"],
-                    "y": r["value"],
-                    "ci": r["confidence_intervals"]
-                })
-
-                # Prepare MASE calculation
-                current_val = r["current_value"]
-                latest_val = r["latest_observed_value"]
-                pred_val = r["value"]
-
-                if current_val is not None and latest_val is not None and pred_val is not None:
-                    grouped[key]["_mae_model_sum"] += abs(pred_val - current_val)
-                    grouped[key]["_mae_naive_sum"] += abs(latest_val - current_val)
-                    grouped[key]["_mae_count"] += 1
-            
-            # Calculate MASE and remove temporary fields
-            for key, item in grouped.items():
-                if item["_mae_count"] > 0:
-                    mae_model = item["_mae_model_sum"] / item["_mae_count"]
-                    mae_naive = item["_mae_naive_sum"] / item["_mae_count"]
+                forecasts = []
+                forecast_exists = False
+                
+                if series_in_round:
+                    # Check if forecasts exist for this round
+                    # Build query with optional date filters
+                    query = """
+                        SELECT 
+                            f.ts,
+                            f.predicted_value as y,
+                            f.probabilistic_values as ci
+                        FROM forecasts.forecasts f
+                        WHERE f.round_id = %s 
+                            AND f.model_id = %s 
+                            AND f.series_id = %s
+                    """
+                    params = [round_id, model_id, series_id]
                     
-                    if mae_naive != 0:
-                        item["current_mase"] = mae_model / mae_naive
+                    if start_time:
+                        query += " AND f.ts >= %s::date"
+                        params.append(start_time)
+                    if end_time:
+                        query += " AND f.ts < (%s::date + INTERVAL '1 day')"
+                        params.append(end_time)
+                    
+                    query += " ORDER BY f.ts ASC"
+                    
+                    cur.execute(query, params)
+                    forecast_rows = [dict(r) for r in cur.fetchall()]
+                    
+                    if forecast_rows:
+                        forecast_exists = True
+                        forecasts = forecast_rows
                 
-                # Cleanup
-                del item["_mae_model_sum"]
-                del item["_mae_naive_sum"]
-                del item["_mae_count"]
+                result_rounds.append({
+                    "round_id": round_id,
+                    "round_name": round_info['name'],
+                    "start_time": round_info['start_time'],
+                    "end_time": round_info['end_time'],
+                    "series_in_round": series_in_round,
+                    "forecast_exists": forecast_exists,
+                    "forecasts": forecasts if forecasts else None
+                })
             
-            return grouped
-        
-    def _format_model_readable_id(self, row: Dict[str, Any]) -> str:
-        """Format: 'readable_id' (without org for now)."""
-        readable_id = row.get("readable_id") or "model_id"
-        return f"{readable_id}"
-    
-    def _format_model_label(self, row: Dict[str, Any]) -> str:
-        """Format: 'name' (without org for now)."""
-        name = row.get("model_name") or row.get("readable_id") or "model"
-        return f"{name}"
+            # Get ground truth data with optional date filters
+            gt_query = f"""
+                SELECT ts, value::FLOAT as value
+                FROM {table_name}
+                WHERE series_id = %s
+            """
+            gt_params = [series_id]
+            
+            if start_time:
+                gt_query += " AND ts >= %s::date"
+                gt_params.append(start_time)
+            if end_time:
+                gt_query += " AND ts < (%s::date + INTERVAL '1 day')"
+                gt_params.append(end_time)
+            
+            gt_query += " ORDER BY ts ASC"
+            
+            cur.execute(gt_query, gt_params)
+            ground_truth = [dict(r) for r in cur.fetchall()]
+            
+            return {
+                "model_id": model_row['id'],
+                "model_readable_id": model_row['readable_id'],
+                "model_name": model_row['name'],
+                "definition_id": definition_row['id'],
+                "definition_name": definition_row['name'],
+                "series_id": series_row['series_id'],
+                "series_name": series_row['name'],
+                "rounds": result_rounds,
+                "ground_truth": ground_truth
+            }
+

@@ -39,15 +39,26 @@ class TimeSeriesDataSCD2Repository:
         if not data_points:
             return {'inserted': 0, 'updated': 0, 'unchanged': 0}
 
-        # Prepare data for bulk processing
-        values_to_upsert = [
-            {
-                "series_id": series_id,
-                "ts": datetime.fromisoformat(p['ts'].replace('Z', '+00:00')) if isinstance(p['ts'], str) else p['ts'],
-                "value": float(p['value'])
-            }
-            for p in data_points if p.get('ts') is not None and p.get('value') is not None
-        ]
+        # Prepare data for bulk processing and deduplicate by timestamp.
+        # If multiple values exist for the same timestamp, keep only the last one.
+        # This prevents unique constraint violations when input data contains duplicates.
+        temp_dict = {}
+        for p in data_points:
+            if p.get('ts') is not None:
+                ts = datetime.fromisoformat(p['ts'].replace('Z', '+00:00')) if isinstance(p['ts'], str) else p['ts']
+                # Value can be None for gap markers
+                value = float(p['value']) if p.get('value') is not None else None
+                # Default quality_code to 0 (original) if not provided
+                quality_code = p.get('quality_code', 0)
+                # Overwrite with later value if duplicate timestamp exists
+                temp_dict[ts] = {
+                    "series_id": series_id,
+                    "ts": ts,
+                    "value": value,
+                    "quality_code": quality_code
+                }
+        
+        values_to_upsert = list(temp_dict.values())
 
         if not values_to_upsert:
             return {'inserted': 0, 'updated': 0, 'unchanged': 0}
@@ -56,10 +67,11 @@ class TimeSeriesDataSCD2Repository:
             # This single query handles inserts, and updates of existing records
             # in a single, atomic operation.
             upsert_query = text("""
-WITH input_data(series_id, ts, value) AS (
+WITH input_data(series_id, ts, value, quality_code) AS (
   SELECT (d->>'series_id')::int,
          (d->>'ts')::timestamptz,
-         (d->>'value')::double precision
+         (d->>'value')::double precision,
+         COALESCE((d->>'quality_code')::smallint, 0)
   FROM jsonb_array_elements(CAST(:data AS jsonb)) d
 ),
 closed AS (
@@ -71,13 +83,13 @@ closed AS (
   WHERE t.series_id = i.series_id
     AND t.ts = i.ts
     AND t.is_current = TRUE
-    AND t.value IS DISTINCT FROM i.value
+    AND (t.value IS DISTINCT FROM i.value OR t.quality_code IS DISTINCT FROM i.quality_code)
   RETURNING t.series_id, t.ts, t.sk
 ),
 new_records AS (
   INSERT INTO data_portal.time_series_data_scd2
-    (series_id, ts, value, valid_from, valid_to, is_current, created_at)
-  SELECT i.series_id, i.ts, i.value, NOW(), NULL, TRUE, NOW()
+    (series_id, ts, value, quality_code, valid_from, valid_to, is_current, created_at)
+  SELECT i.series_id, i.ts, i.value, i.quality_code, NOW(), NULL, TRUE, NOW()
   FROM input_data i
   WHERE EXISTS (SELECT 1 FROM closed c WHERE c.series_id = i.series_id AND c.ts = i.ts)
      OR NOT EXISTS (
@@ -97,7 +109,12 @@ SELECT
             result = await self.session.execute(
                 upsert_query,
                 {'data': json.dumps([
-                    {'series_id': v['series_id'], 'ts': v['ts'].isoformat(), 'value': v['value']}
+                    {
+                        'series_id': v['series_id'], 
+                        'ts': v['ts'].isoformat(), 
+                        'value': v['value'],
+                        'quality_code': v.get('quality_code', 0)
+                    }
                     for v in values_to_upsert
                 ])}
             )

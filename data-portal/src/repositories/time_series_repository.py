@@ -30,27 +30,21 @@ def validate_and_normalize_interval(interval_str: str) -> str:
     """
     interval_str = interval_str.strip()
     
-    # Try ISO 8601 format first (e.g., 'PT1H', 'PT15M', 'P1D')
     if interval_str.startswith('P'):
         try:
-            # Validate that it's a valid ISO 8601 duration
             duration = isodate.parse_duration(interval_str)
-            # Convert to timedelta if needed
             if not isinstance(duration, timedelta):
                 duration = duration.totimedelta(start=datetime.now())
-            # Return original ISO 8601 string if valid
             return interval_str
         except (isodate.ISO8601Error, AttributeError) as e:
             logger.warning(f"Failed to parse ISO 8601 duration '{interval_str}': {e}")
     
-    # Try to parse PostgreSQL INTERVAL format (e.g., '1 hour', '15 minutes', '1 day')
     match = re.match(r'^(\d+)\s*(minute|hour|day|week|second)s?$', interval_str.lower())
     
     if match:
         value = int(match.group(1))
         unit = match.group(2)
         
-        # Convert to ISO 8601 duration format
         if unit == 'second':
             return f"PT{value}S"
         elif unit == 'minute':
@@ -76,84 +70,80 @@ class TimeSeriesDataRepository:
     async def get_or_create_series_id(
         self, 
         name: str, 
-        endpoint_prefix: str,
+        unique_id: str,
         description: str = "",
         frequency: str = "1 hour",
         unit: str = "",
         domain: str = "",
         category: str = "",
         subcategory: str = "",
+        imputation_policy: Optional[str] = None,
         update_frequency: str = "1 day"
     ) -> int:
         """
         Get existing series_id or create new time series metadata entry.
+        Updates metadata if the series already exists (UPSERT).
         
         Args:
             name: Name of the time series
-            endpoint_prefix: Unique endpoint prefix
+            unique_id: Unique unique id
             description: Description
-            frequency: Data frequency as ISO 8601 (e.g., 'PT1H', 'PT15M') or PostgreSQL format (e.g., '1 hour', '15 minutes')
+            frequency: Data frequency as ISO 8601 (e.g., 'PT1H', 'PT15M') or PostgreSQL format
             unit: Unit of measurement
             domain: Domain category
             category: Category
             subcategory: Subcategory
-            update_frequency: How often data is updated, as ISO 8601 or PostgreSQL format
+            imputation_policy: Imputation policy (e.g., 'linear', 'ffill')
+            update_frequency: How often data is updated
             
         Returns:
             series_id
         """
-        # Get or create domain_category_id
         domain_category_id = await self._get_or_create_domain_category_id(domain, category, subcategory)
         
-        # Try to find existing series
-        query = text("""
-            SELECT series_id FROM data_portal.time_series WHERE endpoint_prefix = :endpoint_prefix
-        """)
-        result = await self.session.execute(query, {"endpoint_prefix": endpoint_prefix})
-        row = result.fetchone()
-        
-        if row:
-            return row[0]
-        
-        # Validate and normalize interval strings to ISO 8601, then convert to timedelta
         try:
             frequency_iso = validate_and_normalize_interval(frequency)
             frequency_dt = isodate.parse_duration(frequency_iso)
-            # Convert to timedelta if needed
             if not isinstance(frequency_dt, timedelta):
                 frequency_dt = frequency_dt.totimedelta(start=datetime.now())
             
             update_frequency_iso = validate_and_normalize_interval(update_frequency)
-            update_frequency_dt = isodate.parse_duration(update_frequency_iso)
-            # Convert to timedelta if needed
-            if not isinstance(update_frequency_dt, timedelta):
-                update_frequency_dt = update_frequency_dt.totimedelta(start=datetime.now())
+            # We don't need update_frequency_dt here as we pass the string to DB
         except ValueError as e:
             logger.error(f"Failed to parse interval for series '{name}': {e}")
             raise
         
-        # Create new series - use strings with CAST in SQL for asyncpg + text()
-        insert_query = text("""
+        # Use UPSERT to modify existing records if they exist
+        upsert_query = text("""
             INSERT INTO data_portal.time_series (
                 name, description, frequency, unit, update_frequency, 
-                domain_category_id, endpoint_prefix
+                imputation_policy, domain_category_id, unique_id
             )
             VALUES (
                 :name, :description, :frequency, :unit, :update_frequency,
-                :domain_category_id, :endpoint_prefix
+                :imputation_policy, :domain_category_id, :unique_id
             )
+            ON CONFLICT (unique_id) DO UPDATE SET
+                name = EXCLUDED.name,
+                description = EXCLUDED.description,
+                frequency = EXCLUDED.frequency,
+                unit = EXCLUDED.unit,
+                update_frequency = EXCLUDED.update_frequency,
+                imputation_policy = EXCLUDED.imputation_policy,
+                domain_category_id = EXCLUDED.domain_category_id
             RETURNING series_id
         """)
         
         result = await self.session.execute(
-            insert_query,
+            upsert_query,
             {
                 "name": name,
-                "endpoint_prefix": endpoint_prefix,
+                "unique_id": unique_id,
                 "description": description,
                 "frequency": frequency_dt,  # Use timedelta directly
                 "unit": unit,
-                "update_frequency": update_frequency,
+                "update_frequency": update_frequency_iso, # Normalized string
+                "imputation_policy": imputation_policy,
                 "domain_category_id": domain_category_id
             }
         )
@@ -163,10 +153,42 @@ class TimeSeriesDataRepository:
         series_id = row[0] if row else None
         
         if series_id is None:
-            raise ValueError(f"Failed to create time series for {name}")
+            query = text("SELECT series_id FROM data_portal.time_series WHERE unique_id = :unique_id")
+            result = await self.session.execute(query, {"unique_id": unique_id})
+            row = result.fetchone()
+            if row:
+                series_id = row[0]
+            else:
+                raise ValueError(f"Failed to upsert time series for {name}")
         
-        logger.info(f"Created new time series: {name} (series_id={series_id})")
         return series_id
+    
+    async def update_series_timezone(self, series_id: int, timezone: str) -> None:
+        """
+        Update the timezone for a time series.
+        
+        Args:
+            series_id: The series ID
+            timezone: Timezone string (e.g., 'US/Pacific', 'UTC', '+02:00')
+        """
+        if not timezone:
+            return
+            
+        # Check if already set to avoid unnecessary updates? 
+        # But upsert/update is cheap enough.
+        
+        query = text("""
+            UPDATE data_portal.time_series 
+            SET ts_timezone = :timezone 
+            WHERE series_id = :series_id
+            AND (ts_timezone IS NULL OR ts_timezone != :timezone)
+        """)
+        
+        await self.session.execute(query, {
+            "series_id": series_id,
+            "timezone": timezone
+        })
+        await self.session.commit()
     
     async def upsert_data_points(
         self,
@@ -175,19 +197,22 @@ class TimeSeriesDataRepository:
     ) -> int:
         """
         Insert or update time series data points using PostgreSQL UPSERT.
+        Uses bulk insert with jsonb_array_elements for efficient batch processing.
         
         Args:
             series_id: The series ID
-            data_points: List of dicts with 'timestamp' and 'value' keys
+            data_points: List of dicts with 'ts' and 'value' keys
             
         Returns:
             Number of rows affected
         """
+        import json
+        
         if not data_points:
             return 0
         
-        # Prepare data for bulk insert
-        values = []
+        # Prepare and deduplicate data by timestamp (keep last value for duplicates)
+        temp_dict = {}
         for point in data_points:
             timestamp = point.get('ts')
             value = point.get('value')
@@ -195,25 +220,34 @@ class TimeSeriesDataRepository:
             if timestamp is None or value is None:
                 continue
             
-            # Convert timestamp to datetime if it's a string
             if isinstance(timestamp, str):
                 timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
             
-            values.append({
+            # Overwrite with later value if duplicate timestamp exists
+            temp_dict[timestamp] = {
                 'series_id': series_id,
-                'ts': timestamp,
-                'value': float(value),
-                'updated_at': datetime.utcnow()
-            })
+                'ts': timestamp.isoformat(),
+                'value': float(value)
+            }
+        
+        values = list(temp_dict.values())
         
         if not values:
             logger.warning(f"No valid data points to insert for series_id={series_id}")
             return 0
         
-        # Use PostgreSQL INSERT ... ON CONFLICT DO UPDATE
+        # Bulk upsert using jsonb_array_elements - single query instead of N queries
         stmt = text("""
+            WITH input_data AS (
+                SELECT 
+                    (d->>'series_id')::int AS series_id,
+                    (d->>'ts')::timestamptz AS ts,
+                    (d->>'value')::double precision AS value
+                FROM jsonb_array_elements(CAST(:data AS jsonb)) d
+            )
             INSERT INTO data_portal.time_series_data (series_id, ts, value, updated_at)
-            VALUES (:series_id, :ts, :value, :updated_at)
+            SELECT series_id, ts, value, NOW()
+            FROM input_data
             ON CONFLICT (series_id, ts) 
             DO UPDATE SET 
                 value = EXCLUDED.value,
@@ -221,16 +255,14 @@ class TimeSeriesDataRepository:
         """)
         
         try:
-            for value_dict in values:
-                await self.session.execute(stmt, value_dict)
-            
+            await self.session.execute(stmt, {'data': json.dumps(values)})
             await self.session.commit()
-            logger.info(f"Upserted {len(values)} data points for series_id={series_id}")
+            logger.info(f"Bulk upserted {len(values)} data points for series_id={series_id}")
             return len(values)
             
         except Exception as e:
             await self.session.rollback()
-            logger.error(f"Failed to upsert data points for series_id={series_id}: {e}", exc_info=True)
+            logger.error(f"Failed to bulk upsert data points for series_id={series_id}: {e}", exc_info=True)
             raise
     
     async def get_latest_timestamp(self, series_id: int) -> Optional[datetime]:
@@ -279,28 +311,6 @@ class TimeSeriesDataRepository:
         Returns:
             domain_category_id
         """
-        # Try to find existing domain_category
-        # Use IS NOT DISTINCT FROM for nullable columns to handle NULL/None correctly
-        # Note: In asyncpg/SQLAlchemy text(), we need to handle NULLs explicitly if we used =
-        # but IS NOT DISTINCT FROM works for both NULL and values.
-        # However, for simplicity with empty strings defaulting to '', we check:
-        # If the input is empty string, we treat it as such. 
-        # init_db.sql schema allows NULL for category/subcategory. 
-        # But here we are passing strings (default "").
-        # Let's assume we store empty strings as NULL in DB? 
-        # Or store them as empty strings? 
-        # The schema has strict UNIQUE(domain, category, subcategory).
-        # Typically NULL != NULL in SQL unique constraint (except in recent PG versions with NULLS NOT DISTINCT).
-        # Let's check init_db.sql again.
-        # It's standard UNIQUE. So (A, NULL, NULL) and (A, NULL, NULL) would be duplicate key violation if we insert strictly?
-        # No, standard SQL says unique allows multiple NULLs. 
-        # BUT we want to reuse the ID.
-        # If we insert NULLs, we might get multiple rows which is bad for "domain_category".
-        # So we probably want to treat empty string as NULL or just Use empty string if that's the convention.
-        # The sources.yaml implies strings. 
-        # Let's stick to strings for now. If they are None, we pass None.
-        
-        # Adjust arguments to be optional? The signature above has them as str = "".
         
         query = text("""
             SELECT id FROM data_portal.domain_category 
@@ -308,10 +318,7 @@ class TimeSeriesDataRepository:
             AND (category = :category OR (category IS NULL AND :category IS NULL))
             AND (subcategory = :subcategory OR (subcategory IS NULL AND :subcategory IS NULL))
         """)
-        
-        # Convert empty strings to None if preferred, OR keep as empty strings.
-        # For now, let's keep strict equality but handle the NULL case if passed.
-        
+                
         result = await self.session.execute(query, {
             "domain": domain, 
             "category": category if category else None, 
@@ -322,7 +329,6 @@ class TimeSeriesDataRepository:
         if row:
             return row[0]
         
-        # Create new domain_category
         insert_query = text("""
             INSERT INTO data_portal.domain_category (domain, category, subcategory)
             VALUES (:domain, :category, :subcategory)

@@ -81,7 +81,7 @@ timeseries:
 
 ```sql
 -- Metadata
-INSERT INTO time_series (name, endpoint_prefix, granularity, ...)
+INSERT INTO time_series (name, unique_id, granularity, ...)
 VALUES ('SMARD-1223-DE-hour', 'smard-1223-de-hour', '1 hour', ...);
 
 -- Data points (upsert)
@@ -116,6 +116,136 @@ python -m uvicorn src.main:app --reload
 3. Add configuration to `sources.yaml`
 4. Restart service to load new plugin
 
+### Adding Multi-Series Data Sources
+
+For APIs that return multiple time series per request, use the more efficient `MultiSeriesPlugin`:
+
+#### 1. Create the Plugin
+
+```python
+"""my_multi_plugin.py"""
+
+import asyncio
+import logging
+import os
+from typing import Dict, Any, List, Optional
+from src.plugins.base_plugin import MultiSeriesPlugin, TimeSeriesDefinition
+
+logger = logging.getLogger(__name__)
+
+
+class MyMultiSeriesPlugin(MultiSeriesPlugin):
+    """Plugin that fetches multiple time series efficiently."""
+
+    def __init__(
+        self, 
+        group_id: str,
+        request_params: Dict[str, Any], 
+        series_definitions: List[TimeSeriesDefinition],
+        schedule: str
+    ):
+        super().__init__(group_id, request_params, series_definitions, schedule)
+        
+        # Access common parameters from YAML
+        self.api_key = os.getenv("MY_API_KEY")
+        self.base_url = request_params.get("base_url", "https://api.example.com")
+
+    async def get_historical_data_multi(
+        self, 
+        start_date: str, 
+        end_date: Optional[str] = None
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Fetch data for ALL time series in this group.
+        
+        Returns:
+            Dict mapping unique_id -> list of data points
+            {
+                "series-1": [{"ts": "2025-01-01T00:00:00Z", "value": 123.4}, ...],
+                "series-2": [{"ts": "2025-01-01T00:00:00Z", "value": 567.8}, ...],
+            }
+        """
+        result: Dict[str, List[Dict[str, Any]]] = {}
+        
+        for series_def in self._series_definitions:
+            # Access extract_filter from YAML
+            dataset_id = series_def.extract_filter.get("dataset_id")
+            
+            try:
+                data = await self._fetch_dataset(dataset_id, start_date, end_date)
+                result[series_def.unique_id] = data
+            except Exception as e:
+                logger.error(f"Failed to fetch {series_def.unique_id}: {e}")
+                result[series_def.unique_id] = []
+        
+        return result
+```
+
+#### 2. Configure in sources.yaml
+
+```yaml
+request_groups:
+  my-api-energy-data:
+    module: src.plugins.data_sources.my_multi_plugin
+    class: MyMultiSeriesPlugin
+    schedule: 15 minutes
+    
+    request_params:
+      base_url: https://api.example.com
+      api_key: ${MY_API_KEY}  # Environment variable expansion
+      page_size: 10000
+    
+    timeseries:
+      - unique_id: my-series-electricity
+        extract_filter:
+          dataset_id: "elec-001"
+        metadata:
+          name: Electricity Consumption
+          description: "Hourly electricity consumption"
+          frequency: 1 hour
+          unit: MWh
+          domain: energy
+          category: load
+      
+      - unique_id: my-series-gas
+        extract_filter:
+          dataset_id: "gas-002"
+        metadata:
+          name: Gas Flow Rate
+          description: "Natural gas flow measurements"
+          frequency: 15 minutes
+          unit: m³/h
+          domain: energy
+          category: transmission
+```
+
+#### Multi-Series vs Single-Series
+
+| Use **Multi-Series** (`request_groups`) when... | Use **Single-Series** (`timeseries`) when... |
+|------------------------------------------------|---------------------------------------------|
+| One API call returns multiple time series | One API call = one time series |
+| Need to share rate-limiting across series | Simple, independent sources |
+| Same API structure, different dataset IDs | Different API structures per source |
+
+#### Available Properties in Plugin
+
+```python
+# In plugin constructor:
+self._group_id           # "my-api-energy-data"
+self._request_params     # {"base_url": "...", "api_key": "...", ...}
+self._series_definitions # List[TimeSeriesDefinition]
+self._schedule           # "15 minutes"
+
+# Per TimeSeriesDefinition:
+series_def.unique_id   # "my-series-electricity"
+series_def.name              # "Electricity Consumption"
+series_def.frequency         # "1 hour"
+series_def.extract_filter    # {"dataset_id": "elec-001"}
+series_def.unit              # "MWh"
+series_def.domain            # "energy"
+series_def.category          # "load"
+```
+
 ## Docker Deployment
 
 ```bash
@@ -145,6 +275,59 @@ docker run -p 8000:8000 --env-file .env data-portal
 - **Data Versioning**: SCD Type 2 tracks all data changes with temporal validity
 - **Audit Trail**: Complete history of when and how data values changed
 
+## Data Preprocessing
+
+The Data Portal automatically handles missing values during data ingestion to ensure clean, gap-free time series for downstream analysis.
+
+### Missing Value Imputation
+
+When data is fetched from plugins, the system:
+
+1. **Detects Gaps**: Compares timestamps against the expected frequency
+2. **Fills Small Gaps** (≤ 10× frequency): Linear interpolation between known values
+3. **Marks Large Gaps** (> 10× frequency): Inserts NULL value with timestamp to indicate the gap
+
+### Quality Codes
+
+The SCD2 table (`time_series_data_scd2`) tracks data quality with a `quality_code` column:
+
+| Code | Meaning | Description |
+|------|---------|-------------|
+| 0 | Original | Raw data from source API |
+| 1 | Imputed | Interpolated value or NULL gap marker |
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ENABLE_IMPUTATION` | `true` | Enable/disable imputation workflow |
+| `MAX_GAP_FACTOR` | `6` | Maximum gap size (as multiple of frequency) for interpolation |
+
+Set `ENABLE_IMPUTATION=false` to ingest raw data without any preprocessing.
+
+### Example
+
+For a 15-minute frequency series with a 1-hour gap:
+- Gap = 4 intervals (less than 10×) → Linear interpolation applied
+- 3 imputed values inserted with `quality_code = 1`
+
+For a 15-minute series with a 4-hour gap:
+- Gap = 16 intervals (greater than 10×) → NULL markers inserted
+- 15 records with `value = NULL` and `quality_code = 1`
+
+### Grafana Visualization
+
+Use the `quality_code` to highlight imputed data in dashboards:
+```sql
+SELECT 
+  ts,
+  value,
+  CASE WHEN quality_code = 1 THEN 'Imputed' ELSE 'Original' END as data_source
+FROM data_portal.time_series_data_scd2
+WHERE series_id = :series_id AND is_current = TRUE;
+```
+
 ## Additional Documentation
 
 - [SCD2_INTEGRATION.md](SCD2_INTEGRATION.md) - Detailed documentation on SCD Type 2 history tracking
+

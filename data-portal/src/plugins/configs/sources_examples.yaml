@@ -1,0 +1,1185 @@
+##############################################################################
+# REQUEST GROUPS - Multiple time series from a single API call
+# Use this when an API returns multiple series or when you want to batch
+# requests to the same API endpoint for efficiency.
+##############################################################################
+
+request_groups:
+  # Example: Fingrid generation data - fetches multiple generation types with fewer API calls
+  fingrid-generation-3min:
+    module: src.plugins.data_sources.fingrid_multi_plugin
+    class: FingridMultiSeriesPlugin
+    schedule: 180 seconds  # 3 minutes
+    request_params:
+      # Common parameters for all series in this group
+      page_size: 20000
+    timeseries:
+      - unique_id: fingrid-multi-192
+        extract_filter:
+          dataset_id: 192
+        metadata:
+          name: FINGRID-MULTI-192-FI-3min
+          description: 'Electricity production in Finland based on the real-time measurements in Fingrid''s operation control system. The data is updated every 3 minutes.'
+          frequency: 3 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: fingrid-multi-191
+        extract_filter:
+          dataset_id: 191
+        metadata:
+          name: FINGRID-MULTI-191-FI-3min
+          description: 'Hydro power production in Finland based on the real-time measurements in Fingrid''s operation control system. The data is updated every 3 minutes.'
+          frequency: 3 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: fingrid-multi-181
+        extract_filter:
+          dataset_id: 181
+        metadata:
+          name: FINGRID-MULTI-181-FI-3min
+          description: 'Wind power production based on the real-time measurements in Fingrid''s operation control system. About two percent of the production capacity is estimated as measurements aren''t available. The data is updated every 3 minutes.'
+          frequency: 3 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: fingrid-multi-188
+        extract_filter:
+          dataset_id: 188
+        metadata:
+          name: FINGRID-MULTI-188-FI-3min
+          description: 'Nuclear power production in Finland based on the real-time measurements in Fingrid''s operation control system. The data is updated every 3 minutes.'
+          frequency: 3 minutes
+          unit: MW
+          domain: energy
+          category: generation
+
+  gridstatus-caiso-fuel-mix:
+    module: src.plugins.data_sources.gridstatus_plugin
+    class: GridStatusMultiSeriesPlugin
+    schedule: 5 minutes
+    request_params:
+      iso: CAISO
+      dataset: fuel_mix
+    timeseries:
+      - unique_id: gridstatus-caiso-solar
+        extract_filter:
+          value_column: Solar
+        metadata:
+          name: GRIDSTATUS-CAISO-Solar-5min
+          description: 'California ISO solar generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-caiso-wind
+        extract_filter:
+          value_column: Wind
+        metadata:
+          name: GRIDSTATUS-CAISO-Wind-5min
+          description: 'California ISO wind generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-caiso-nuclear
+        extract_filter:
+          value_column: Nuclear
+        metadata:
+          name: GRIDSTATUS-CAISO-Nuclear-5min
+          description: 'California ISO nuclear generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-caiso-natural-gas
+        extract_filter:
+          value_column: Natural Gas
+        metadata:
+          name: GRIDSTATUS-CAISO-NaturalGas-5min
+          description: 'California ISO natural gas generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-caiso-hydro
+        extract_filter:
+          value_column: Large Hydro
+        metadata:
+          name: GRIDSTATUS-CAISO-Hydro-5min
+          description: 'California ISO large hydro generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+
+  # =====================
+  # CAISO - Load (single series, but using multi for consistency)
+  # =====================
+  gridstatus-caiso-load:
+    module: src.plugins.data_sources.gridstatus_plugin
+    class: GridStatusMultiSeriesPlugin
+    schedule: 5 minutes
+    request_params:
+      iso: CAISO
+      dataset: load
+    timeseries:
+      - unique_id: gridstatus-caiso-load
+        extract_filter:
+          value_column: Load
+        metadata:
+          name: GRIDSTATUS-CAISO-Load-5min
+          description: 'California ISO total electricity load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+
+  # =====================
+  # CAISO - LMP (Prices)
+  # =====================
+  gridstatus-caiso-lmp:
+    module: src.plugins.data_sources.gridstatus_plugin
+    class: GridStatusMultiSeriesPlugin
+    schedule: 5 minutes
+    request_params:
+      iso: CAISO
+      dataset: lmp
+      market: REAL_TIME_5_MIN
+    timeseries:
+      - unique_id: gridstatus-caiso-lmp
+        extract_filter:
+          value_column: LMP
+        metadata:
+          name: GRIDSTATUS-CAISO-LMP-5min
+          description: 'California ISO real-time locational marginal price'
+          frequency: 5 minutes
+          unit: $/MWh
+          domain: energy
+          category: price
+
+  # =====================
+  # NYISO (New York) - Fuel Mix
+  # =====================
+  gridstatus-nyiso-fuel-mix:
+    module: src.plugins.data_sources.gridstatus_plugin
+    class: GridStatusMultiSeriesPlugin
+    schedule: 5 minutes
+    request_params:
+      iso: NYISO
+      dataset: fuel_mix
+    timeseries:
+      - unique_id: gridstatus-nyiso-wind
+        extract_filter:
+          value_column: Wind
+        metadata:
+          name: GRIDSTATUS-NYISO-Wind-5min
+          description: 'New York ISO wind generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-nyiso-hydro
+        extract_filter:
+          value_column: Hydro
+        metadata:
+          name: GRIDSTATUS-NYISO-Hydro-5min
+          description: 'New York ISO hydro generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-nyiso-nuclear
+        extract_filter:
+          value_column: Nuclear
+        metadata:
+          name: GRIDSTATUS-NYISO-Nuclear-5min
+          description: 'New York ISO nuclear generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-nyiso-natural-gas
+        extract_filter:
+          value_column: Natural Gas
+        metadata:
+          name: GRIDSTATUS-NYISO-NaturalGas-5min
+          description: 'New York ISO natural gas generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+
+  # =====================
+  # NYISO - Load (multiple zones available)
+  # =====================
+  gridstatus-nyiso-load:
+    module: src.plugins.data_sources.gridstatus_plugin
+    class: GridStatusMultiSeriesPlugin
+    schedule: 5 minutes
+    request_params:
+      iso: NYISO
+      dataset: load
+    timeseries:
+      - unique_id: gridstatus-nyiso-load-total
+        extract_filter:
+          value_column: Load
+        metadata:
+          name: GRIDSTATUS-NYISO-Load-5min
+          description: 'New York ISO total electricity load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-nyiso-load-nyc
+        extract_filter:
+          value_column: N.Y.C.
+        metadata:
+          name: GRIDSTATUS-NYISO-NYC-Load-5min
+          description: 'New York City zone load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-nyiso-load-capitl
+        extract_filter:
+          value_column: CAPITL
+        metadata:
+          name: GRIDSTATUS-NYISO-CAPITL-Load-5min
+          description: 'New York ISO Capital zone load (Albany area)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-nyiso-load-centrl
+        extract_filter:
+          value_column: CENTRL
+        metadata:
+          name: GRIDSTATUS-NYISO-CENTRL-Load-5min
+          description: 'New York ISO Central zone load (Syracuse area)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-nyiso-load-dunwod
+        extract_filter:
+          value_column: DUNWOD
+        metadata:
+          name: GRIDSTATUS-NYISO-DUNWOD-Load-5min
+          description: 'New York ISO Dunwoodie zone load (Westchester)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-nyiso-load-genese
+        extract_filter:
+          value_column: GENESE
+        metadata:
+          name: GRIDSTATUS-NYISO-GENESE-Load-5min
+          description: 'New York ISO Genesee zone load (Rochester area)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-nyiso-load-hudvl
+        extract_filter:
+          value_column: HUD VL
+        metadata:
+          name: GRIDSTATUS-NYISO-HUDVL-Load-5min
+          description: 'New York ISO Hudson Valley zone load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-nyiso-load-longil
+        extract_filter:
+          value_column: LONGIL
+        metadata:
+          name: GRIDSTATUS-NYISO-LONGIL-Load-5min
+          description: 'New York ISO Long Island zone load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-nyiso-load-mhkvl
+        extract_filter:
+          value_column: MHK VL
+        metadata:
+          name: GRIDSTATUS-NYISO-MHKVL-Load-5min
+          description: 'New York ISO Mohawk Valley zone load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-nyiso-load-millwd
+        extract_filter:
+          value_column: MILLWD
+        metadata:
+          name: GRIDSTATUS-NYISO-MILLWD-Load-5min
+          description: 'New York ISO Millwood zone load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-nyiso-load-north
+        extract_filter:
+          value_column: NORTH
+        metadata:
+          name: GRIDSTATUS-NYISO-NORTH-Load-5min
+          description: 'New York ISO North zone load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-nyiso-load-west
+        extract_filter:
+          value_column: WEST
+        metadata:
+          name: GRIDSTATUS-NYISO-WEST-Load-5min
+          description: 'New York ISO West zone load (Buffalo area)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+
+  # =====================
+  # MISO (Midwest) - Fuel Mix
+  # =====================
+  gridstatus-miso-fuel-mix:
+    module: src.plugins.data_sources.gridstatus_plugin
+    class: GridStatusMultiSeriesPlugin
+    schedule: 5 minutes
+    request_params:
+      iso: MISO
+      dataset: fuel_mix
+    timeseries:
+      - unique_id: gridstatus-miso-wind
+        extract_filter:
+          value_column: Wind
+        metadata:
+          name: GRIDSTATUS-MISO-Wind-5min
+          description: 'Midwest ISO wind generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-miso-solar
+        extract_filter:
+          value_column: Solar
+        metadata:
+          name: GRIDSTATUS-MISO-Solar-5min
+          description: 'Midwest ISO solar generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-miso-coal
+        extract_filter:
+          value_column: Coal
+        metadata:
+          name: GRIDSTATUS-MISO-Coal-5min
+          description: 'Midwest ISO coal generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-miso-natural-gas
+        extract_filter:
+          value_column: Natural Gas
+        metadata:
+          name: GRIDSTATUS-MISO-NaturalGas-5min
+          description: 'Midwest ISO natural gas generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+
+  # =====================
+  # MISO - Load
+  # =====================
+  gridstatus-miso-load:
+    module: src.plugins.data_sources.gridstatus_plugin
+    class: GridStatusMultiSeriesPlugin
+    schedule: 5 minutes
+    request_params:
+      iso: MISO
+      dataset: load
+    timeseries:
+      - unique_id: gridstatus-miso-load
+        extract_filter:
+          value_column: Load
+        metadata:
+          name: GRIDSTATUS-MISO-Load-5min
+          description: 'Midwest ISO total electricity load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+
+  # =====================
+  # PJM (Mid-Atlantic/Midwest) - Fuel Mix
+  # =====================
+  gridstatus-pjm-fuel-mix:
+    module: src.plugins.data_sources.gridstatus_plugin
+    class: GridStatusMultiSeriesPlugin
+    schedule: 1 hour
+    request_params:
+      iso: PJM
+      dataset: fuel_mix
+    timeseries:
+      - unique_id: gridstatus-pjm-gas
+        extract_filter:
+          value_column: Gas
+        metadata:
+          name: GRIDSTATUS-PJM-Gas-1hour
+          description: 'PJM Interconnection gas generation'
+          frequency: 1 hour
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-pjm-coal
+        extract_filter:
+          value_column: Coal
+        metadata:
+          name: GRIDSTATUS-PJM-Coal-1hour
+          description: 'PJM Interconnection coal generation'
+          frequency: 1 hour
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-pjm-nuclear
+        extract_filter:
+          value_column: Nuclear
+        metadata:
+          name: GRIDSTATUS-PJM-Nuclear-1hour
+          description: 'PJM Interconnection nuclear generation'
+          frequency: 1 hour
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-pjm-hydro
+        extract_filter:
+          value_column: Hydro
+        metadata:
+          name: GRIDSTATUS-PJM-Hydro-1hour
+          description: 'PJM Interconnection hydro generation'
+          frequency: 1 hour
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-pjm-wind
+        extract_filter:
+          value_column: Wind
+        metadata:
+          name: GRIDSTATUS-PJM-Wind-1hour
+          description: 'PJM Interconnection wind generation'
+          frequency: 1 hour
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-pjm-solar
+        extract_filter:
+          value_column: Solar
+        metadata:
+          name: GRIDSTATUS-PJM-Solar-1hour
+          description: 'PJM Interconnection solar generation'
+          frequency: 1 hour
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-pjm-oil
+        extract_filter:
+          value_column: Oil
+        metadata:
+          name: GRIDSTATUS-PJM-Oil-1hour
+          description: 'PJM Interconnection oil generation'
+          frequency: 1 hour
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-pjm-other-renewables
+        extract_filter:
+          value_column: Other Renewables
+        metadata:
+          name: GRIDSTATUS-PJM-OtherRenewables-1hour
+          description: 'PJM Interconnection other renewables generation'
+          frequency: 1 hour
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-pjm-storage
+        extract_filter:
+          value_column: Storage
+        metadata:
+          name: GRIDSTATUS-PJM-Storage-1hour
+          description: 'PJM Interconnection battery storage'
+          frequency: 1 hour
+          unit: MW
+          domain: energy
+          category: generation
+
+  # =====================
+  # PJM - Load
+  # =====================
+  gridstatus-pjm-load:
+    module: src.plugins.data_sources.gridstatus_plugin
+    class: GridStatusMultiSeriesPlugin
+    schedule: 5 minutes
+    request_params:
+      iso: PJM
+      dataset: load
+    timeseries:
+      - unique_id: gridstatus-pjm-load
+        extract_filter:
+          value_column: Load
+        metadata:
+          name: GRIDSTATUS-PJM-Load-5min
+          description: 'PJM Interconnection total electricity load (PJM RTO)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-aep
+        extract_filter:
+          value_column: AEP
+        metadata:
+          name: GRIDSTATUS-PJM-AEP-Load-5min
+          description: 'PJM American Electric Power zone load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-aps
+        extract_filter:
+          value_column: APS
+        metadata:
+          name: GRIDSTATUS-PJM-APS-Load-5min
+          description: 'PJM Allegheny Power zone load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-atsi
+        extract_filter:
+          value_column: ATSI
+        metadata:
+          name: GRIDSTATUS-PJM-ATSI-Load-5min
+          description: 'PJM American Transmission Systems zone load (Ohio)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-comed
+        extract_filter:
+          value_column: COMED
+        metadata:
+          name: GRIDSTATUS-PJM-COMED-Load-5min
+          description: 'PJM Commonwealth Edison zone load (Chicago area)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-dayton
+        extract_filter:
+          value_column: DAYTON
+        metadata:
+          name: GRIDSTATUS-PJM-DAYTON-Load-5min
+          description: 'PJM Dayton Power zone load (Ohio)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-deok
+        extract_filter:
+          value_column: DEOK
+        metadata:
+          name: GRIDSTATUS-PJM-DEOK-Load-5min
+          description: 'PJM Duke Energy Ohio/Kentucky zone load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-dom
+        extract_filter:
+          value_column: DOM
+        metadata:
+          name: GRIDSTATUS-PJM-DOM-Load-5min
+          description: 'PJM Dominion Virginia Power zone load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-dpl
+        extract_filter:
+          value_column: DPL
+        metadata:
+          name: GRIDSTATUS-PJM-DPL-Load-5min
+          description: 'PJM Delmarva Power zone load (Delaware/Maryland)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-duq
+        extract_filter:
+          value_column: DUQ
+        metadata:
+          name: GRIDSTATUS-PJM-DUQ-Load-5min
+          description: 'PJM Duquesne Light zone load (Pittsburgh area)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-ekpc
+        extract_filter:
+          value_column: EKPC
+        metadata:
+          name: GRIDSTATUS-PJM-EKPC-Load-5min
+          description: 'PJM East Kentucky Power Cooperative zone load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-jc
+        extract_filter:
+          value_column: JC
+        metadata:
+          name: GRIDSTATUS-PJM-JC-Load-5min
+          description: 'PJM Jersey Central zone load (New Jersey)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-me
+        extract_filter:
+          value_column: ME
+        metadata:
+          name: GRIDSTATUS-PJM-ME-Load-5min
+          description: 'PJM Metropolitan Edison zone load (Pennsylvania)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-pe
+        extract_filter:
+          value_column: PE
+        metadata:
+          name: GRIDSTATUS-PJM-PE-Load-5min
+          description: 'PJM PECO Energy zone load (Philadelphia area)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-pep
+        extract_filter:
+          value_column: PEP
+        metadata:
+          name: GRIDSTATUS-PJM-PEP-Load-5min
+          description: 'PJM Pepco Holdings zone load (DC/Maryland)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-pl
+        extract_filter:
+          value_column: PL
+        metadata:
+          name: GRIDSTATUS-PJM-PL-Load-5min
+          description: 'PJM PPL Electric zone load (Pennsylvania)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-pn
+        extract_filter:
+          value_column: PN
+        metadata:
+          name: GRIDSTATUS-PJM-PN-Load-5min
+          description: 'PJM Penelec zone load (Pennsylvania)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-ps
+        extract_filter:
+          value_column: PS
+        metadata:
+          name: GRIDSTATUS-PJM-PS-Load-5min
+          description: 'PJM Public Service Electric & Gas zone load (New Jersey)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-reco
+        extract_filter:
+          value_column: RECO
+        metadata:
+          name: GRIDSTATUS-PJM-RECO-Load-5min
+          description: 'PJM Rockland Electric zone load (New Jersey/New York)'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-mid-atlantic
+        extract_filter:
+          value_column: PJM MID ATLANTIC REGION
+        metadata:
+          name: GRIDSTATUS-PJM-MidAtlantic-Load-5min
+          description: 'PJM Mid-Atlantic region total load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-southern
+        extract_filter:
+          value_column: PJM SOUTHERN REGION
+        metadata:
+          name: GRIDSTATUS-PJM-Southern-Load-5min
+          description: 'PJM Southern region total load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+      - unique_id: gridstatus-pjm-load-western
+        extract_filter:
+          value_column: PJM WESTERN REGION
+        metadata:
+          name: GRIDSTATUS-PJM-Western-Load-5min
+          description: 'PJM Western region total load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+
+  # =====================
+  # ISONE (New England) - Fuel Mix
+  # =====================
+  gridstatus-isone-fuel-mix:
+    module: src.plugins.data_sources.gridstatus_plugin
+    class: GridStatusMultiSeriesPlugin
+    schedule: 5 minutes
+    request_params:
+      iso: ISONE
+      dataset: fuel_mix
+    timeseries:
+      - unique_id: gridstatus-isone-natural-gas
+        extract_filter:
+          value_column: Natural Gas
+        metadata:
+          name: GRIDSTATUS-ISONE-NaturalGas-5min
+          description: 'ISO New England natural gas generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-isone-nuclear
+        extract_filter:
+          value_column: Nuclear
+        metadata:
+          name: GRIDSTATUS-ISONE-Nuclear-5min
+          description: 'ISO New England nuclear generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-isone-hydro
+        extract_filter:
+          value_column: Hydro
+        metadata:
+          name: GRIDSTATUS-ISONE-Hydro-5min
+          description: 'ISO New England hydro generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-isone-wind
+        extract_filter:
+          value_column: Wind
+        metadata:
+          name: GRIDSTATUS-ISONE-Wind-5min
+          description: 'ISO New England wind generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-isone-solar
+        extract_filter:
+          value_column: Solar
+        metadata:
+          name: GRIDSTATUS-ISONE-Solar-5min
+          description: 'ISO New England solar generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-isone-oil
+        extract_filter:
+          value_column: Oil
+        metadata:
+          name: GRIDSTATUS-ISONE-Oil-5min
+          description: 'ISO New England oil generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-isone-coal
+        extract_filter:
+          value_column: Coal
+        metadata:
+          name: GRIDSTATUS-ISONE-Coal-5min
+          description: 'ISO New England coal generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-isone-wood
+        extract_filter:
+          value_column: Wood
+        metadata:
+          name: GRIDSTATUS-ISONE-Wood-5min
+          description: 'ISO New England wood/biomass generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-isone-refuse
+        extract_filter:
+          value_column: Refuse
+        metadata:
+          name: GRIDSTATUS-ISONE-Refuse-5min
+          description: 'ISO New England refuse/waste generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-isone-landfill-gas
+        extract_filter:
+          value_column: Landfill Gas
+        metadata:
+          name: GRIDSTATUS-ISONE-LandfillGas-5min
+          description: 'ISO New England landfill gas generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+
+  # =====================
+  # ISONE - Load
+  # =====================
+  gridstatus-isone-load:
+    module: src.plugins.data_sources.gridstatus_plugin
+    class: GridStatusMultiSeriesPlugin
+    schedule: 5 minutes
+    request_params:
+      iso: ISONE
+      dataset: load
+    timeseries:
+      - unique_id: gridstatus-isone-load
+        extract_filter:
+          value_column: Load
+        metadata:
+          name: GRIDSTATUS-ISONE-Load-5min
+          description: 'ISO New England total electricity load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+
+  # =====================
+  # SPP (Southwest Power Pool) - Fuel Mix
+  # =====================
+  gridstatus-spp-fuel-mix:
+    module: src.plugins.data_sources.gridstatus_plugin
+    class: GridStatusMultiSeriesPlugin
+    schedule: 5 minutes
+    request_params:
+      iso: SPP
+      dataset: fuel_mix
+    timeseries:
+      - unique_id: gridstatus-spp-wind
+        extract_filter:
+          value_column: Wind
+        metadata:
+          name: GRIDSTATUS-SPP-Wind-5min
+          description: 'Southwest Power Pool wind generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-spp-solar
+        extract_filter:
+          value_column: Solar
+        metadata:
+          name: GRIDSTATUS-SPP-Solar-5min
+          description: 'Southwest Power Pool solar generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-spp-coal
+        extract_filter:
+          value_column: Coal
+        metadata:
+          name: GRIDSTATUS-SPP-Coal-5min
+          description: 'Southwest Power Pool coal generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-spp-gas
+        extract_filter:
+          value_column: Gas
+        metadata:
+          name: GRIDSTATUS-SPP-Gas-5min
+          description: 'Southwest Power Pool gas generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-spp-hydro
+        extract_filter:
+          value_column: Hydro
+        metadata:
+          name: GRIDSTATUS-SPP-Hydro-5min
+          description: 'Southwest Power Pool hydro generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-spp-nuclear
+        extract_filter:
+          value_column: Nuclear
+        metadata:
+          name: GRIDSTATUS-SPP-Nuclear-5min
+          description: 'Southwest Power Pool nuclear generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-spp-diesel
+        extract_filter:
+          value_column: Diesel Fuel Oil
+        metadata:
+          name: GRIDSTATUS-SPP-Diesel-5min
+          description: 'Southwest Power Pool diesel fuel oil generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-spp-other
+        extract_filter:
+          value_column: Other
+        metadata:
+          name: GRIDSTATUS-SPP-Other-5min
+          description: 'Southwest Power Pool other generation'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: generation
+
+  # =====================
+  # SPP - Load
+  # =====================
+  gridstatus-spp-load:
+    module: src.plugins.data_sources.gridstatus_plugin
+    class: GridStatusMultiSeriesPlugin
+    schedule: 5 minutes
+    request_params:
+      iso: SPP
+      dataset: load
+    timeseries:
+      - unique_id: gridstatus-spp-load
+        extract_filter:
+          value_column: Load
+        metadata:
+          name: GRIDSTATUS-SPP-Load-5min
+          description: 'Southwest Power Pool total electricity load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+
+  # =====================
+  # IESO (Ontario, Canada) - Fuel Mix
+  # =====================
+  gridstatus-ieso-fuel-mix:
+    module: src.plugins.data_sources.gridstatus_plugin
+    class: GridStatusMultiSeriesPlugin
+    schedule: 1 hour
+    request_params:
+      iso: IESO
+      dataset: fuel_mix
+    timeseries:
+      - unique_id: gridstatus-ieso-nuclear
+        extract_filter:
+          value_column: Nuclear
+        metadata:
+          name: GRIDSTATUS-IESO-Nuclear-1hour
+          description: 'Ontario IESO nuclear generation'
+          frequency: 1 hour
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-ieso-gas
+        extract_filter:
+          value_column: Gas
+        metadata:
+          name: GRIDSTATUS-IESO-Gas-1hour
+          description: 'Ontario IESO gas generation'
+          frequency: 1 hour
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-ieso-hydro
+        extract_filter:
+          value_column: Hydro
+        metadata:
+          name: GRIDSTATUS-IESO-Hydro-1hour
+          description: 'Ontario IESO hydro generation'
+          frequency: 1 hour
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-ieso-wind
+        extract_filter:
+          value_column: Wind
+        metadata:
+          name: GRIDSTATUS-IESO-Wind-1hour
+          description: 'Ontario IESO wind generation'
+          frequency: 1 hour
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-ieso-solar
+        extract_filter:
+          value_column: Solar
+        metadata:
+          name: GRIDSTATUS-IESO-Solar-1hour
+          description: 'Ontario IESO solar generation'
+          frequency: 1 hour
+          unit: MW
+          domain: energy
+          category: generation
+      - unique_id: gridstatus-ieso-biofuel
+        extract_filter:
+          value_column: Biofuel
+        metadata:
+          name: GRIDSTATUS-IESO-Biofuel-1hour
+          description: 'Ontario IESO biofuel generation'
+          frequency: 1 hour
+          unit: MW
+          domain: energy
+          category: generation
+
+  # =====================
+  # IESO - Load
+  # =====================
+  gridstatus-ieso-load:
+    module: src.plugins.data_sources.gridstatus_plugin
+    class: GridStatusMultiSeriesPlugin
+    schedule: 5 minutes
+    request_params:
+      iso: IESO
+      dataset: load
+    timeseries:
+      - unique_id: gridstatus-ieso-load
+        extract_filter:
+          value_column: Load
+        metadata:
+          name: GRIDSTATUS-IESO-Load-5min
+          description: 'Ontario IESO total electricity load'
+          frequency: 5 minutes
+          unit: MW
+          domain: energy
+          category: load
+
+# =====================
+# Available value_column options by ISO/dataset:
+# =====================
+# 
+# CAISO fuel_mix: Solar, Wind, Geothermal, Biomass, Biogas, Small Hydro, 
+#                 Coal, Nuclear, Natural Gas, Large Hydro, Batteries, Imports, Other
+# CAISO load: Load
+# CAISO lmp: LMP, Energy, Congestion, Loss, GHG
+#
+# MISO fuel_mix: Coal, Imports, Natural Gas, Nuclear, Other, Solar, Wind
+# MISO load: Load
+# MISO lmp: LMP, Energy, Congestion, Loss
+#
+# NYISO load (zones): Load, CAPITL, CENTRL, DUNWOD, GENESE, HUD VL, LONGIL, 
+#                     MHK VL, MILLWD, N.Y.C., NORTH, WEST
+# NYISO fuel_mix: Dual Fuel, Hydro, Natural Gas, Nuclear, Other Fossil Fuels, 
+#                 Other Renewables, Wind
+# NYISO lmp: LMP, Energy, Congestion, Loss
+#
+# PJM fuel_mix: Gas, Coal, Nuclear, Hydro, Oil, Solar, Wind, Multiple Fuels, 
+#               Other, Other Renewables, Storage
+# PJM load (zones): Load, AE, AEP, APS, ATSI, BC, COMED, DAYTON, DEOK, DOM, 
+#                   DPL, DUQ, EKPC, JC, ME, PE, PEP, PL, PN, PS, RECO,
+#                   PJM MID ATLANTIC REGION, PJM RTO, PJM SOUTHERN REGION, 
+#                   PJM WESTERN REGION
+# PJM lmp: LMP, Energy, Congestion, Loss
+#
+# ISONE fuel_mix: Coal, Hydro, Natural Gas, Nuclear, Oil, Solar, Wind, 
+#                 Refuse, Wood, Landfill Gas, Other
+# ISONE load: Load
+# ISONE lmp: LMP, Energy, Congestion, Loss
+#
+# SPP fuel_mix: Coal, Gas, Hydro, Nuclear, Solar, Wind, Diesel Fuel Oil, Other
+# SPP load: Load
+# SPP lmp: LMP, Energy, Congestion, Loss
+#
+# IESO fuel_mix: Nuclear, Gas, Hydro, Wind, Solar, Biofuel
+# IESO load: Load
+
+
+
+##############################################################################
+# TIMESERIES - Single time series per plugin (simple cases)
+# Use this when each API call returns exactly one time series.
+##############################################################################
+
+timeseries:
+  smard-410-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-410-DE-quarterhour
+      description: 'Electricity consumption: Total (grid load)'
+      frequency: 15 minutes
+      unit: MWh
+      domain: energy
+      category: load
+    default_params:
+      filter: 410
+      region: DE
+      resolution: quarterhour
+  smard-4359-de-hour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4359-DE-hour
+      description: 'Electricity consumption: Residual load'
+      frequency: 1 hour
+      unit: MWh
+      domain: energy
+      category: load
+    default_params:
+      filter: 4359
+      region: DE
+      resolution: hour
+
+  smard-4169-de-quarterhour:
+    module: src.plugins.data_sources.smard_plugin
+    class: SmardDataSourcePlugin
+    metadata:
+      name: SMARD-4169-DE-quarterhour
+      description: 'Market price: Germany/Luxembourg'
+      frequency: 15 minutes
+      unit: Euro
+      domain: energy
+      category: price
+    default_params:
+      filter: 4169
+      region: DE
+      resolution: quarterhour

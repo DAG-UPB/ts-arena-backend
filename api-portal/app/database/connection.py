@@ -7,7 +7,7 @@ from app.core.config import Config
 Base = declarative_base()
 
 # IMPORTANT: Import all ORM models so that the tables are registered in MetaData
-# (especially for string-based ForeignKeys like 'challenges.challenge_id').
+# (especially for string-based ForeignKeys like 'challenges.rounds.id').
 # This import has no runtime costs, but ensures the order.
 from app.database import models  # noqa: F401
 

@@ -5,6 +5,21 @@ from datetime import timedelta
 import isodate
 
 
+def serialize_timedelta_to_iso8601(value: Optional[timedelta]) -> Optional[str]:
+    """
+    Convert timedelta to ISO 8601 duration format (PostgreSQL interval format).
+    
+    Args:
+        value: timedelta object or None
+        
+    Returns:
+        ISO 8601 duration string like 'P1D' (1 day), 'PT1H' (1 hour), 'PT15M' (15 minutes), or None
+    """
+    if value is None:
+        return None
+    
+    return isodate.duration_isoformat(value)
+
 def parse_iso8601_to_interval_list(
     iso_strings: List[str]
 ) -> List[str]:

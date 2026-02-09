@@ -1,12 +1,31 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Generic, TypeVar
+
+T = TypeVar('T')
+
+
+class PaginationMeta(BaseModel):
+    """Pagination metadata."""
+    page: int = Field(..., description="Current page number (1-indexed)", ge=1)
+    page_size: int = Field(..., description="Number of items per page", ge=1)
+    total_items: int = Field(..., description="Total number of items across all pages", ge=0)
+    total_pages: int = Field(..., description="Total number of pages", ge=0)
+    has_next: bool = Field(..., description="Whether there is a next page")
+    has_previous: bool = Field(..., description="Whether there is a previous page")
+
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    """Generic paginated response wrapper."""
+    items: List[T] = Field(..., description="List of items for the current page")
+    pagination: PaginationMeta = Field(..., description="Pagination metadata")
 
 
 class ModelRankingSchema(BaseModel):
     """Global model ranking (Legacy - kept for backward compatibility)."""
     model_config = {"protected_namespaces": ()}
     
+    model_id: int
     model_name: str
     n_completed: int
     avg_mase: float
@@ -42,7 +61,7 @@ class RankingFiltersSchema(BaseModel):
     subcategory: Optional[List[str]] = Field(None, description="Subcategory filters applied")
     frequency: Optional[List[str]] = Field(None, description="Frequency filters applied (ISO 8601)")
     horizon: Optional[List[str]] = Field(None, description="Horizon filters applied (ISO 8601)")
-    min_challenges: Optional[int] = Field(None, description="Minimum challenges threshold applied")
+    min_rounds: Optional[int] = Field(None, description="Minimum rounds threshold applied")
     limit: Optional[int] = Field(None, description="Result limit applied")
 
 
@@ -64,3 +83,23 @@ class APIInfoSchema(BaseModel):
     title: str
     version: str
     description: str
+
+
+class ModelDefinitionRankingSchema(BaseModel):
+    """Rankings for a model in a specific definition across different time ranges."""
+    definition_id: int = Field(..., description="Definition ID")
+    definition_name: str = Field(..., description="Definition name")
+    rankings_7d: Optional[Dict[str, Any]] = Field(None, description="7 day ranking stats")
+    rankings_30d: Optional[Dict[str, Any]] = Field(None, description="30 day ranking stats")
+    rankings_90d: Optional[Dict[str, Any]] = Field(None, description="90 day ranking stats")
+    rankings_365d: Optional[Dict[str, Any]] = Field(None, description="365 day ranking stats")
+
+
+class ModelRankingsResponseSchema(BaseModel):
+    """Response schema for model rankings across all definitions."""
+    model_id: int = Field(..., description="Model ID")
+    model_name: str = Field(..., description="Model name")
+    definition_rankings: List[ModelDefinitionRankingSchema] = Field(
+        default_factory=list,
+        description="Rankings grouped by definition"
+    )

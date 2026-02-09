@@ -101,19 +101,30 @@ class EntsoeDataSourcePlugin(BasePlugin):
         self.api_key = self._defaults.get("api_key", "")
         self.document_type = self._defaults.get("document_type", "A65")  # e.g., load
         self.process_type = self._defaults.get("process_type", "A16")    # e.g., day-ahead
+        self.process_type = self._defaults.get("process_type", "A16")    # e.g., day-ahead
         self.domain = self._defaults.get("outBiddingZone_Domain", "10Y1001A1001A83F")  # DE
         self.client = EntsoeApiClient(self.api_key)
+        self.detected_timezone: Optional[str] = None
+
+    def get_detected_timezone(self) -> Optional[str]:
+        return self.detected_timezone
 
     async def get_historical_data(
         self,
         start_date: str,
-        end_date: str,
+        end_date: Optional[str] = None,
         metrics: Optional[List[str]] = None
     ) -> Dict[str, Any]:
-        """Fetch historical data from ENTSO-E API"""
+        """
+        Fetch historical data from ENTSO-E API.
+        
+        Note: ENTSO-E API requires an end_date. If not provided, 
+        current time will be used as fallback.
+        """
         # ENTSO-E expects time in format YYYYMMDDHHMM
         start_dt = pd.Timestamp(start_date)
-        end_dt = pd.Timestamp(end_date)
+        # ENTSO-E requires end_date, fallback to current time if not provided
+        end_dt = pd.Timestamp(end_date) if end_date else pd.Timestamp.now(tz='UTC')
         period_start = start_dt.strftime("%Y%m%d%H%M")
         period_end = end_dt.strftime("%Y%m%d%H%M")
         
@@ -125,6 +136,16 @@ class EntsoeDataSourcePlugin(BasePlugin):
             period_end=period_end,
             outBiddingZone_Domain=self.domain
         )
+        
+        # Detect timezone from first data point
+        if data and len(data) > 0 and "ts" in data[0]:
+            try:
+                ts_str = data[0]["ts"]
+                ts = pd.Timestamp(ts_str)
+                if ts.tz:
+                    self.detected_timezone = str(ts.tz)
+            except Exception:
+                pass
         
         if data is None:
             return {"data": [], "error": "Failed to fetch or parse ENTSO-E data."}

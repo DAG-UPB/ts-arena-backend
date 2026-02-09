@@ -1,10 +1,12 @@
 from __future__ import annotations
 import logging
 import functools
+import time
 from typing import Any, Dict, Callable, Awaitable
 from app.database.connection import SessionLocal
 from app.services.challenge_service import ChallengeService
 from app.services.score_evaluation_service import ScoreEvaluationService
+from app.services.elo_ranking_service import EloRankingService
 from app.scheduler.dependencies import get_scheduler
 
 
@@ -34,16 +36,12 @@ def job_error_handler(func: Callable[..., Awaitable[None]]) -> Callable[..., Awa
 
 
 @job_error_handler
-async def create_challenge_from_schedule_job(schedule_params: Dict[str, Any]) -> None:
+async def create_round_from_definition_job(definition_id: int) -> None:
     """
-    Job function that creates a new challenge based on schedule parameters.
-    It delegates the actual business logic to the ChallengeService.
-    
-    Args:
-        schedule_params: Dictionary containing challenge creation parameters
+    Job function that creates a new challenge round from a definition.
     """
     logger = logging.getLogger("challenge-scheduler")
-    logger.info(f"Starting job to create challenge from schedule with params: {schedule_params}")
+    logger.info(f"Starting job to create round from definition {definition_id}")
 
     try:
         # Get scheduler from global reference
@@ -52,41 +50,35 @@ async def create_challenge_from_schedule_job(schedule_params: Dict[str, Any]) ->
         async with SessionLocal() as session:
             challenge_service = ChallengeService(session, scheduler=scheduler)
             
-            challenge = await challenge_service.create_challenge_from_schedule(schedule_params)
+            round_obj = await challenge_service.create_round_from_definition(definition_id)
             
-            logger.info(f"Successfully created challenge '{challenge.name}' (ID: {challenge.id})")
+            logger.info(f"Successfully created round '{round_obj.name}' (ID: {round_obj.id})")
 
     except Exception as e:
-        logger.exception(f"Failed to create challenge from schedule. Error: {e}")
+        logger.exception(f"Failed to create round from definition {definition_id}. Error: {e}")
         raise  # Re-raise to let decorator handle it
 
 
 @job_error_handler
-async def prepare_challenge_context_data_job(
-    challenge_id: int, 
-    preparation_params: Dict[str, Any]
-) -> None:
+async def prepare_round_context_data_job(round_id: int) -> None:
     """
-    Job function that prepares context data for a challenge.
+    Job function that prepares context data for a challenge round.
     Called at registration_start to ensure fresh data.
     """
     logger = logging.getLogger("challenge-scheduler")
-    logger.info(f"Starting context data preparation for challenge {challenge_id}")
+    logger.info(f"Starting context data preparation for round {round_id}")
 
     try:
         async with SessionLocal() as session:
             challenge_service = ChallengeService(session)
             
-            # Execute preparation with stored parameters
-            await challenge_service._execute_context_data_preparation(
-                challenge_id=challenge_id,
-                preparation_params=preparation_params
-            )
+            # Execute preparation
+            await challenge_service.prepare_round_context_data(round_id)
             
-            logger.info(f"Successfully prepared context data for challenge {challenge_id}")
+            logger.info(f"Successfully prepared context data for round {round_id}")
 
     except Exception as e:
-        logger.exception(f"Failed to prepare context data for challenge {challenge_id}: {e}")
+        logger.exception(f"Failed to prepare context data for round {round_id}: {e}")
         raise  # Re-raise to let decorator handle it
 
 
@@ -105,42 +97,151 @@ async def periodic_challenge_scores_evaluation_job() -> None:
     logger.info("Starting periodic challenge scores evaluation job")
     
     try:
-        # Step 1: Retrieve list of Challenges to evaluate (Short-lived Session)
-        challenge_ids = []
+        # Step 1: Retrieve list of Rounds to evaluate (Short-lived Session)
+        round_ids = []
         async with SessionLocal() as session:
             score_service = ScoreEvaluationService(session)
-            challenge_ids = await score_service.get_ids_needing_evaluation()
+            round_ids = await score_service.get_ids_needing_evaluation()
         
-        if not challenge_ids:
-            logger.info("No challenges need evaluation at this time.")
+        if not round_ids:
+            logger.info("No rounds need evaluation at this time.")
             return
 
-        logger.info(f"Found {len(challenge_ids)} challenge(s) needing evaluation")
+        logger.info(f"Found {len(round_ids)} round(s) needing evaluation")
 
-        # Step 2: Process each challenge in a separate session
+        # Step 2: Process each round in a separate session
         # This prevents one long transaction from holding a DB connection for the entire batch.
         evaluated_count = 0
         finalized_count = 0
 
-        for challenge_id in challenge_ids:
+        for round_id in round_ids:
             try:
                 async with SessionLocal() as session:
                     score_service = ScoreEvaluationService(session)
-                    finalized = await score_service.evaluate_challenge_scores(challenge_id)
+                    finalized = await score_service.evaluate_challenge_scores(round_id)
                     
                     evaluated_count += 1
                     if finalized:
                         finalized_count += 1
             except Exception as e:
-                logger.error(f"Error evaluating challenge {challenge_id} in periodic job: {e}")
-                # Continue with next challenge instead of failing the whole job
+                logger.error(f"Error evaluating round {round_id} in periodic job: {e}")
+                # Continue with next round instead of failing the whole job
 
         logger.info(
             f"Periodic evaluation complete: "
-            f"{evaluated_count} challenges evaluated, "
+            f"{evaluated_count} rounds evaluated, "
             f"{finalized_count} finalized"
         )
     
     except Exception as e:
         logger.exception(f"Failed to run periodic challenge scores evaluation: {e}")
+        raise  # Re-raise to let decorator handle it
+
+
+@job_error_handler
+async def periodic_elo_ranking_calculation_job() -> None:
+    """
+    Periodic job that calculates bootstrapped ELO ratings for all models.
+    
+    This job runs 4x daily (every 6 hours) and:
+    1. Calculates global ELO rating across all challenges
+    2. Calculates per-definition ELO ratings
+    3. Calculates per-frequency+horizon ELO ratings
+    4. Stores results in forecasts.daily_rankings table
+    5. Logs timing metrics for performance monitoring
+    """
+    logger = logging.getLogger("challenge-scheduler")
+    logger.info("Starting periodic ELO ranking calculation job")
+    
+    start_time = time.time()
+    
+    try:
+        async with SessionLocal() as session:
+            elo_service = EloRankingService(session)
+            
+            # Calculate and store all ELO ratings
+            results = await elo_service.calculate_and_store_all_ratings(
+                n_bootstraps=500
+            )
+
+            
+            duration_seconds = time.time() - start_time
+            
+            # Extract metrics
+            n_global = len(results.get("global", []))
+            n_definitions = len(results.get("per_definition", []))
+            n_freq_horizon = len(results.get("per_frequency_horizon", []))
+            total_duration_ms = results.get("total_duration_ms", 0)
+            
+            # Log success with detailed metrics
+            logger.info(
+                f"✅ ELO calculation SUCCESS in {duration_seconds:.1f}s. "
+                f"Global: {n_global}, Definitions: {n_definitions}, FreqHorizon: {n_freq_horizon}, "
+                f"Total calculation time: {total_duration_ms}ms"
+            )
+
+    
+    except Exception as e:
+        duration_seconds = time.time() - start_time
+        logger.error(
+            f"❌ ELO calculation FAILED after {duration_seconds:.1f}s: {e}",
+            exc_info=True
+        )
+        raise  # Re-raise to let decorator handle it
+
+
+
+@job_error_handler
+async def startup_elo_check_job() -> None:
+    """
+    Startup job that checks if ELO ratings have been calculated today.
+    If not, triggers a calculation immediately.
+    """
+    logger = logging.getLogger("challenge-scheduler")
+    logger.info("Checking if ELO ratings have been calculated today...")
+    
+    start_time = time.time()
+    
+    try:
+        async with SessionLocal() as session:
+            elo_service = EloRankingService(session)
+            
+            # Check if already calculated today
+            if await elo_service.has_calculated_today():
+                logger.info("ELO ratings already calculated today. Skipping startup calculation.")
+                return
+            
+            logger.info("No ELO ratings for today. Starting calculation...")
+            
+            # Run the calculation
+            results = await elo_service.calculate_and_store_all_ratings(
+                n_bootstraps=500
+            )
+
+            
+            duration_seconds = time.time() - start_time
+            
+            # Handle case where no data is available
+            if not results:
+                logger.info("Startup ELO calculation: No data available for ranking.")
+                return
+            
+            n_global = len(results.get('global', []))
+            n_definitions = len(results.get('per_definition', []))
+            n_freq_horizon = len(results.get('per_frequency_horizon', []))
+            total_time = results.get('total_duration_ms', 0)
+            
+            logger.info(
+                f"✅ Startup ELO calculation complete in {duration_seconds:.1f}s. "
+                f"Global: {n_global}, Definitions: {n_definitions}, FreqHorizon: {n_freq_horizon}, "
+                f"Calculation time: {total_time}ms"
+            )
+
+    
+    except Exception as e:
+        duration_seconds = time.time() - start_time
+        logger.error(
+            f"❌ Startup ELO check FAILED after {duration_seconds:.1f}s: {e}",
+            exc_info=True
+        )
         raise  # Re-raise to let decorator handle it

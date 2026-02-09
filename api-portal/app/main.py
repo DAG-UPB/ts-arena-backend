@@ -9,9 +9,8 @@ from app.api.v1 import models as models_router
 from app.api.v1 import users
 from app.api.v1 import organizations
 from app.api.v1 import forecasts
-# Import all models to ensure SQLAlchemy can resolve relationships
 from app.database.forecasts.models import Forecast, ChallengeScore
-from app.database.challenges.challenge import Challenge, ChallengeParticipant, ChallengeContextData
+from app.database.challenges.challenge import ChallengeRound, ChallengeDefinition, ChallengeParticipant, ChallengeContextData
 from app.database.models.model_info import ModelInfo
 from app.database.auth.user import User
 from app.database.data_portal.time_series import TimeSeriesModel, TimeSeriesDataModel
@@ -32,7 +31,6 @@ logger.propagate = False
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Configuration-dependent level setting
     logger.setLevel(getattr(logging, Config.LOG_LEVEL, logging.INFO))
     app.state.logger = logger
 
@@ -155,7 +153,6 @@ async def get_admin_docs():
         title=app.title + " - Admin Docs",
     )
 
-# Public endpoints (without authentication)
 @app.get("/")
 async def root():
     return {
@@ -168,16 +165,12 @@ async def health_check():
     """Health check endpoint for Docker containers"""
     return {"status": "healthy"}
 
-# API Key Management (for internal services only)
 app.include_router(api_keys.router, prefix="/api/v1")
 
-# User Management (for internal services only)
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(organizations.router, prefix="/api/v1")
 
-# Protected routers with authentication
 app.include_router(challenges.router, prefix="/api/v1", dependencies=[Depends(require_auth)])
 app.include_router(models_router.router, prefix="/api/v1", dependencies=[Depends(require_auth)])
 
-# Forecast router (has its own authentication in the endpoint)
 app.include_router(forecasts.router, prefix="/api/v1")

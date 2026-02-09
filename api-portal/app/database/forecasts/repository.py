@@ -31,17 +31,17 @@ class ForecastRepository:
 
     async def bulk_create_forecasts(
         self, 
-        challenge_id: int,
+        round_id: int,
         model_id: int,
         series_id: int,
         forecast_data: List[Dict[str, Any]]
     ) -> int:
         """
-    Bulk insert forecasts for a specific challenge, model, and series.
+        Bulk insert forecasts for a specific challenge round, model, and series.
         Uses INSERT ... ON CONFLICT DO NOTHING to handle duplicates gracefully.
         
         Args:
-            challenge_id: Challenge ID
+            round_id: Challenge Round ID
             model_id: Model ID
             series_id: Underlying time series ID (resolved from challenge_series_name)
             forecast_data: List of dicts with 'timestamp', 'value', 'probabilistic_values'
@@ -55,7 +55,7 @@ class ForecastRepository:
         # Prepare data for bulk insert
         mappings = [
             {
-                "challenge_id": challenge_id,
+                "round_id": round_id,
                 "model_id": model_id,
                 "series_id": series_id,
                 "ts": dp["ts"],
@@ -68,7 +68,7 @@ class ForecastRepository:
         # Use PostgreSQL INSERT ... ON CONFLICT DO NOTHING
         stmt = insert(Forecast).values(mappings)
         stmt = stmt.on_conflict_do_nothing(
-            index_elements=["challenge_id", "model_id", "series_id", "ts"]
+            index_elements=["round_id", "model_id", "series_id", "ts"]
         )
         
         result = await self.session.execute(stmt)
@@ -76,31 +76,31 @@ class ForecastRepository:
         
         return result.rowcount if result.rowcount else 0
 
-    async def get_challenges_needing_evaluation(self) -> List[Dict[str, Any]]:
+    async def get_ids_needing_evaluation(self) -> List[int]:
         """
-        Get all challenges that need score evaluation.
-        Includes challenges with no scores yet OR challenges with non-finalized scores.
+        Get all round_ids that need score evaluation.
+        Includes rounds with no scores yet OR rounds with non-finalized scores.
         
         Returns:
-            List of dicts with challenge_id and status
+            List of round_ids
         """
         from sqlalchemy import text
         
         query = text("""
-            SELECT DISTINCT c.id as challenge_id, c.status
-            FROM challenges.v_challenges_with_status c
-            LEFT JOIN forecasts.challenge_scores cs ON c.id = cs.challenge_id
-            WHERE c.status IN ('active', 'completed')
+            SELECT DISTINCT c.id as round_id
+            FROM challenges.v_rounds_with_status c
+            LEFT JOIN forecasts.scores cs ON c.id = cs.round_id
+            WHERE c.computed_status IN ('active', 'completed')
               AND (cs.id IS NULL OR cs.final_evaluation = FALSE)
             ORDER BY c.id
         """)
         
         result = await self.session.execute(query)
-        return [{"challenge_id": row.challenge_id, "status": row.status} for row in result]
+        return [row.round_id for row in result]
 
-    async def mark_challenge_scores_final(self, challenge_id: int) -> int:
+    async def mark_scores_final(self, round_id: int) -> int:
         """
-        Set final_evaluation=True for all scores of a given challenge.
+        Set final_evaluation=True for all scores of a given round.
         
         Returns:
             Number of rows updated
@@ -108,7 +108,7 @@ class ForecastRepository:
         from sqlalchemy import update
         
         stmt = update(ChallengeScore).where(
-            ChallengeScore.challenge_id == challenge_id
+            ChallengeScore.round_id == round_id
         ).values(final_evaluation=True)
         
         result = await self.session.execute(stmt)
@@ -116,37 +116,37 @@ class ForecastRepository:
         
         return result.rowcount if result.rowcount else 0
 
-    async def get_challenge_participants(self, challenge_id: int) -> List[int]:
+    async def get_round_participants(self, round_id: int) -> List[int]:
         """
-        Get unique model_ids that have submitted forecasts for a challenge.
+        Get unique model_ids that have submitted forecasts for a round.
         
         Returns:
             List of model_ids
         """
         result = await self.session.execute(
             select(Forecast.model_id)
-            .where(Forecast.challenge_id == challenge_id)
+            .where(Forecast.round_id == round_id)
             .distinct()
         )
         return [row[0] for row in result]
 
-    async def get_challenge_series_ids(self, challenge_id: int) -> List[int]:
+    async def get_round_series_ids(self, round_id: int) -> List[int]:
         """
-        Get unique series_ids for a challenge.
+        Get unique series_ids for a round.
         
         Returns:
             List of series_ids
         """
         result = await self.session.execute(
             select(Forecast.series_id)
-            .where(Forecast.challenge_id == challenge_id)
+            .where(Forecast.round_id == round_id)
             .distinct()
         )
         return [row[0] for row in result]
 
     async def get_forecast_stats(
         self,
-        challenge_id: int,
+        round_id: int,
         model_id: int,
         series_id: int
     ) -> Optional[Dict[str, Any]]:
@@ -163,7 +163,7 @@ class ForecastRepository:
                 func.count(Forecast.id).label("count")
             ).where(
                 and_(
-                    Forecast.challenge_id == challenge_id,
+                    Forecast.round_id == round_id,
                     Forecast.model_id == model_id,
                     Forecast.series_id == series_id
                 )
@@ -180,12 +180,12 @@ class ForecastRepository:
 
     async def check_existing_forecasts(
         self,
-        challenge_id: int,
+        round_id: int,
         model_id: int,
         series_id: int
     ) -> int:
         """
-        Count existing forecasts for a challenge/model/series combination.
+        Count existing forecasts for a round/model/series combination.
         
         Returns:
             Number of existing forecast records
@@ -194,7 +194,7 @@ class ForecastRepository:
             select(func.count(Forecast.id))
             .where(
                 and_(
-                    Forecast.challenge_id == challenge_id,
+                    Forecast.round_id == round_id,
                     Forecast.model_id == model_id,
                     Forecast.series_id == series_id
                 )
@@ -202,18 +202,18 @@ class ForecastRepository:
         )
         return result.scalar_one()
 
-    async def get_forecasts_by_challenge_and_model(
+    async def get_forecasts_by_round_and_model(
         self, 
-        challenge_id: int, 
+        round_id: int, 
         model_id: int,
         series_id: Optional[int] = None
     ) -> List[Forecast]:
         """
-        Retrieve forecasts for a specific model in a challenge.
+        Retrieve forecasts for a specific model in a round.
         Optionally filter by series_id.
         """
         conditions = [
-            Forecast.challenge_id == challenge_id,
+            Forecast.round_id == round_id,
             Forecast.model_id == model_id
         ]
         
@@ -229,7 +229,7 @@ class ForecastRepository:
 
     async def get_evaluation_data(
         self,
-        challenge_id: int,
+        round_id: int,
         model_id: int,
         series_id: int
     ) -> List[Dict[str, Any]]:
@@ -254,7 +254,7 @@ class ForecastRepository:
             )
             .where(
                 and_(
-                    Forecast.challenge_id == challenge_id,
+                    Forecast.round_id == round_id,
                     Forecast.model_id == model_id,
                     Forecast.series_id == series_id
                 )
@@ -274,7 +274,7 @@ class ForecastRepository:
 
     async def get_evaluation_data_by_resolution(
         self,
-        challenge_id: int,
+        round_id: int,
         model_id: int,
         series_id: int,
         resolution: str = "1h"
@@ -284,7 +284,7 @@ class ForecastRepository:
         Reads actual values from the appropriate continuous aggregate view.
         
         Args:
-            challenge_id: Challenge ID
+            round_id: Round ID
             model_id: Model ID
             series_id: Time series ID
             resolution: Target resolution ("15min", "1h", "1d", "raw")
@@ -311,7 +311,7 @@ class ForecastRepository:
             )
             .where(
                 and_(
-                    Forecast.challenge_id == challenge_id,
+                    Forecast.round_id == round_id,
                     Forecast.model_id == model_id,
                     Forecast.series_id == series_id
                 )
@@ -331,12 +331,12 @@ class ForecastRepository:
 
     async def delete_forecasts(
         self,
-        challenge_id: int,
+        round_id: int,
         model_id: int,
         series_id: Optional[int] = None
     ) -> int:
         """
-        Delete forecasts for a challenge/model combination.
+        Delete forecasts for a round/model combination.
         Optionally filter by series_id.
         
         Returns:
@@ -345,7 +345,7 @@ class ForecastRepository:
         from sqlalchemy import delete as sql_delete
         
         conditions = [
-            Forecast.challenge_id == challenge_id,
+            Forecast.round_id == round_id,
             Forecast.model_id == model_id
         ]
         
@@ -360,7 +360,7 @@ class ForecastRepository:
 
     # === Challenge Scores ===
     
-    async def create_or_update_challenge_score(
+    async def create_or_update_score(
         self, 
         score_data: Dict[str, Any]
     ) -> ChallengeScore:
@@ -369,7 +369,7 @@ class ForecastRepository:
         """
         stmt = insert(ChallengeScore).values(**score_data)
         stmt = stmt.on_conflict_do_update(
-            index_elements=["challenge_id", "model_id", "series_id"],
+            index_elements=["round_id", "model_id", "series_id"],
             set_={
                 "mase": stmt.excluded.mase,
                 "rmse": stmt.excluded.rmse,
@@ -392,7 +392,7 @@ class ForecastRepository:
             select(ChallengeScore)
             .where(
                 and_(
-                    ChallengeScore.challenge_id == score_data["challenge_id"],
+                    ChallengeScore.round_id == score_data["round_id"],
                     ChallengeScore.model_id == score_data["model_id"],
                     ChallengeScore.series_id == score_data["series_id"]
                 )
@@ -400,13 +400,13 @@ class ForecastRepository:
         )
         return result.scalar_one()
 
-    async def get_scores_by_challenge(self, challenge_id: int) -> List[ChallengeScore]:
+    async def get_scores_by_round(self, round_id: int) -> List[ChallengeScore]:
         """
-        Retrieve all scores for a given challenge, including model information.
+        Retrieve all scores for a given round, including model information.
         """
         result = await self.session.execute(
             select(ChallengeScore)
-            .where(ChallengeScore.challenge_id == challenge_id)
+            .where(ChallengeScore.round_id == round_id)
             .options(selectinload(ChallengeScore.model))
             .order_by(ChallengeScore.mase.asc())
         )
@@ -421,7 +421,7 @@ class ForecastRepository:
         
         stmt = insert(ChallengeScore).values(scores_data)
         stmt = stmt.on_conflict_do_update(
-            index_elements=["challenge_id", "model_id", "series_id"],
+            index_elements=["round_id", "model_id", "series_id"],
             set_={
                 "mase": stmt.excluded.mase,
                 "rmse": stmt.excluded.rmse,
@@ -441,9 +441,9 @@ class ForecastRepository:
         
         return result.rowcount if result.rowcount else 0
 
-    async def check_all_scores_complete(self, challenge_id: int) -> bool:
+    async def check_all_scores_complete(self, round_id: int) -> bool:
         """
-        Check if all scores for a challenge have 100% data coverage.
+        Check if all scores for a round have 100% data coverage.
         
         Returns:
             True if all scores have evaluation_status = 'complete'
@@ -454,11 +454,11 @@ class ForecastRepository:
             SELECT 
                 COUNT(*) as total_scores,
                 COUNT(*) FILTER (WHERE evaluation_status = 'complete') as complete_scores
-            FROM forecasts.challenge_scores
-            WHERE challenge_id = :challenge_id
+            FROM forecasts.scores
+            WHERE round_id = :round_id
         """)
         
-        result = await self.session.execute(query, {"challenge_id": challenge_id})
+        result = await self.session.execute(query, {"round_id": round_id})
         row = result.fetchone()
         
         if not row or row.total_scores == 0:

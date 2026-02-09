@@ -10,6 +10,7 @@ from typing import Optional
 from app.database.connection import get_db
 from app.services.challenge_service import ChallengeService
 from app.services.model_info_service import ModelInfoService
+from app.services.export_service import ExportService
 from app.database.auth.api_key_repository import APIKeyRepository
 from app.core.config import Config
 
@@ -143,6 +144,14 @@ async def get_model_info_service(
 ) -> ModelInfoService:
     """Dependency for ModelInfoService with DB session."""
     return ModelInfoService(db)
+
+
+async def get_export_service(
+    db: AsyncSession = Depends(get_db),
+    challenge_service: ChallengeService = Depends(get_challenge_service)
+) -> ExportService:
+    """Dependency for ExportService."""
+    return ExportService(db, challenge_service)
 
 
 async def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:

@@ -14,7 +14,7 @@ class TimeSeriesBase(BaseModel):
     forecast_horizon: str = Field(..., description="Supported forecast horizon.", example="24h")
     available_metrics: List[str] = Field(default=[], description="List of available metrics/time series.", example=["power", "voltage"])
     update_frequency: str = Field(..., description="How often the data is updated (e.g. 'daily', 'hourly').", example="hourly")
-    endpoint_prefix: str = Field(..., description="Unique prefix for API endpoints.", example="power-consumption")
+    unique_id: str = Field(..., description="Unique prefix for API endpoints.", example="power-consumption")
     ts_timezone: Optional[str] = Field(None, description="The timezone of the time series (e.g. 'UTC' or 'Europe/Berlin').")
 
 # ==========================================================================
@@ -31,7 +31,7 @@ class TimeSeriesUpdate(BaseModel):
     forecast_horizon: Optional[str] = Field(None, description="The new forecast horizon.")
     available_metrics: Optional[List[str]] = Field(None, description="The new available metrics.")
     update_frequency: Optional[str] = Field(None, description="The new update frequency.")
-    endpoint_prefix: Optional[str] = Field(None, description="The new endpoint prefix.")
+    unique_id: Optional[str] = Field(None, description="The new unique id.")
 
 # ==========================================================================
 # Schemas for Database Models (Response Models)

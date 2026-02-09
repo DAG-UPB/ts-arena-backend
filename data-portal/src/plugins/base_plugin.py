@@ -3,6 +3,24 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+from dataclasses import dataclass, field
+
+
+@dataclass
+class TimeSeriesDefinition:
+    """Definition of a single time series within a request group"""
+    unique_id: str
+    name: str
+    description: str
+    frequency: str
+    unit: str
+    domain: str
+    category: str
+    subdomain: Optional[str] = None
+    subcategory: Optional[str] = None
+    imputation_policy: Optional[str] = None
+    update_frequency: Optional[str] = None
+    extract_filter: Dict[str, Any] = field(default_factory=dict)
 
 
 class TimeSeriesMetadata:
@@ -10,40 +28,45 @@ class TimeSeriesMetadata:
     
     def __init__(
         self,
-        endpoint_prefix: str,
+        unique_id: str,
         name: str,
         description: str,
         frequency: str,
         unit: str,
         domain: str,
+        subdomain: Optional[str],
         category: str,
         subcategory: Optional[str],
-        update_frequency: str
+        update_frequency: str,
+        imputation_policy: Optional[str] = None
     ):
         """
         Initialize time series metadata.
         
         Args:
-            endpoint_prefix: Unique prefix for API endpoint
+            unique_id: Unique prefix for API endpoint
             name: Display name of the time series
             description: Description of the data source
             frequency: Data frequency as PostgreSQL INTERVAL string (e.g., '1 hour', '15 minutes', '1 day')
                       This will be stored as INTERVAL type in the database
             unit: Unit of measurement (e.g., 'MWh', '°C')
             domain: Domain category (e.g., 'energy', 'weather')
-            category: Category (e.g., 'generation', 'temperature')
+            subdomain: Subdomain (e.g., 'renewable', 'fossil')
             subcategory: Subcategory (e.g., 'nuclear', 'wind')
             update_frequency: How often the data source is updated (PostgreSQL INTERVAL string)
+            imputation_policy: Policy for imputing missing values (e.g., 'linear', 'ffill', 'zero')
         """
-        self.endpoint_prefix = endpoint_prefix
+        self.unique_id = unique_id
         self.name = name
         self.description = description
         self.frequency = frequency
         self.unit = unit
         self.domain = domain
+        self.subdomain = subdomain
         self.category = category
         self.subcategory = subcategory
         self.update_frequency = update_frequency
+        self.imputation_policy = imputation_policy
 
 
 class BasePlugin(ABC):
@@ -57,19 +80,28 @@ class BasePlugin(ABC):
         """Returns metadata for this data source"""
         return self._meta
     
-    def get_endpoint_prefix(self) -> str:
-        """Returns the endpoint prefix for this data source"""
-        return self._meta.endpoint_prefix
+    def get_unique_id(self) -> str:
+        """Returns the unique id for this data source"""
+        return self._meta.unique_id
     
     def get_update_frequency(self) -> str:
         """Returns the update frequency for this data source"""
         return self._meta.update_frequency
     
+    def get_detected_timezone(self) -> Optional[str]:
+        """
+        Returns the timezone detected from the last data fetch.
+        
+        Returns:
+            Timezone string (e.g. 'US/Eastern') or None if not detected/supported.
+        """
+        return None
+    
     @abstractmethod
     async def get_historical_data(
         self, 
         start_date: str, 
-        end_date: str, 
+        end_date: Optional[str] = None, 
         metrics: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
@@ -77,7 +109,9 @@ class BasePlugin(ABC):
         
         Args:
             start_date: Start date in ISO format
-            end_date: End date in ISO format
+            end_date: Optional end date in ISO format. If not provided, 
+                      the API should return data up to the latest available.
+                      This is preferred as APIs may operate in different timezones.
             metrics: Optional list of metrics to fetch
             
         Returns:
@@ -86,6 +120,101 @@ class BasePlugin(ABC):
                 "data": [
                     {"ts": "2025-08-05T14:00:00Z", "value": 22.5},
                     {"ts": "2025-08-05T14:05:00Z", "value": 22.7},
+                    ...
+                ]
+            }
+        """
+        pass
+
+
+class MultiSeriesPlugin(ABC):
+    """
+    Base interface for plugins that return multiple time series from a single API call.
+    
+    Use this when an API returns data for multiple time series in one response,
+    to avoid making redundant API calls for each series.
+    """
+
+    def __init__(
+        self, 
+        group_id: str,
+        request_params: Dict[str, Any], 
+        series_definitions: List[TimeSeriesDefinition],
+        schedule: str
+    ):
+        """
+        Initialize multi-series plugin.
+        
+        Args:
+            group_id: Unique identifier for this request group
+            request_params: Common parameters for the API request
+            series_definitions: List of time series definitions to extract from response
+            schedule: Update frequency for this group (PostgreSQL INTERVAL string)
+        """
+        self._group_id = group_id
+        self._request_params = request_params
+        self._series_definitions = series_definitions
+        self._schedule = schedule
+    
+    @property
+    def group_id(self) -> str:
+        """Returns the group ID for this plugin"""
+        return self._group_id
+    
+    @property
+    def schedule(self) -> str:
+        """Returns the update schedule for this plugin"""
+        return self._schedule
+    
+    @property
+    def request_params(self) -> Dict[str, Any]:
+        """Returns the common request parameters"""
+        return self._request_params
+    
+    def get_series_definitions(self) -> List[TimeSeriesDefinition]:
+        """Returns all time series definitions for this group"""
+        return self._series_definitions
+    
+    def get_unique_ides(self) -> List[str]:
+        """Returns list of all unique ides in this group"""
+        return [s.unique_id for s in self._series_definitions]
+    
+    def get_detected_timezone(self, unique_id: str) -> Optional[str]:
+        """
+        Returns the timezone detected from the last data fetch for a specific series.
+        
+        Args:
+            unique_id: The unique series identifier
+            
+        Returns:
+            Timezone string (e.g. 'US/Eastern') or None if not detected/supported.
+        """
+        return None
+    
+    @abstractmethod
+    async def get_historical_data_multi(
+        self, 
+        start_date: str, 
+        end_date: Optional[str] = None
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Fetch historical data for all time series in this group with a single API call.
+        
+        Args:
+            start_date: Start date in ISO format
+            end_date: Optional end date in ISO format. If not provided, 
+                      the API should return data up to the latest available.
+            
+        Returns:
+            Dict mapping unique_id to list of data points:
+            {
+                "series-1": [
+                    {"ts": "2025-08-05T14:00:00Z", "value": 22.5},
+                    {"ts": "2025-08-05T14:05:00Z", "value": 22.7},
+                    ...
+                ],
+                "series-2": [
+                    {"ts": "2025-08-05T14:00:00Z", "value": 100.0},
                     ...
                 ]
             }

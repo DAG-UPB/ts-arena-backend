@@ -58,13 +58,13 @@ services:
       POSTGRES_MAX_CONNECTIONS: "200"
     volumes:
       - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
-      - dbarena:/var/lib/postgresql/data
+      - /mnt/volume-nbg1-1/storage/ts-arena-db:/var/lib/postgresql/data
     command: postgres -c max_connections=200
     networks:
       - default
 
   cloudbeaver:
-    image: dbeaver/cloudbeaver:latest
+    image: dbeaver/cloudbeaver:25.3.2
     restart: unless-stopped
     networks:
       - default
@@ -72,11 +72,6 @@ services:
       - ./cloudbeaver:/opt/cloudbeaver/workspace
     depends_on:
       - timescaledb
-      - api-portal
-
-volumes:
-  dbarena:
-
 
 networks:
   default:

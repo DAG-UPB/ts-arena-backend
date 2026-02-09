@@ -33,11 +33,13 @@ $$ LANGUAGE plpgsql;
 CREATE TABLE data_portal.domain_category (
   id SERIAL PRIMARY KEY,
   domain TEXT NOT NULL,
+  subdomain TEXT,
   category TEXT,
   subcategory TEXT,
+  aggregation_level TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE(domain, category, subcategory)
+  UNIQUE(domain, subdomain, category, subcategory, aggregation_level)
 );
 
 CREATE TRIGGER trg_domain_category_updated_at
@@ -54,12 +56,13 @@ CREATE TABLE data_portal.time_series (
   description TEXT,
   api_endpoint TEXT,
   frequency INTERVAL,
+  aggregation_level_name TEXT,
   unit TEXT,
   update_frequency TEXT,
-  update_frequency_timepoint TEXT,
   ts_timezone TEXT,
+  imputation_policy TEXT,
   domain_category_id INTEGER REFERENCES data_portal.domain_category(id),
-  endpoint_prefix TEXT UNIQUE NOT NULL,
+  unique_id TEXT UNIQUE NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -84,7 +87,7 @@ CREATE TABLE data_portal.time_series_data (
 SELECT create_hypertable('data_portal.time_series_data', 'ts', 'series_id', 4, 
                          chunk_time_interval => INTERVAL '1 day', if_not_exists => TRUE);
 
-SELECT add_retention_policy('data_portal.time_series_data', INTERVAL '200 days', if_not_exists => TRUE);
+SELECT add_retention_policy('data_portal.time_series_data', INTERVAL '5 years', if_not_exists => TRUE);
 
 CREATE TRIGGER trg_time_series_data_updated_at
 BEFORE UPDATE ON data_portal.time_series_data
@@ -98,7 +101,8 @@ CREATE TABLE data_portal.time_series_data_scd2 (
   sk BIGSERIAL,
   series_id INTEGER NOT NULL REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
   ts TIMESTAMPTZ NOT NULL,
-  value DOUBLE PRECISION NOT NULL,
+  value DOUBLE PRECISION,  -- NULL allowed for gap markers
+  quality_code SMALLINT NOT NULL DEFAULT 0,  -- 0 = Original, 1 = Imputed
   valid_from TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   valid_to TIMESTAMPTZ,
   valid_during TSTZRANGE NOT NULL GENERATED ALWAYS AS (tstzrange(valid_from, valid_to, '[)')) STORED,
@@ -107,6 +111,9 @@ CREATE TABLE data_portal.time_series_data_scd2 (
   updated_at TIMESTAMPTZ,
   PRIMARY KEY (sk, valid_from)
 );
+
+COMMENT ON COLUMN data_portal.time_series_data_scd2.quality_code IS 
+'Data quality flag: 0 = Original (raw data), 1 = Imputed (interpolated/filled). NULL values with quality_code=1 indicate gaps too large for interpolation.';
 
 CREATE UNIQUE INDEX uq_tsd2_current ON data_portal.time_series_data_scd2(series_id, ts, valid_from) WHERE is_current = TRUE;
 
@@ -146,6 +153,7 @@ RETURNS TABLE(
   series_id INTEGER,
   ts TIMESTAMPTZ,
   value DOUBLE PRECISION,
+  quality_code SMALLINT,
   valid_from TIMESTAMPTZ,
   valid_to TIMESTAMPTZ
 ) AS $$
@@ -155,6 +163,7 @@ BEGIN
       scd.series_id,
       scd.ts,
       scd.value,
+      scd.quality_code,
       scd.valid_from,
       scd.valid_to
   FROM data_portal.time_series_data_scd2 scd
@@ -222,56 +231,166 @@ CREATE INDEX idx_model_info_organization ON models.model_info(organization_id);
 -- === Schema: challenges ===
 CREATE SCHEMA IF NOT EXISTS challenges;
 
-CREATE TABLE challenges.challenges (
+-- ==========================================================
+-- Challenge Definitions (from YAML configuration)
+-- ==========================================================
+CREATE TABLE challenges.definitions (
     id SERIAL PRIMARY KEY,
-    name TEXT UNIQUE NOT NULL,
+    schedule_id TEXT UNIQUE NOT NULL,     -- YAML id: "smard_dam_challenge_24h_15min"
+    name TEXT NOT NULL,                    -- Human readable name
     description TEXT,
+    domains TEXT[],                        -- Domain filters for time series selection
+    subdomains TEXT[],                     -- Subdomain filters
+    categories TEXT[],                     -- Categories filters
+    subcategories TEXT[],                  -- Subcategories filters
     context_length INTEGER NOT NULL,
-    registration_start TIMESTAMPTZ,
-    registration_end TIMESTAMPTZ,
     horizon INTERVAL NOT NULL,
-    frequency INTERVAL,
-    start_time TIMESTAMPTZ,
-    end_time TIMESTAMPTZ,
-    preparation_params JSONB,
+    frequency INTERVAL NOT NULL,
+    cron_schedule TEXT,                    -- Cron expression: "0 14 * * *"
+    n_time_series INTEGER NOT NULL,        -- Target number of time series to include
+    registration_duration INTERVAL,        -- Duration of registration window
+    evaluation_delay INTERVAL DEFAULT '0 hours',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    run_on_startup BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-COMMENT ON COLUMN challenges.challenges.context_length IS 
-'Number of historical data points to use as context for forecasting';
+COMMENT ON TABLE challenges.definitions IS 
+'Challenge definitions/templates from YAML configuration. Each represents a recurring challenge type.';
 
-COMMENT ON COLUMN challenges.challenges.frequency IS 
+COMMENT ON COLUMN challenges.definitions.schedule_id IS 
+'Unique identifier matching the YAML schedule id (e.g., smard_dam_challenge_24h_15min)';
+
+COMMENT ON COLUMN challenges.definitions.domains IS 
+'List of domains to filter time series by (e.g., ["Smard", "Fingrid"])';
+
+COMMENT ON COLUMN challenges.definitions.subdomains IS 
+'List of subdomains to filter time series by';
+
+COMMENT ON COLUMN challenges.definitions.categories IS 
+'List of categories to filter time series by';
+
+COMMENT ON COLUMN challenges.definitions.subcategories IS 
+'List of subcategories to filter time series by';
+
+COMMENT ON COLUMN challenges.definitions.is_active IS 
+'When FALSE, scheduler skips this challenge. Historical rounds remain accessible.';
+
+COMMENT ON COLUMN challenges.definitions.frequency IS 
 'Target frequency for this challenge (e.g., 15 minutes, 1 hour). Determines which aggregation view to use.';
 
-COMMENT ON COLUMN challenges.challenges.preparation_params IS 
-'JSON object containing parameters for context data preparation';
-
-CREATE TABLE challenges.challenge_participants (
-    id SERIAL PRIMARY KEY,
-    challenge_id INTEGER REFERENCES challenges.challenges(id) ON DELETE CASCADE,
-    model_id INTEGER REFERENCES models.model_info(id) ON DELETE CASCADE,
-    registered_at TIMESTAMPTZ DEFAULT now(),
-    UNIQUE (challenge_id, model_id)
+-- ==========================================================
+-- Challenge Definition Series (SCD Type 2)
+-- ==========================================================
+CREATE TABLE challenges.definition_series_scd2 (
+    sk BIGSERIAL PRIMARY KEY,
+    definition_id INTEGER NOT NULL REFERENCES challenges.definitions(id) ON DELETE CASCADE,
+    series_id INTEGER NOT NULL REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
+    is_required BOOLEAN NOT NULL DEFAULT TRUE,  -- Required series vs optional pool
+    is_excluded BOOLEAN NOT NULL DEFAULT FALSE, -- Exclude from rankings/ELO
+    valid_from TIMESTAMPTZ NOT NULL DEFAULT now(),
+    valid_to TIMESTAMPTZ,                       -- NULL = currently active
+    is_current BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE challenges.challenge_context_data (
+-- Ensure only one current assignment per definition + series
+CREATE UNIQUE INDEX uq_def_series_current 
+ON challenges.definition_series_scd2(definition_id, series_id) 
+WHERE is_current = TRUE;
+
+CREATE INDEX idx_def_series_definition ON challenges.definition_series_scd2(definition_id);
+CREATE INDEX idx_def_series_series ON challenges.definition_series_scd2(series_id);
+
+-- Partial index for fast NOT EXISTS lookups filtering excluded series
+CREATE INDEX IF NOT EXISTS idx_def_series_excluded 
+ON challenges.definition_series_scd2(definition_id, series_id) 
+WHERE is_excluded = TRUE;
+
+COMMENT ON TABLE challenges.definition_series_scd2 IS 
+'SCD Type 2 table tracking which time series are assigned to each challenge definition over time.
+When a series is added or removed, the previous record is closed (valid_to set, is_current=FALSE) 
+and a new record is created.';
+
+COMMENT ON COLUMN challenges.definition_series_scd2.is_required IS 
+'TRUE = required series that must be included. FALSE = part of optional random selection pool.';
+
+COMMENT ON COLUMN challenges.definition_series_scd2.is_excluded IS 
+'When TRUE, this series is excluded from all rankings and ELO calculations, 
+even for historical rounds. Use this to mark series with unsuitable data.';
+
+-- ==========================================================
+-- Challenge Rounds (individual instances of challenge definitions)
+-- ==========================================================
+CREATE TABLE challenges.rounds (
+    id SERIAL PRIMARY KEY,
+    definition_id INTEGER REFERENCES challenges.definitions(id) ON DELETE CASCADE,
+    name TEXT UNIQUE NOT NULL,             -- Generated: "definition description - timestamp"
+    description TEXT,
+    context_length INTEGER NOT NULL,
+    horizon INTERVAL NOT NULL,
+    frequency INTERVAL,
+    registration_start TIMESTAMPTZ, -- registration_start is basis for scheduling and basis for registration_end, start_time, end_time. When filtering, grouping, etc., always take registration_start as basis.
+    registration_end TIMESTAMPTZ,
+    start_time TIMESTAMPTZ,
+    end_time TIMESTAMPTZ,
+    is_cancelled BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+COMMENT ON TABLE challenges.rounds IS 
+'Individual challenge round instances. Each row represents one execution of a challenge_definition.';
+
+COMMENT ON COLUMN challenges.rounds.definition_id IS 
+'Links to the parent challenge definition.';
+
+COMMENT ON COLUMN challenges.rounds.is_cancelled IS 
+'Manual override flag. When TRUE, the round is cancelled regardless of timestamps.';
+
+COMMENT ON COLUMN challenges.rounds.context_length IS 
+'Number of historical data points to use as context for forecasting';
+
+CREATE INDEX idx_rounds_definition ON challenges.rounds(definition_id);
+CREATE INDEX idx_rounds_cancelled ON challenges.rounds(is_cancelled) WHERE is_cancelled = TRUE;
+CREATE INDEX idx_rounds_time_range ON challenges.rounds(registration_start, registration_end, end_time);
+
+-- ==========================================================
+-- Challenge Participants
+-- ==========================================================
+CREATE TABLE challenges.participants (
+    id SERIAL PRIMARY KEY,
+    round_id INTEGER REFERENCES challenges.rounds(id) ON DELETE CASCADE,
+    model_id INTEGER REFERENCES models.model_info(id) ON DELETE CASCADE,
+    registered_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (round_id, model_id)
+);
+
+CREATE INDEX idx_participants_round ON challenges.participants(round_id);
+
+-- ==========================================================
+-- Challenge Context Data
+-- ==========================================================
+CREATE TABLE challenges.context_data (
     id BIGSERIAL,
-    challenge_id INTEGER REFERENCES challenges.challenges(id) ON DELETE CASCADE,
+    round_id INTEGER REFERENCES challenges.rounds(id) ON DELETE CASCADE,
     series_id INTEGER NOT NULL REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
     ts TIMESTAMPTZ NOT NULL,
     value DOUBLE PRECISION,
     metadata JSONB,
     PRIMARY KEY (id, ts),
-    UNIQUE (challenge_id, series_id, ts)
+    UNIQUE (round_id, series_id, ts)
 );
-SELECT create_hypertable('challenges.challenge_context_data', 'ts', if_not_exists => TRUE);
-CREATE INDEX idx_context_challenge_series ON challenges.challenge_context_data(challenge_id, series_id);
+SELECT create_hypertable('challenges.context_data', 'ts', if_not_exists => TRUE);
+CREATE INDEX idx_context_round_series ON challenges.context_data(round_id, series_id);
 
--- Stores the selected (pseudo) series name per challenge and series
-CREATE TABLE challenges.challenge_series_pseudo (
+-- ==========================================================
+-- Challenge Series Pseudo (anonymized series names per round)
+-- ==========================================================
+CREATE TABLE challenges.series_pseudo (
   id SERIAL PRIMARY KEY,
-  challenge_id INTEGER REFERENCES challenges.challenges(id) ON DELETE CASCADE,
+  round_id INTEGER REFERENCES challenges.rounds(id) ON DELETE CASCADE,
   series_id INTEGER NOT NULL REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
   challenge_series_name TEXT NOT NULL,
   min_ts TIMESTAMPTZ,
@@ -279,29 +398,29 @@ CREATE TABLE challenges.challenge_series_pseudo (
   value_avg DOUBLE PRECISION,
   value_std DOUBLE PRECISION,
   created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE (challenge_id, series_id)
+  UNIQUE (round_id, series_id)
 );
 
-COMMENT ON COLUMN challenges.challenge_series_pseudo.min_ts IS 
+COMMENT ON COLUMN challenges.series_pseudo.min_ts IS 
 'First timestamp in the context data for this series';
 
-COMMENT ON COLUMN challenges.challenge_series_pseudo.max_ts IS 
+COMMENT ON COLUMN challenges.series_pseudo.max_ts IS 
 'Last timestamp in the context data for this series';
 
-COMMENT ON COLUMN challenges.challenge_series_pseudo.value_avg IS 
+COMMENT ON COLUMN challenges.series_pseudo.value_avg IS 
 'Average value of the context data for this series';
 
-COMMENT ON COLUMN challenges.challenge_series_pseudo.value_std IS 
+COMMENT ON COLUMN challenges.series_pseudo.value_std IS 
 'Standard deviation of the context data for this series';
 
-CREATE INDEX idx_challenge_series_pseudo_challenge ON challenges.challenge_series_pseudo(challenge_id);
+CREATE INDEX idx_series_pseudo_round ON challenges.series_pseudo(round_id);
 
 -- === Schema: forecasts ===
 CREATE SCHEMA IF NOT EXISTS forecasts;
 
 CREATE TABLE forecasts.forecasts (
     id BIGSERIAL,
-    challenge_id INTEGER REFERENCES challenges.challenges(id) ON DELETE CASCADE,
+    round_id INTEGER REFERENCES challenges.rounds(id) ON DELETE CASCADE,
     model_id INTEGER REFERENCES models.model_info(id) ON DELETE CASCADE,
     series_id INTEGER NOT NULL REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
     ts TIMESTAMPTZ NOT NULL,
@@ -309,13 +428,28 @@ CREATE TABLE forecasts.forecasts (
     probabilistic_values JSONB,
     created_at TIMESTAMPTZ DEFAULT now(),
     PRIMARY KEY (id, ts),
-    UNIQUE (challenge_id, model_id, series_id, ts)
+    UNIQUE (round_id, model_id, series_id, ts)
 );
 SELECT create_hypertable('forecasts.forecasts', 'ts', if_not_exists => TRUE);
 
-CREATE TABLE forecasts.challenge_scores (
+-- Compression configuration for forecasts.forecasts
+-- Segmenting by round_id, model_id, series_id keeps time series queries fast
+-- Ordering by ts DESC optimizes for recent data access patterns
+ALTER TABLE forecasts.forecasts SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'round_id, model_id, series_id',
+  timescaledb.compress_orderby = 'ts DESC'
+);
+
+-- Automatic compression policy: compress chunks older than 7 days
+-- Forecasts are typically final once a round completes, so this is safe
+SELECT add_compression_policy('forecasts.forecasts', INTERVAL '7 days', if_not_exists => TRUE);
+
+CREATE INDEX idx_forecasts_round ON forecasts.forecasts(round_id);
+
+CREATE TABLE forecasts.scores (
     id SERIAL PRIMARY KEY,
-    challenge_id INTEGER REFERENCES challenges.challenges(id) ON DELETE CASCADE,
+    round_id INTEGER REFERENCES challenges.rounds(id) ON DELETE CASCADE,
     model_id INTEGER REFERENCES models.model_info(id) ON DELETE CASCADE,
     series_id INTEGER REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
     mase DOUBLE PRECISION,
@@ -328,71 +462,98 @@ CREATE TABLE forecasts.challenge_scores (
     evaluation_status TEXT DEFAULT 'pending',
     error_message TEXT,
     calculated_at TIMESTAMPTZ DEFAULT now(),
-    UNIQUE (challenge_id, model_id, series_id)
+    UNIQUE (round_id, model_id, series_id)
 );
+CREATE INDEX idx_scores_round ON forecasts.scores(round_id);
 
 -- ==========================================================
--- View: Challenge Status
+-- View: Challenge Round Status (computed from timestamps)
 -- ==========================================================
-CREATE OR REPLACE VIEW challenges.v_challenges_with_status AS
+CREATE OR REPLACE VIEW challenges.v_rounds_with_status AS
 SELECT
-    c.*,
+    cr.*,
+    cd.schedule_id AS definition_schedule_id,
+    cd.name AS definition_name,
+    cd.domains AS definition_domains,
+    cd.subdomains AS definition_subdomains,
+    cd.categories AS definition_categories,
+    cd.subcategories AS definition_subcategories,
+    -- Computed status from timestamps (pure computation, no override)
     CASE
-        WHEN NOW() < c.registration_start THEN 'announced'
-        WHEN NOW() >= c.registration_start AND NOW() <= c.registration_end THEN 'registration'
-        WHEN NOW() > c.registration_end AND NOW() <= c.end_time THEN 'active'
-        WHEN NOW() > c.end_time THEN 'completed'
+        WHEN NOW() >= cr.registration_start AND NOW() <= cr.registration_end THEN 'registration'
+        WHEN NOW() > cr.registration_end AND NOW() <= cr.end_time THEN 'active'
+        WHEN NOW() > cr.end_time THEN 'completed'
+        ELSE 'undefined'
+    END AS computed_status,
+    -- Effective status: respects is_cancelled override
+    CASE
+        WHEN cr.is_cancelled THEN 'cancelled'
+        WHEN NOW() >= cr.registration_start AND NOW() <= cr.registration_end THEN 'registration'
+        WHEN NOW() > cr.registration_end AND NOW() <= cr.end_time THEN 'active'
+        WHEN NOW() > cr.end_time THEN 'completed'
         ELSE 'undefined'
     END AS status
-FROM
-    challenges.challenges c;
+FROM challenges.rounds cr
+LEFT JOIN challenges.definitions cd ON cr.definition_id = cd.id;
 
 -- ==========================================================
 -- View: Challenge Context Data Range
 -- ==========================================================
-CREATE OR REPLACE VIEW challenges.v_challenge_context_data_range AS 
+CREATE OR REPLACE VIEW challenges.v_context_data_range AS 
 SELECT DISTINCT
-    challenge_id,
+    round_id,
     series_id,
-    MIN(ts) OVER (PARTITION BY challenge_id, series_id) AS min_ts,
-    MAX(ts) OVER (PARTITION BY challenge_id, series_id) AS max_ts,
+    MIN(ts) OVER (PARTITION BY round_id, series_id) AS min_ts,
+    MAX(ts) OVER (PARTITION BY round_id, series_id) AS max_ts,
     FIRST_VALUE(value) OVER (
-        PARTITION BY challenge_id, series_id
+        PARTITION BY round_id, series_id
         ORDER BY ts DESC
     ) AS latest_value
-FROM challenges.challenge_context_data;
+FROM challenges.context_data;
 
 -- ==========================================================
--- View: Challenges with Metadata (for filtering)
+-- View: Challenge Rounds with Metadata (for participant filtering)
 -- ==========================================================
-CREATE OR REPLACE VIEW challenges.v_challenges_with_metadata AS
+CREATE OR REPLACE VIEW challenges.v_rounds_with_metadata AS
 SELECT
-    c.id as challenge_id,
-    c.name,
-    c.description,
-    c.registration_start,
-    c.registration_end,
-    c.start_time,
-    c.end_time,
-    c.context_length,
-    c.horizon,
-    c.frequency,  -- Challenge frequency (for materialized view selection)
-    c.preparation_params,
-    c.created_at,
-    c.updated_at,
-    -- Status derived from timestamps
+    cr.id as round_id,
+    cr.name,
+    cr.description,
+    cr.definition_id,
+    cd.schedule_id AS definition_schedule_id,
+    cd.name AS definition_name,
+    cd.domains,
+    cd.subdomains,
+    cd.categories as definition_categories,
+    cd.subcategories as definition_subcategories,
+    cr.registration_start,
+    cr.registration_end,
+    cr.start_time,
+    cr.end_time,
+    cr.context_length,
+    cr.horizon,
+    cr.frequency,
+    cr.is_cancelled,
+    -- Effective status: computed from timestamps, respecting is_cancelled override
     CASE
-        WHEN NOW() < c.registration_start THEN 'announced'
-        WHEN NOW() >= c.registration_start AND NOW() <= c.registration_end THEN 'registration'
-        WHEN NOW() > c.registration_end AND NOW() <= c.end_time THEN 'active'
-        WHEN NOW() > c.end_time THEN 'completed'
+        WHEN cr.is_cancelled THEN 'cancelled'
+        WHEN NOW() >= cr.registration_start AND NOW() <= cr.registration_end THEN 'registration'
+        WHEN NOW() > cr.registration_end AND NOW() <= cr.end_time THEN 'active'
+        WHEN NOW() > cr.end_time THEN 'completed'
         ELSE 'undefined'
     END AS status,
+    -- Pure computed status (for backwards compatibility)
+    CASE
+        WHEN NOW() >= cr.registration_start AND NOW() <= cr.registration_end THEN 'registration'
+        WHEN NOW() > cr.registration_end AND NOW() <= cr.end_time THEN 'active'
+        WHEN NOW() > cr.end_time THEN 'completed'
+        ELSE 'undefined'
+    END AS computed_status,
+    cr.created_at,
+    cr.updated_at,
     -- Time series statistics
     COUNT(DISTINCT csp.series_id) as n_time_series,
     -- Aggregated domain information (arrays)
-    ARRAY_AGG(DISTINCT dc.domain ORDER BY dc.domain) 
-        FILTER (WHERE dc.domain IS NOT NULL) AS domains,
     ARRAY_AGG(DISTINCT dc.category ORDER BY dc.category) 
         FILTER (WHERE dc.category IS NOT NULL) AS categories,
     ARRAY_AGG(DISTINCT dc.subcategory ORDER BY dc.subcategory) 
@@ -400,23 +561,35 @@ SELECT
     -- Model & Forecast Counts (subqueries for performance)
     (SELECT COUNT(DISTINCT f.model_id) 
      FROM forecasts.forecasts f 
-     WHERE f.challenge_id = c.id) AS model_count,
+     WHERE f.round_id = cr.id) AS model_count,
     (SELECT COUNT(*) 
      FROM forecasts.forecasts f 
-     WHERE f.challenge_id = c.id) AS forecast_count
-FROM challenges.challenges c
-LEFT JOIN challenges.challenge_series_pseudo csp ON csp.challenge_id = c.id
+     WHERE f.round_id = cr.id) AS forecast_count
+FROM challenges.rounds cr
+LEFT JOIN challenges.definitions cd ON cr.definition_id = cd.id
+LEFT JOIN challenges.series_pseudo csp ON csp.round_id = cr.id
 LEFT JOIN data_portal.time_series ts ON ts.series_id = csp.series_id
 LEFT JOIN data_portal.domain_category dc ON ts.domain_category_id = dc.id
 GROUP BY 
-    c.id, c.name, c.description, c.registration_start, c.registration_end,
-    c.start_time, c.end_time, c.context_length, c.horizon, c.frequency,
-    c.preparation_params, c.created_at, c.updated_at;
+    cr.id, cr.name, cr.description, cr.definition_id, cd.schedule_id, cd.name, cd.domains, cd.subdomains, cd.categories, cd.subcategories,
+    cr.registration_start, cr.registration_end, cr.start_time, cr.end_time, 
+    cr.context_length, cr.horizon, cr.frequency, cr.is_cancelled, cr.created_at, cr.updated_at;
 
-COMMENT ON VIEW challenges.v_challenges_with_metadata IS 
-'Challenges with aggregated metadata for extended filtering.
-Contains c.frequency (challenge frequency) as well as arrays of domains, categories, subcategories 
-from all associated time series.';
+COMMENT ON VIEW challenges.v_rounds_with_metadata IS 
+'Challenge rounds with aggregated metadata for participant-facing filtering.
+The status column is computed dynamically from timestamps, respecting is_cancelled override.
+Includes definition info, round timing, and aggregated domain/category data from time series.';
+
+-- ==========================================================
+-- View: Active Challenge Definitions
+-- ==========================================================
+CREATE OR REPLACE VIEW challenges.v_active_definitions AS
+SELECT *
+FROM challenges.definitions
+WHERE is_active = TRUE;
+
+COMMENT ON VIEW challenges.v_active_definitions IS 
+'View returning only active challenge definitions, mirroring the table structure 1:1.';
 
 -- ==========================================================
 -- 7) View: Data Availability Check
@@ -426,11 +599,11 @@ SELECT
     ts.series_id,
     ts.name,
     ts.frequency,
-    ts.endpoint_prefix,
+    ts.unique_id,
     dc.domain,
     dc.category,
     dc.subcategory,
-    MAX(tsd.ts) as last_data_timestamp,
+    latest.last_data_timestamp,
     NOW() as current_timestamp,
     CASE 
         WHEN ts.frequency = '1 hour' THEN NOW() - INTERVAL '6 hours'
@@ -439,7 +612,7 @@ SELECT
         ELSE NOW() - INTERVAL '2 days'
     END as expected_threshold,
     CASE 
-        WHEN MAX(tsd.ts) >= CASE 
+        WHEN latest.last_data_timestamp >= CASE 
             WHEN ts.frequency = '1 hour' THEN NOW() - INTERVAL '12 hours'
             WHEN ts.frequency = '1 day' THEN NOW() - INTERVAL '2 days'
             WHEN ts.frequency = '15 minutes' THEN NOW() - INTERVAL '6 hours'
@@ -448,9 +621,14 @@ SELECT
         ELSE FALSE
     END as has_recent_data
 FROM data_portal.time_series ts
-LEFT JOIN data_portal.time_series_data tsd ON ts.series_id = tsd.series_id
 LEFT JOIN data_portal.domain_category dc ON ts.domain_category_id = dc.id
-GROUP BY ts.series_id, ts.name, ts.frequency, ts.endpoint_prefix, dc.domain, dc.category, dc.subcategory;
+LEFT JOIN LATERAL (
+    SELECT tsd.ts AS last_data_timestamp
+    FROM data_portal.time_series_data tsd
+    WHERE tsd.series_id = ts.series_id
+    ORDER BY tsd.ts DESC
+    LIMIT 1
+) latest ON TRUE;
 
 COMMENT ON VIEW data_portal.v_data_availability IS 
 'Checks if time series have recent data based on their configured frequency:
@@ -464,31 +642,35 @@ COMMENT ON VIEW data_portal.v_data_availability IS
 -- ==========================================================
 CREATE OR REPLACE VIEW forecasts.v_ranking_base AS
 SELECT
-    cs.challenge_id,
+    cs.round_id,
     cs.model_id,
     cs.series_id,
     cs.mase,
     cs.rmse,
     cs.final_evaluation,
     cs.calculated_at,
-    -- Challenge Info
-    c.name AS challenge_name,
-    c.horizon,
-    c.end_time AS challenge_end_time,
-    c.start_time AS challenge_start_time,
+    -- Round Info
+    cr.name AS round_name,
+    cr.horizon,
+    cr.end_time AS round_end_time,
+    cr.start_time AS round_start_time,
+    cr.definition_id,
+    cd.name AS definition_name,
+    cd.domains AS definition_domains,
     -- Model Info
     mi.name AS model_name,
     u.username,
     -- Time Series Info
     ts.name AS series_name,
     ts.frequency,
-    ts.endpoint_prefix,
+    ts.unique_id,
     -- Domain Info
     dc.domain,
     dc.category,
     dc.subcategory
-FROM forecasts.challenge_scores cs
-JOIN challenges.challenges c ON c.id = cs.challenge_id
+FROM forecasts.scores cs
+JOIN challenges.rounds cr ON cr.id = cs.round_id
+LEFT JOIN challenges.v_active_definitions cd ON cr.definition_id = cd.id
 JOIN models.model_info mi ON mi.id = cs.model_id
 JOIN auth.users u ON u.id = mi.user_id
 JOIN data_portal.time_series ts ON ts.series_id = cs.series_id
@@ -497,22 +679,30 @@ WHERE cs.mase IS NOT NULL
   AND cs.mase != 'NaN'
   AND cs.mase != 'Infinity'
   AND cs.mase != '-Infinity'
-  AND cs.final_evaluation;
+  AND cs.final_evaluation
+  -- Exclude series marked as excluded in definition_series_scd2
+  AND NOT EXISTS (
+      SELECT 1 FROM challenges.definition_series_scd2 ds
+      WHERE ds.definition_id = cr.definition_id 
+        AND ds.series_id = cs.series_id
+        AND ds.is_excluded = TRUE
+  );
 COMMENT ON VIEW forecasts.v_ranking_base IS 
-'Base view for model rankings with all filter dimensions. Filters out invalid MASE values (NULL, NaN, Infinity).';
+'Base view for model rankings with all filter dimensions. 
+Filters out invalid MASE values (NULL, NaN, Infinity) and excluded series.';
 
 -- ==========================================================
 -- 9) Indexes for Ranking Performance
 -- ==========================================================
 
 -- Index for challenge_scores lookup
-CREATE INDEX IF NOT EXISTS idx_challenge_scores_lookup 
-ON forecasts.challenge_scores(challenge_id, model_id, series_id) 
+CREATE INDEX IF NOT EXISTS idx_scores_lookup 
+ON forecasts.scores(round_id, model_id, series_id) 
 WHERE mase IS NOT NULL;
 
--- Index for time-based filtering
-CREATE INDEX IF NOT EXISTS idx_challenges_end_time 
-ON challenges.challenges(end_time) 
+-- Index for time-based filtering on challenge rounds
+CREATE INDEX IF NOT EXISTS idx_rounds_end_time 
+ON challenges.rounds(end_time) 
 WHERE end_time IS NOT NULL;
 
 -- Index for domain/frequency filtering
@@ -528,12 +718,40 @@ CREATE INDEX IF NOT EXISTS idx_model_info_user
 ON models.model_info(user_id);
 
 -- Index for challenge_series_pseudo
-CREATE INDEX IF NOT EXISTS idx_challenge_series_pseudo_series
-ON challenges.challenge_series_pseudo(series_id);
+CREATE INDEX IF NOT EXISTS idx_series_pseudo_series
+ON challenges.series_pseudo(series_id);
 
--- Index for challenges (time-based filtering)
-CREATE INDEX IF NOT EXISTS idx_challenges_time_range
-ON challenges.challenges(registration_start, registration_end, end_time);
+CREATE INDEX idx_forecasts_round_model 
+ON forecasts.forecasts(round_id, model_id);
+
+-- Composite index for round + series queries (used by dashboard get_series_forecasts)
+CREATE INDEX IF NOT EXISTS idx_forecasts_round_series 
+ON forecasts.forecasts(round_id, series_id);
+
+CREATE INDEX IF NOT EXISTS idx_forecasts_series_id ON forecasts.forecasts(series_id);
+CREATE INDEX IF NOT EXISTS idx_scores_series_id ON forecasts.scores(series_id);
+CREATE INDEX IF NOT EXISTS idx_context_data_series_id ON challenges.context_data(series_id);
+
+-- Composite index for series_pseudo lookups by round + series
+CREATE INDEX IF NOT EXISTS idx_series_pseudo_round_series 
+ON challenges.series_pseudo(round_id, series_id);
+
+-- Index for model-based filtering on forecasts (critical for deletions and model queries)
+CREATE INDEX IF NOT EXISTS idx_forecasts_model_id 
+ON forecasts.forecasts(model_id);
+
+-- Index for model-based filtering on scores
+CREATE INDEX IF NOT EXISTS idx_scores_model_id 
+ON forecasts.scores(model_id);
+
+-- Index for model-based filtering on participants
+CREATE INDEX IF NOT EXISTS idx_participants_model_id 
+ON challenges.participants(model_id);
+
+-- Index for efficient "latest data per series" lookups (used by v_data_availability)
+CREATE INDEX IF NOT EXISTS idx_time_series_data_series_ts_desc 
+ON data_portal.time_series_data(series_id, ts DESC);
+
 
 -- ==========================================================
 -- 10) Continuous Aggregates for Multi-Granularity Time Series
@@ -642,6 +860,259 @@ COMMENT ON MATERIALIZED VIEW data_portal.time_series_1h IS
 
 COMMENT ON MATERIALIZED VIEW data_portal.time_series_1d IS 
 'Continuous aggregate for daily data. Aggregates all time series with frequency <= 1 day.';
+
+-- ==========================================================
+-- 11) Daily Rankings System (Bootstrapped ELO Snapshots)
+-- ==========================================================
+
+-- Daily Rankings Table (Fact Table)
+-- Stores daily ELO snapshots per model, scoped by type
+CREATE TABLE IF NOT EXISTS forecasts.daily_rankings (
+    id SERIAL PRIMARY KEY,
+    calculation_date DATE NOT NULL,
+    model_id INTEGER NOT NULL REFERENCES models.model_info(id) ON DELETE CASCADE,
+    
+    -- Scope: defines WHAT this ranking applies to
+    -- 'global' = platform-wide ranking across all challenges
+    -- 'definition' = per challenge definition ranking (scope_id = definition_id)
+    -- 'frequency_horizon' = grouped by frequency+horizon (scope_id = e.g. '00:15:00_1 day')
+    scope_type TEXT NOT NULL CHECK (scope_type IN ('global', 'definition', 'frequency_horizon')),
+    scope_id TEXT,  -- NULL for global, definition_id as string, or "frequency_horizon" key
+    
+    -- ELO Results from Bootstrapping
+    elo_rating_median DOUBLE PRECISION NOT NULL,
+    elo_ci_lower DOUBLE PRECISION,
+    elo_ci_upper DOUBLE PRECISION,
+    
+    -- Metadata
+    matches_played INTEGER DEFAULT 0,
+    rank_position INTEGER,
+    n_bootstraps INTEGER DEFAULT 500,
+    calculation_duration_ms INTEGER,
+    calculated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    
+    -- Cumulative MASE/RMSE snapshot (computed at calculation time)
+    avg_mase DOUBLE PRECISION,
+    mase_std DOUBLE PRECISION,
+    avg_rmse DOUBLE PRECISION,
+    evaluated_count INTEGER DEFAULT 0
+);
+
+-- Unique constraint: one row per model per scope per day
+CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_rankings_unique 
+ON forecasts.daily_rankings(
+    calculation_date, 
+    model_id, 
+    scope_type, 
+    COALESCE(scope_id, '')
+);
+
+-- Indexes for fast lookups
+CREATE INDEX IF NOT EXISTS idx_daily_rankings_date ON forecasts.daily_rankings(calculation_date);
+CREATE INDEX IF NOT EXISTS idx_daily_rankings_model ON forecasts.daily_rankings(model_id);
+CREATE INDEX IF NOT EXISTS idx_daily_rankings_scope ON forecasts.daily_rankings(scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_daily_rankings_score_desc ON forecasts.daily_rankings(elo_rating_median DESC);
+
+COMMENT ON TABLE forecasts.daily_rankings IS 
+'Daily ELO ranking snapshots. Each row represents a model''s ELO score for a specific date and scope.
+Scopes: global (all challenges), definition (per challenge definition), frequency_horizon (grouped by frequency+horizon).
+Uses full historical data (no time-window truncation) for maximum statistical robustness.';
+
+COMMENT ON COLUMN forecasts.daily_rankings.calculation_date IS 
+'The date this snapshot was calculated. Used for trajectory visualization over time.';
+
+COMMENT ON COLUMN forecasts.daily_rankings.scope_type IS 
+'Type of ranking scope: global, definition, or frequency_horizon.';
+
+COMMENT ON COLUMN forecasts.daily_rankings.scope_id IS 
+'Scope identifier. NULL for global, definition_id for definition, or "frequency::horizon" for frequency_horizon.';
+
+COMMENT ON COLUMN forecasts.daily_rankings.elo_rating_median IS 
+'Median ELO rating from N bootstrap iterations. Higher is better. Base rating is 1000.';
+
+-- View: Daily Rankings Leaderboard with model and definition info
+CREATE OR REPLACE VIEW forecasts.v_daily_rankings_leaderboard AS
+SELECT 
+    dr.id,
+    dr.calculation_date,
+    dr.elo_rating_median,
+    dr.elo_ci_lower,
+    dr.elo_ci_upper,
+    dr.matches_played,
+    dr.rank_position,
+    dr.n_bootstraps,
+    dr.calculation_duration_ms,
+    dr.calculated_at,
+    dr.scope_type,
+    dr.scope_id,
+    -- Pre-computed MASE/RMSE from snapshot
+    dr.avg_mase,
+    dr.mase_std,
+    dr.avg_rmse,
+    dr.evaluated_count,
+    -- Flag for most recent ranking in this scope
+    (dr.calculation_date = MAX(dr.calculation_date) OVER (PARTITION BY dr.scope_type, dr.scope_id)) AS is_latest,
+    -- Model info
+    mi.id as model_id,
+    mi.name as model_name,
+    mi.readable_id,
+    mi.model_family,
+    mi.model_type,
+    mi.architecture,
+    mi.model_size, 
+    -- User info
+    u.username,
+    o.name as organization_name,
+    -- Definition info (only for scope_type='definition')
+    CASE WHEN dr.scope_type = 'definition' THEN cd.id END as definition_id,
+    CASE WHEN dr.scope_type = 'definition' THEN cd.name END as definition_name,
+    CASE WHEN dr.scope_type = 'definition' THEN cd.schedule_id END as definition_schedule_id
+FROM forecasts.daily_rankings dr
+JOIN models.model_info mi ON dr.model_id = mi.id
+JOIN auth.users u ON mi.user_id = u.id
+LEFT JOIN auth.organizations o ON mi.organization_id = o.id
+LEFT JOIN challenges.definitions cd ON dr.scope_type = 'definition' AND dr.scope_id = cd.id::text
+ORDER BY dr.calculation_date DESC, dr.scope_type, dr.scope_id NULLS FIRST, dr.elo_rating_median DESC;
+
+COMMENT ON VIEW forecasts.v_daily_rankings_leaderboard IS 
+'Leaderboard view combining daily rankings with model metadata.
+Includes pre-computed avg_mase, mase_std, avg_rmse from snapshot.
+Includes is_latest flag to easily filter for the most recent ranking per scope.';
+
+-- ==========================================================
+-- 12) Round-Level Model Scores & Latest Rankings System
+-- ==========================================================
+
+-- Materialized View: Round Model Scores
+-- Aggregates raw scores by round (based on round registration_start) and scope.
+-- Stores SUMS to allow cumulative calculations in the final view.
+-- Granularity: per-round (= per-day since rounds occur once daily)
+CREATE MATERIALIZED VIEW IF NOT EXISTS forecasts.round_model_scores AS
+-- Global Scope
+SELECT
+    r.id as round_id,
+    r.registration_start::date as round_date,
+    s.model_id,
+    'global' as scope_type,
+    CAST(NULL AS TEXT) as scope_id,
+    SUM(s.mase) as sum_mase,
+    SUM(s.mase * s.mase) as sum_mase_sq,
+    SUM(s.rmse) as sum_rmse,
+    COUNT(*) as num_scores
+FROM forecasts.scores s
+JOIN challenges.rounds r ON s.round_id = r.id
+WHERE s.mase IS NOT NULL
+  AND s.mase != 'NaN'::double precision
+  AND s.mase != 'Infinity'::double precision
+  AND s.mase != '-Infinity'::double precision
+  AND s.final_evaluation = TRUE
+  -- Exclude series marked as excluded in definition_series_scd2
+  AND NOT EXISTS (
+      SELECT 1 FROM challenges.definition_series_scd2 ds
+      WHERE ds.definition_id = r.definition_id 
+        AND ds.series_id = s.series_id
+        AND ds.is_excluded = TRUE
+  )
+GROUP BY r.id, r.registration_start::date, s.model_id
+
+UNION ALL
+
+-- Definition Scope
+SELECT
+    r.id as round_id,
+    r.registration_start::date as round_date,
+    s.model_id,
+    'definition' as scope_type,
+    CAST(r.definition_id AS TEXT) as scope_id,
+    SUM(s.mase) as sum_mase,
+    SUM(s.mase * s.mase) as sum_mase_sq,
+    SUM(s.rmse) as sum_rmse,
+    COUNT(*) as num_scores
+FROM forecasts.scores s
+JOIN challenges.rounds r ON s.round_id = r.id
+WHERE s.mase IS NOT NULL
+  AND s.mase != 'NaN'::double precision
+  AND s.mase != 'Infinity'::double precision
+  AND s.mase != '-Infinity'::double precision
+  AND s.final_evaluation = TRUE
+  AND NOT EXISTS (
+      SELECT 1 FROM challenges.definition_series_scd2 ds
+      WHERE ds.definition_id = r.definition_id 
+        AND ds.series_id = s.series_id
+        AND ds.is_excluded = TRUE
+  )
+GROUP BY r.id, r.registration_start::date, s.model_id, r.definition_id
+
+UNION ALL
+
+-- Frequency+Horizon Scope
+SELECT
+    r.id as round_id,
+    r.registration_start::date as round_date,
+    s.model_id,
+    'frequency_horizon' as scope_type,
+    CONCAT(d.frequency::text, '::', d.horizon::text) as scope_id,
+    SUM(s.mase) as sum_mase,
+    SUM(s.mase * s.mase) as sum_mase_sq,
+    SUM(s.rmse) as sum_rmse,
+    COUNT(*) as num_scores
+FROM forecasts.scores s
+JOIN challenges.rounds r ON s.round_id = r.id
+JOIN challenges.definitions d ON r.definition_id = d.id
+WHERE s.mase IS NOT NULL
+  AND s.mase != 'NaN'::double precision
+  AND s.mase != 'Infinity'::double precision
+  AND s.mase != '-Infinity'::double precision
+  AND s.final_evaluation = TRUE
+  AND NOT EXISTS (
+      SELECT 1 FROM challenges.definition_series_scd2 ds
+      WHERE ds.definition_id = r.definition_id 
+        AND ds.series_id = s.series_id
+        AND ds.is_excluded = TRUE
+  )
+GROUP BY r.id, r.registration_start::date, s.model_id, d.frequency, d.horizon;
+
+-- Unique index for concurrent refresh
+CREATE UNIQUE INDEX IF NOT EXISTS idx_round_scores_unique 
+ON forecasts.round_model_scores(round_id, model_id, scope_type, COALESCE(scope_id, ''));
+
+-- Additional indexes for query performance
+CREATE INDEX IF NOT EXISTS idx_round_scores_date ON forecasts.round_model_scores(round_date);
+CREATE INDEX IF NOT EXISTS idx_round_scores_model ON forecasts.round_model_scores(model_id);
+CREATE INDEX IF NOT EXISTS idx_round_scores_scope ON forecasts.round_model_scores(scope_type, scope_id);
+
+COMMENT ON MATERIALIZED VIEW forecasts.round_model_scores IS 
+'Round-level aggregated model scores. Stores per-round MASE/RMSE sums for computing
+cumulative metrics up to any calculation_date. Granularity is per-round (= per-day).
+Filters: final_evaluation=TRUE, excludes problematic series, excludes invalid MASE values.';
+
+-- Refresh Procedure for Round Scores
+CREATE OR REPLACE PROCEDURE forecasts.refresh_round_scores()
+AS $$
+BEGIN
+    REFRESH MATERIALIZED VIEW CONCURRENTLY forecasts.round_model_scores;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Schedule the refresh job (every 1 hour)
+SELECT add_job('forecasts.refresh_round_scores', '1 hour');
+
+
+-- View: Monthly and Latest Rankings (simplified - uses pre-computed snapshots)
+CREATE OR REPLACE VIEW forecasts.v_monthly_and_latest_rankings AS
+SELECT 
+    dr.*,
+    -- Date flags for filtering
+    (dr.calculation_date = (date_trunc('month', dr.calculation_date) + interval '1 month - 1 day')::date) as is_month_end
+FROM forecasts.v_daily_rankings_leaderboard dr
+WHERE 
+    dr.is_latest = TRUE 
+    OR (dr.calculation_date = (date_trunc('month', dr.calculation_date) + interval '1 month - 1 day')::date);
+
+COMMENT ON VIEW forecasts.v_monthly_and_latest_rankings IS 
+'Rankings filtered for "Latest" (most recent) and "End of Month" snapshots.
+MASE/RMSE are pre-computed at ELO calculation time (no on-the-fly computation).
+Much faster than the previous CTE-based approach.';
 
 -- ==========================================================
 -- Final message

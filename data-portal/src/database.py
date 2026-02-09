@@ -9,10 +9,8 @@ from src.config import Config
 
 logger = logging.getLogger(__name__)
 
-# Declarative base for models
 Base = declarative_base()
 
-# Async database engine
 engine = create_async_engine(
     Config.DATABASE_URL,
     pool_pre_ping=True,
@@ -21,7 +19,6 @@ engine = create_async_engine(
     echo=False,
 )
 
-# Async session factory
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,

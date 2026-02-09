@@ -30,16 +30,16 @@ async def get_model_info_service(db: AsyncSession = Depends(get_db)) -> ModelInf
     "/upload",
     response_model=ForecastUploadResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Upload forecasts for a challenge",
+    summary="Upload forecasts for a challenge round",
     description=(
-        "Upload forecasts for a challenge. Requirements:\n"
+        "Upload forecasts for a challenge round. Requirements:\n"
         "- Valid API key in X-API-Key header\n"
         "- User must own the model\n"
         "- Current time must be within challenge registration window (registration_start to registration_end)\n"
         "- Forecast timestamps must be within challenge horizon\n"
         "- Use challenge_series_name identifiers from the challenge context instead of raw series_id\n\n"
         "**Auto-Registration**: Uploading a forecast automatically registers "
-        "your model as a participant in the challenge. No pre-registration required!"
+        "your model as a participant in the challenge round. No pre-registration required!"
     )
 )
 async def upload_forecasts(
@@ -48,7 +48,7 @@ async def upload_forecasts(
     service: ForecastService = Depends(get_forecast_service)
 ) -> ForecastUploadResponse:
     """
-    Upload forecasts for a challenge.
+    Upload forecasts for a challenge round.
     
     The endpoint validates:
     1. User authorization (owns the model)
@@ -73,16 +73,16 @@ async def upload_forecasts(
 
 
 @router.get(
-    "/{challenge_id}/{model_id}",
+    "/{round_id}/{model_id}",
     response_model=ForecastListResponse,
-    summary="Get forecasts for a challenge and model",
+    summary="Get forecasts for a challenge round and model",
     description=(
-        "Retrieve all forecasts for a specific model in a challenge. "
+        "Retrieve all forecasts for a specific model in a challenge round. "
         "Optionally filter by challenge_series_name."
     )
 )
 async def get_forecasts(
-    challenge_id: int,
+    round_id: int,
     model_id: int,
     challenge_series_name: Optional[str] = None,
     current_user: dict = Depends(require_auth),
@@ -90,7 +90,7 @@ async def get_forecasts(
     model_service: ModelInfoService = Depends(get_model_info_service)
 ) -> ForecastListResponse:
     """
-    Retrieve forecasts for a specific challenge and model.
+    Retrieve forecasts for a specific challenge round and model.
     Optionally filter by series_id.
     
     - **Internal Service**: Can see all forecasts.
@@ -107,7 +107,7 @@ async def get_forecasts(
              raise HTTPException(status_code=403, detail="Not authorized to view these forecasts")
 
     forecasts_data = await service.get_forecasts(
-        challenge_id=challenge_id,
+        round_id=round_id,
         model_id=model_id,
         challenge_series_name=challenge_series_name
     )
@@ -123,7 +123,46 @@ async def get_forecasts(
     ]
     
     return ForecastListResponse(
-        challenge_id=challenge_id,
+        round_id=round_id,
         model_id=model_id,
         forecasts=forecasts
     )
+
+
+from app.api.dependencies import get_challenge_service
+from app.services.challenge_service import ChallengeService
+
+
+@router.get(
+    "/naive-template/{round_id}",
+    response_model=ForecastUploadRequest,
+    summary="Get a naive forecast template for easy upload",
+    description=(
+        "Returns a ready-to-upload naive forecast template matching the ForecastUploadRequest structure. "
+        "Uses persistence (last context value) as the prediction method. "
+        "Timestamps are correctly calculated based on round horizon and frequency. "
+        "The template includes model_name='Naive' and can be posted to /forecasts/upload if a corresponding model is registered."
+    )
+)
+async def get_naive_forecast_template(
+    round_id: int,
+    current_user: dict = Depends(require_auth),
+    challenge_service: ChallengeService = Depends(get_challenge_service)
+) -> ForecastUploadRequest:
+    """
+    Returns a naive forecast template ready for direct upload.
+    
+    The template uses the last known context value as the prediction 
+    for all forecast timestamps (persistence/naive method).
+    
+    Response structure matches ForecastUploadRequest exactly:
+    - round_id: The challenge round ID
+    - model_name: "Naive" (persistence baseline)
+    - forecasts: List of series with their forecast data points
+    """
+    try:
+        template = await challenge_service.generate_naive_forecast_template(round_id)
+        return ForecastUploadRequest(**template)
+    except ValueError as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=str(e))

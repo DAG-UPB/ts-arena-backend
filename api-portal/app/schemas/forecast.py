@@ -22,9 +22,10 @@ class ForecastSeriesUpload(BaseModel):
     forecasts: List[ForecastDataPoint] = Field(..., description="List of forecast data points")
 
 
+
 class ForecastUploadRequest(BaseModel):
     """Request payload for uploading forecasts."""
-    challenge_id: int = Field(..., description="ID of the challenge")
+    round_id: int = Field(..., description="ID of the challenge round")
     model_name: str = Field(..., description="Name of the model making predictions")
     forecasts: List[ForecastSeriesUpload] = Field(
         ..., 
@@ -46,7 +47,7 @@ class ForecastUploadResponse(BaseModel):
 class ForecastInDB(BaseModel):
     """Forecast record as stored in database (single row)."""
     id: int
-    challenge_id: int
+    round_id: int
     model_id: int
     series_id: int
     ts: datetime
@@ -69,6 +70,7 @@ class ForecastResponse(BaseModel):
 
 class ForecastListResponse(BaseModel):
     """Response for listing forecasts."""
-    challenge_id: int
+    round_id: int
     model_id: int
     forecasts: List[ForecastResponse]
+
