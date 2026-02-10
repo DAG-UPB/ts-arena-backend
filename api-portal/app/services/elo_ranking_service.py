@@ -689,6 +689,11 @@ class EloRankingService:
         stats = {}
         for row in result.fetchall():
             model_id, total_mase, total_mase_sq, total_rmse, total_scores = row
+            # Cast Decimal values from DB to float for arithmetic
+            total_mase = float(total_mase) if total_mase is not None else None
+            total_mase_sq = float(total_mase_sq) if total_mase_sq is not None else None
+            total_rmse = float(total_rmse) if total_rmse is not None else None
+            total_scores = float(total_scores) if total_scores is not None else None
             
             avg_mase = None
             mase_std = None
