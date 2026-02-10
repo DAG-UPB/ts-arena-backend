@@ -120,10 +120,10 @@ class ChallengeRoundResponse(ChallengeRoundBase):
 
 
 class ChallengeRoundFull(ChallengeRoundBase):
-    """Full challenge round (for admin/internal use)."""
+    """Full challenge round (for admin/internal use).
+        """
     id: int
     definition_id: Optional[int] = None
-    status: RoundStatus
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

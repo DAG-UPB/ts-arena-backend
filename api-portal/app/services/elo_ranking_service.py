@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 from dataclasses import dataclass
 import numpy as np
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -177,8 +177,8 @@ class EloRankingService:
         scope_type: str,
         scope_id: Optional[str],
         definition_id: Optional[int],
-        frequency: Optional[str],
-        horizon: Optional[str],
+        frequency: Optional[timedelta],
+        horizon: Optional[timedelta],
         n_bootstraps: int,
         calculation_date: date
     ) -> Optional[Dict[str, Any]]:
@@ -232,8 +232,8 @@ class EloRankingService:
     async def calculate_elo_ratings(
         self,
         definition_id: Optional[int] = None,
-        frequency: Optional[str] = None,
-        horizon: Optional[str] = None,
+        frequency: Optional[timedelta] = None,
+        horizon: Optional[timedelta] = None,
         n_bootstraps: int = DEFAULT_N_BOOTSTRAPS,
         k_factor: float = DEFAULT_K_FACTOR,
         base_rating: float = DEFAULT_BASE_RATING
@@ -332,8 +332,8 @@ class EloRankingService:
     async def _get_scores_matrix(
         self,
         definition_id: Optional[int] = None,
-        frequency: Optional[str] = None,
-        horizon: Optional[str] = None
+        frequency: Optional[timedelta] = None,
+        horizon: Optional[timedelta] = None
     ) -> Tuple[np.ndarray, List[int], List[int]]:
         """
         Build pivot matrix: rows=round_id matches, cols=model_id, values=AVG(MASE).
@@ -380,8 +380,8 @@ class EloRankingService:
             base_query += """
                 AND cr.definition_id IN (
                     SELECT id FROM challenges.definitions 
-                    WHERE frequency = CAST(:frequency AS interval) 
-                      AND horizon = CAST(:horizon AS interval)
+                    WHERE frequency = :frequency 
+                      AND horizon = :horizon
                 )
             """
             params["frequency"] = frequency
@@ -547,10 +547,41 @@ class EloRankingService:
         result = await self.session.execute(query)
         return [row[0] for row in result.fetchall()]
     
-    async def _get_frequency_horizon_groups(self) -> List[Tuple[str, str]]:
+    @staticmethod
+    def _parse_pg_interval(text_val: str) -> timedelta:
+        """
+        Parse a PostgreSQL interval text representation into a timedelta.
+        Handles formats like '00:15:00', '1 day', '3 days', '1 day 02:00:00', etc.
+        """
+        days = 0
+        hours = 0
+        minutes = 0
+        seconds = 0
+        
+        parts = text_val.strip().split()
+        i = 0
+        while i < len(parts):
+            if i + 1 < len(parts) and parts[i + 1].startswith('day'):
+                days = int(parts[i])
+                i += 2
+            elif ':' in parts[i]:
+                time_parts = parts[i].split(':')
+                hours = int(time_parts[0])
+                minutes = int(time_parts[1])
+                seconds = int(time_parts[2]) if len(time_parts) > 2 else 0
+                i += 1
+            else:
+                i += 1
+        
+        return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
+
+    async def _get_frequency_horizon_groups(self) -> List[Tuple[timedelta, timedelta]]:
         """
         Get unique frequency+horizon combinations from challenges.definitions
         that have finalized scores.
+        
+        Returns timedelta objects so asyncpg can properly serialize them
+        as interval bind parameters.
         """
         query = text("""
             SELECT DISTINCT cd.frequency::text AS freq, cd.horizon::text AS hor
@@ -564,7 +595,10 @@ class EloRankingService:
             ORDER BY freq, hor
         """)
         result = await self.session.execute(query)
-        return [(row[0], row[1]) for row in result.fetchall()]
+        return [
+            (self._parse_pg_interval(row[0]), self._parse_pg_interval(row[1]))
+            for row in result.fetchall()
+        ]
     
     async def _store_ratings(
         self,
