@@ -18,6 +18,7 @@ class ChallengeDefinitionSchema(BaseModel):
     subcategories: List[str] = []
     frequency: Optional[timedelta] = None
     horizon: Optional[timedelta] = None
+    context_length: Optional[int] = None
     created_at: Optional[datetime] = None
     next_registration_start: Optional[datetime] = None
     next_registration_end: Optional[datetime] = None

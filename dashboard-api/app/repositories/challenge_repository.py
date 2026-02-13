@@ -28,6 +28,7 @@ class ChallengeRepository:
                 subcategories,
                 frequency,
                 horizon,
+                context_length,
                 created_at,
                 cron_schedule,
                 registration_duration
@@ -72,6 +73,7 @@ class ChallengeRepository:
                 subcategories,
                 frequency,
                 horizon,
+                context_length,
                 created_at
             FROM challenges.v_active_definitions
             WHERE id = %s;
