@@ -1,6 +1,6 @@
 # TS-Arena Backend
 
-For the main repository and full project documentation, please visit: [TS-Arena](https://github.com/DAG-UPB/ts-arena)
+
 
 This repository serves as a sub-component containing the backend infrastructure, including:
 - **API-Portal**

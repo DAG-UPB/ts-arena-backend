@@ -20,7 +20,7 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - API_KEY=${DASHBOARD_API_KEY}
-      - CORS_ORIGINS=["http://localhost:8501","http://arena-app:8501", "https://huggingface.co/spaces/DAG-UPB/TS-Arena"]
+      - CORS_ORIGINS=["http://localhost:8501","http://arena-app:8501"]
       - DEBUG=${DEBUG:-false}
     networks:
       - default

@@ -77,7 +77,7 @@ async def get_filtered_rankings(
           "model_name": "ExampleModel",
           "architecture": "decoder-only",
           "model_size": 200,
-          "organization_name": "UPB",
+          "organization_name": "Example Org",
           "elo_rating_median": 1337.5,
           "elo_ci_lower": 1300.2,
           "elo_ci_upper": 1374.8,
