@@ -1094,8 +1094,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Schedule the refresh job (every 1 hour)
-SELECT add_job('forecasts.refresh_round_scores', '1 hour');
+-- Schedule the refresh job (every 10 minutes)
+-- This ensures the materialized view stays in sync with the score evaluation job
+-- which also runs every 10 minutes, making new MASE values immediately available
+-- for ELO ranking calculations
+SELECT add_job('forecasts.refresh_round_scores', '10 minutes');
 
 
 -- View: Monthly and Latest Rankings (simplified - uses pre-computed snapshots)
