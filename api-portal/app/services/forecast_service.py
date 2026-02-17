@@ -106,7 +106,17 @@ class ForecastService:
         errors = []
         total_inserted = 0
         
-        # === Step 5: Process each series ===
+        # === Step 5: Calculate expected forecast count ===
+        # Each series should have horizon/frequency forecast points
+        if challenge.horizon and challenge.frequency:
+            expected_forecast_count = int(
+                challenge.horizon.total_seconds() / challenge.frequency.total_seconds()
+            )
+        else:
+            # If frequency or horizon is not set, we cannot validate
+            expected_forecast_count = None
+
+        # === Step 6: Process each series ===
         for series_upload in upload_request.forecasts:
             # Map challenge_series_name -> series_id for this challenge
             challenge_series_name = series_upload.challenge_series_name
@@ -114,10 +124,21 @@ class ForecastService:
             if series_id is None:
                 errors.append(f"Unknown challenge_series_name '{challenge_series_name}' for round {round_id}")
                 continue
-            
+
+            # Validate forecast count
+            actual_forecast_count = len(series_upload.forecasts)
+            if expected_forecast_count is not None:
+                if actual_forecast_count != expected_forecast_count:
+                    errors.append(
+                        f"Invalid forecast count for series '{challenge_series_name}': "
+                        f"expected {expected_forecast_count} forecast points (horizon={challenge.horizon}, "
+                        f"frequency={challenge.frequency}), but received {actual_forecast_count}"
+                    )
+                    continue
+
             # Prepare forecasts without timestamp validation
             valid_forecasts = []
-            
+
             for forecast_point in series_upload.forecasts:
                 valid_forecasts.append({
                     "ts": forecast_point.ts,
@@ -160,7 +181,7 @@ class ForecastService:
                     errors.append(error_msg)
                     logger.error(error_msg)
         
-        # === Step 6: Return response ===
+        # === Step 7: Return response ===
         success = total_inserted > 0
         message = f"Successfully inserted {total_inserted} forecasts"
         if errors:
