@@ -1,25 +1,6 @@
 services:
-  api-portal:
-    ports:
-      - "8460:8000"
-
-  dashboard-api:
-    ports:
-      - "8487:8000"
-
-  data-portal:
-    ports:
-      - "8490:8000"
 
   timescaledb:
-    ports:
-      - "5433:5432"
     volumes:
-      - dbarena:/var/lib/postgresql/data
-
-  cloudbeaver:
-    ports:
-      - "8980:8978"
-
-volumes:
-  dbarena:
+      - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+      - ./database:/var/lib/postgresql/data
