@@ -49,7 +49,7 @@ services:
       - timescaledb
 
   timescaledb:
-    image: timescale/timescaledb:latest-pg16
+    image: timescale/timescaledb:2.24.0-pg16
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
