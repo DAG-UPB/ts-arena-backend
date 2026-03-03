@@ -17,3 +17,5 @@ __pycache__/
 .env
 cloudbeaver
 migrations
+database
+.claude
