@@ -1087,6 +1087,7 @@ Filters: final_evaluation=TRUE, excludes problematic series, excludes invalid MA
 
 -- Refresh Procedure for Round Scores
 -- TimescaleDB user-defined actions must accept (job_id INT, config JSONB)
+DROP PROCEDURE IF EXISTS forecasts.refresh_round_scores();
 CREATE OR REPLACE PROCEDURE forecasts.refresh_round_scores(job_id INT, config JSONB)
 LANGUAGE plpgsql AS $$
 BEGIN
