@@ -2102,7 +2102,7 @@ timeseries:
       schedule: 7 minutes
     default_params:
       filter: 4170
-      region: AT
+      region: DE
       resolution: quarterhour
   electricity_market_price_BZ_BE_quarterhour_4996:
     module: src.plugins.data_sources.smard_plugin
@@ -2122,7 +2122,7 @@ timeseries:
       schedule: 7 minutes
     default_params:
       filter: 4996
-      region: BE
+      region: DE
       resolution: quarterhour
   electricity_market_price_BZ_CH_quarterhour_259:
     module: src.plugins.data_sources.smard_plugin
@@ -2142,7 +2142,7 @@ timeseries:
       schedule: 7 minutes
     default_params:
       filter: 259
-      region: CH
+      region: DE
       resolution: quarterhour
   electricity_market_price_BZ_CZ_quarterhour_261:
     module: src.plugins.data_sources.smard_plugin
@@ -2163,7 +2163,7 @@ timeseries:
       schedule: 7 minutes
     default_params:
       filter: 261
-      region: CZ
+      region: DE
       resolution: quarterhour
   electricity_market_price_BZ_DE-LU_neighbors_quarterhour_5078:
     module: src.plugins.data_sources.smard_plugin
@@ -2184,7 +2184,7 @@ timeseries:
       schedule: 7 minutes
     default_params:
       filter: 5078
-      region: DE-LU_neighbors
+      region: DE
       resolution: quarterhour
   electricity_market_price_BZ_DE-LU_quarterhour_4169:
     module: src.plugins.data_sources.smard_plugin
@@ -2225,7 +2225,7 @@ timeseries:
       schedule: 7 minutes
     default_params:
       filter: 252
-      region: DK1
+      region: DE
       resolution: quarterhour
   electricity_market_price_BZ_DK2_quarterhour_253:
     module: src.plugins.data_sources.smard_plugin
@@ -2245,7 +2245,7 @@ timeseries:
       schedule: 7 minutes
     default_params:
       filter: 253
-      region: DK2
+      region: DE
       resolution: quarterhour
   electricity_market_price_BZ_FR_quarterhour_254:
     module: src.plugins.data_sources.smard_plugin
@@ -2265,7 +2265,7 @@ timeseries:
       schedule: 7 minutes
     default_params:
       filter: 254
-      region: FR
+      region: DE
       resolution: quarterhour
   electricity_market_price_BZ_HU_quarterhour_262:
     module: src.plugins.data_sources.smard_plugin
@@ -2285,7 +2285,7 @@ timeseries:
       schedule: 7 minutes
     default_params:
       filter: 262
-      region: HU
+      region: DE
       resolution: quarterhour
   electricity_market_price_BZ_IT-NORTH_quarterhour_255:
     module: src.plugins.data_sources.smard_plugin
@@ -2306,7 +2306,7 @@ timeseries:
       schedule: 7 minutes
     default_params:
       filter: 255
-      region: IT-NORTH
+      region: DE
       resolution: quarterhour
   electricity_market_price_BZ_NL_quarterhour_256:
     module: src.plugins.data_sources.smard_plugin
@@ -2326,7 +2326,7 @@ timeseries:
       schedule: 7 minutes
     default_params:
       filter: 256
-      region: NL
+      region: DE
       resolution: quarterhour
   electricity_market_price_BZ_NO2_quarterhour_4997:
     module: src.plugins.data_sources.smard_plugin
@@ -2346,7 +2346,7 @@ timeseries:
       schedule: 7 minutes
     default_params:
       filter: 4997
-      region: NO2
+      region: DE
       resolution: quarterhour
   electricity_market_price_BZ_PL_quarterhour_257:
     module: src.plugins.data_sources.smard_plugin
@@ -2366,7 +2366,7 @@ timeseries:
       schedule: 7 minutes
     default_params:
       filter: 257
-      region: PL
+      region: DE
       resolution: quarterhour
   electricity_market_price_BZ_SI_quarterhour_260:
     module: src.plugins.data_sources.smard_plugin
@@ -2386,7 +2386,7 @@ timeseries:
       schedule: 7 minutes
     default_params:
       filter: 260
-      region: SI
+      region: DE
       resolution: quarterhour
   electricity_natural_gas_power_plant_generation_BZ_AT_quarterhour_4071:
     module: src.plugins.data_sources.smard_plugin
