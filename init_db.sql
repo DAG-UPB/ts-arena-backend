@@ -1072,9 +1072,8 @@ WHERE s.mase IS NOT NULL
   )
 GROUP BY r.id, r.registration_start::date, s.model_id, d.frequency, d.horizon;
 
--- Unique index for concurrent refresh
-CREATE UNIQUE INDEX IF NOT EXISTS idx_round_scores_unique 
-ON forecasts.round_model_scores(round_id, model_id, scope_type, COALESCE(scope_id, ''));
+CREATE INDEX IF NOT EXISTS idx_round_scores_unique
+ON forecasts.round_model_scores(round_id, model_id, scope_type);
 
 -- Additional indexes for query performance
 CREATE INDEX IF NOT EXISTS idx_round_scores_date ON forecasts.round_model_scores(round_date);
@@ -1091,7 +1090,7 @@ Filters: final_evaluation=TRUE, excludes problematic series, excludes invalid MA
 CREATE OR REPLACE PROCEDURE forecasts.refresh_round_scores(job_id INT, config JSONB)
 LANGUAGE plpgsql AS $$
 BEGIN
-    REFRESH MATERIALIZED VIEW CONCURRENTLY forecasts.round_model_scores;
+    REFRESH MATERIALIZED VIEW forecasts.round_model_scores;
 END;
 $$;
 
