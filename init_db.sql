@@ -1072,9 +1072,8 @@ WHERE s.mase IS NOT NULL
   )
 GROUP BY r.id, r.registration_start::date, s.model_id, d.frequency, d.horizon;
 
--- Unique index for concurrent refresh
-CREATE UNIQUE INDEX IF NOT EXISTS idx_round_scores_unique 
-ON forecasts.round_model_scores(round_id, model_id, scope_type, COALESCE(scope_id, ''));
+CREATE INDEX IF NOT EXISTS idx_round_scores_unique
+ON forecasts.round_model_scores(round_id, model_id, scope_type);
 
 -- Additional indexes for query performance
 CREATE INDEX IF NOT EXISTS idx_round_scores_date ON forecasts.round_model_scores(round_date);
@@ -1087,12 +1086,14 @@ cumulative metrics up to any calculation_date. Granularity is per-round (= per-d
 Filters: final_evaluation=TRUE, excludes problematic series, excludes invalid MASE values.';
 
 -- Refresh Procedure for Round Scores
-CREATE OR REPLACE PROCEDURE forecasts.refresh_round_scores()
-AS $$
+-- TimescaleDB user-defined actions must accept (job_id INT, config JSONB)
+DROP PROCEDURE IF EXISTS forecasts.refresh_round_scores();
+CREATE OR REPLACE PROCEDURE forecasts.refresh_round_scores(job_id INT, config JSONB)
+LANGUAGE plpgsql AS $$
 BEGIN
-    REFRESH MATERIALIZED VIEW CONCURRENTLY forecasts.round_model_scores;
+    REFRESH MATERIALIZED VIEW forecasts.round_model_scores;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- Schedule the refresh job (every 1 hour)
 SELECT add_job('forecasts.refresh_round_scores', '1 hour');
