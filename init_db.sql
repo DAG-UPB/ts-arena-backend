@@ -1087,12 +1087,13 @@ cumulative metrics up to any calculation_date. Granularity is per-round (= per-d
 Filters: final_evaluation=TRUE, excludes problematic series, excludes invalid MASE values.';
 
 -- Refresh Procedure for Round Scores
-CREATE OR REPLACE PROCEDURE forecasts.refresh_round_scores()
-AS $$
+-- TimescaleDB user-defined actions must accept (job_id INT, config JSONB)
+CREATE OR REPLACE PROCEDURE forecasts.refresh_round_scores(job_id INT, config JSONB)
+LANGUAGE plpgsql AS $$
 BEGIN
     REFRESH MATERIALIZED VIEW CONCURRENTLY forecasts.round_model_scores;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- Schedule the refresh job (every 10 minutes)
 -- This ensures the materialized view stays in sync with the score evaluation job
