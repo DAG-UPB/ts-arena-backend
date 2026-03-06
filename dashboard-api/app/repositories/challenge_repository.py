@@ -261,6 +261,7 @@ class ChallengeRepository:
                     ts.frequency as frequency,
                     c.horizon,
                     ts.unique_id,
+                    ts.unit,
                     c.start_time as start_time,
                     c.end_time as end_time,
                     c.registration_start as registration_start,
