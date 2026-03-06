@@ -99,7 +99,7 @@ class ForecastRepository:
             
             # Get series info
             cur.execute("""
-                SELECT series_id, name
+                SELECT series_id, name, unit
                 FROM data_portal.time_series
                 WHERE series_id = %s
             """, (series_id,))
@@ -203,6 +203,7 @@ class ForecastRepository:
                 "definition_name": definition_row['name'],
                 "series_id": series_row['series_id'],
                 "series_name": series_row['name'],
+                "series_unit": series_row['unit'],
                 "rounds": result_rounds,
                 "ground_truth": ground_truth
             }

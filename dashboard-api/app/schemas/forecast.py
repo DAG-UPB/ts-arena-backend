@@ -31,5 +31,6 @@ class ModelSeriesForecastsAcrossRoundsSchema(BaseModel):
     definition_name: str
     series_id: int
     series_name: str
+    series_unit: Optional[str] = None
     rounds: List[RoundForecastStatus]
     ground_truth: List[GroundTruthDataPoint]
