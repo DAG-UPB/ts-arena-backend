@@ -111,8 +111,7 @@ class EloRankingService:
         freq_horizon_groups = await self._get_frequency_horizon_groups()
         logger.info(f"Found {len(freq_horizon_groups)} frequency+horizon groups")
         
-        for frequency, horizon in freq_horizon_groups:
-            scope_id = f"{frequency}::{horizon}"
+        for scope_id, frequency, horizon in freq_horizon_groups:
             calculations.append({
                 "scope_type": "frequency_horizon",
                 "scope_id": scope_id,
@@ -575,16 +574,21 @@ class EloRankingService:
         
         return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
 
-    async def _get_frequency_horizon_groups(self) -> List[Tuple[timedelta, timedelta]]:
+    async def _get_frequency_horizon_groups(self) -> List[Tuple[str, timedelta, timedelta]]:
         """
         Get unique frequency+horizon combinations from challenges.definitions
         that have finalized scores.
-        
-        Returns timedelta objects so asyncpg can properly serialize them
-        as interval bind parameters.
+
+        Returns tuples of (scope_id, frequency_timedelta, horizon_timedelta).
+        scope_id uses the PostgreSQL interval text format (e.g. '00:15:00::1 day')
+        to match the scope_id stored in round_model_scores.
+        frequency/horizon timedeltas are used as bind parameters for interval filters.
         """
         query = text("""
-            SELECT DISTINCT cd.frequency::text AS freq, cd.horizon::text AS hor
+            SELECT DISTINCT
+                cd.frequency::text AS freq,
+                cd.horizon::text AS hor,
+                CONCAT(cd.frequency::text, '::', cd.horizon::text) AS scope_id
             FROM challenges.definitions cd
             JOIN challenges.rounds cr ON cr.definition_id = cd.id
             JOIN forecasts.scores fs ON fs.round_id = cr.id
@@ -596,7 +600,7 @@ class EloRankingService:
         """)
         result = await self.session.execute(query)
         return [
-            (self._parse_pg_interval(row[0]), self._parse_pg_interval(row[1]))
+            (row[2], self._parse_pg_interval(row[0]), self._parse_pg_interval(row[1]))
             for row in result.fetchall()
         ]
     
