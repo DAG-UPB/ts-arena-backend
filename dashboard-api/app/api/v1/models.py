@@ -345,6 +345,7 @@ async def get_model_series_forecasts_across_rounds(
       "definition_name": "Day-Ahead Power Forecast",
       "series_id": 456,
       "series_name": "Power Load - Region A",
+      "series_unit": "MW",
       "rounds": [
         {
           "round_id": 1001,
