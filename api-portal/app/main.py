@@ -18,6 +18,8 @@ from app.scheduler.scheduler import ChallengeScheduler
 from app.scheduler.dependencies import set_scheduler
 from app.api.v1 import api_keys
 from app.api.dependencies import require_auth
+from sqlalchemy import text
+from app.database.connection import engine
 import asyncio
 
 logger = logging.getLogger("api-portal")
@@ -29,10 +31,31 @@ if not logger.handlers:
     logger.addHandler(handler)
 logger.propagate = False
 
+async def wait_for_db(logger, max_retries=10, delay=3.0):
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("SELECT 1"))
+            logger.info("Database connection established successfully!")
+            return True
+        except Exception as e:
+            logger.warning(f"Database not ready yet (attempt {attempt}/{max_retries}): {e}")
+            if attempt < max_retries:
+                await asyncio.sleep(delay)
+    
+    logger.error("Could not connect to database after maximum retries.")
+    return False
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.setLevel(getattr(logging, Config.LOG_LEVEL, logging.INFO))
     app.state.logger = logger
+    
+    # Wait for database to be ready before starting other components
+    if Config.DATABASE_URL:
+        db_ready = await wait_for_db(logger)
+        if not db_ready:
+            logger.warning("Starting API without stable database connection.")
 
     # Initialize scheduler (uses its own DB connection pool, not SessionLocal)
     scheduler = None
