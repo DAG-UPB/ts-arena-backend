@@ -137,7 +137,7 @@ class SmardDataPortal:
         # and False for second occurrence (standard time)
         for i, entry in enumerate(history):
             try:
-                entry["ts"] = entry["ts"].tz_localize("Europe/Berlin").isoformat()
+                entry["ts"] = entry["ts"].tz_localize("Europe/Berlin", nonexistent='shift_forward').isoformat()
             except Exception as e:
                 # If ambiguous, check if we've seen this timestamp before
                 if "AmbiguousTimeError" in str(type(e).__name__):
