@@ -7,6 +7,8 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - API_KEY=${API_KEY}
+    networks:
+      - default
     depends_on:
       - timescaledb
       - data-portal
@@ -18,8 +20,10 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - API_KEY=${DASHBOARD_API_KEY}
-      - CORS_ORIGINS=["http://localhost:8501", "https://huggingface.co/spaces/DAG-UPB/TS-Arena"]
+      - CORS_ORIGINS=["http://localhost:8501","http://arena-app:8501", "https://huggingface.co/spaces/DAG-UPB/TS-Arena"]
       - DEBUG=${DEBUG:-false}
+    networks:
+      - default
     depends_on:
       - timescaledb
     restart: unless-stopped
@@ -37,7 +41,10 @@ services:
       - API_KEY_SOURCE_EIA=${API_KEY_SOURCE_EIA}
       - API_KEY_SOURCE_OPENAQ=${API_KEY_SOURCE_OPENAQ}
       - API_KEY_SOURCE_FINGRID=${API_KEY_SOURCE_FINGRID}
-
+    volumes:
+      - ..:/workspaces:cached
+    networks:
+      - default
     depends_on:
       - timescaledb
 
@@ -53,11 +60,20 @@ services:
       - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
       - /mnt/volume-nbg1-1/storage/ts-arena-db:/var/lib/postgresql/data
     command: postgres -c max_connections=200
+    networks:
+      - default
 
   cloudbeaver:
     image: dbeaver/cloudbeaver:25.3.2
     restart: unless-stopped
+    networks:
+      - default
     volumes:
       - ./cloudbeaver:/opt/cloudbeaver/workspace
     depends_on:
       - timescaledb
+
+networks:
+  default:
+  internal:
+    driver: bridge
