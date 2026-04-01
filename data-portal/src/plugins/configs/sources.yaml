@@ -77,7 +77,7 @@ request_groups:
         name: Fingrid-Fingrid-emission_factor_consumed_electricity
         description: Emission factor for electricity consumed in Finland - updated
           every 15 minutes
-        frequency: 15 minutes
+        frequency: 5 minutes
         unit: gCO2/kWh
         domain: energy
         category: emissions
@@ -126,7 +126,7 @@ request_groups:
         name: Fingrid-Fingrid-non_fossil_generation_share
         description: Share of non-fossil electricity generation in Finland - updated
           every 15 minutes
-        frequency: 15 minutes
+        frequency: 5 minutes
         unit: \%
         domain: energy
         category: generation
@@ -1448,6 +1448,213 @@ request_groups:
         value_column: LMP
         filter_column: Location
         filter_value: WEST
+
+  tankerkoenig-fuel-prices:
+    module: src.plugins.data_sources.tankerkoenig_plugin
+    class: TankerkoenigPlugin
+    schedule: 5 minutes
+    request_params: {}
+    timeseries:
+    # --- National averages ---
+    - unique_id: tankerkoenig_de_e5
+      extract_filter:
+        fuel_type: e5
+        region: national
+      metadata:
+        name: "Germany: Retail Fuel Price E5 (avg)"
+        description: National average retail price for E5 gasoline in Germany (Tankerkoenig/MTS-K)
+        frequency: 5 min
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e5
+        aggregation_level: national
+    - unique_id: tankerkoenig_de_e10
+      extract_filter:
+        fuel_type: e10
+        region: national
+      metadata:
+        name: "Germany: Retail Fuel Price E10 (avg)"
+        description: National average retail price for E10 gasoline in Germany (Tankerkoenig/MTS-K)
+        frequency: 5 min
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e10
+        aggregation_level: national
+    - unique_id: tankerkoenig_de_diesel
+      extract_filter:
+        fuel_type: diesel
+        region: national
+      metadata:
+        name: "Germany: Retail Fuel Price Diesel (avg)"
+        description: National average retail price for Diesel in Germany (Tankerkoenig/MTS-K)
+        frequency: 5 min
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: diesel
+        aggregation_level: national
+    # --- Hamburg ---
+    - unique_id: tankerkoenig_hamburg_e5
+      extract_filter:
+        fuel_type: e5
+        region: hamburg
+      metadata:
+        name: "Hamburg: Retail Fuel Price E5 (avg)"
+        description: Average retail price for E5 gasoline in Hamburg region (Tankerkoenig/MTS-K)
+        frequency: 5 min
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e5
+        aggregation_level: city
+    - unique_id: tankerkoenig_hamburg_e10
+      extract_filter:
+        fuel_type: e10
+        region: hamburg
+      metadata:
+        name: "Hamburg: Retail Fuel Price E10 (avg)"
+        description: Average retail price for E10 gasoline in Hamburg region (Tankerkoenig/MTS-K)
+        frequency: 5 min
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e10
+        aggregation_level: city
+    - unique_id: tankerkoenig_hamburg_diesel
+      extract_filter:
+        fuel_type: diesel
+        region: hamburg
+      metadata:
+        name: "Hamburg: Retail Fuel Price Diesel (avg)"
+        description: Average retail price for Diesel in Hamburg region (Tankerkoenig/MTS-K)
+        frequency: 5 min
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: diesel
+        aggregation_level: city
+    # --- Berlin ---
+    - unique_id: tankerkoenig_berlin_e5
+      extract_filter:
+        fuel_type: e5
+        region: berlin
+      metadata:
+        name: "Berlin: Retail Fuel Price E5 (avg)"
+        description: Average retail price for E5 gasoline in Berlin region (Tankerkoenig/MTS-K)
+        frequency: 5 min
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e5
+        aggregation_level: city
+    - unique_id: tankerkoenig_berlin_e10
+      extract_filter:
+        fuel_type: e10
+        region: berlin
+      metadata:
+        name: "Berlin: Retail Fuel Price E10 (avg)"
+        description: Average retail price for E10 gasoline in Berlin region (Tankerkoenig/MTS-K)
+        frequency: 5 min
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e10
+        aggregation_level: city
+    - unique_id: tankerkoenig_berlin_diesel
+      extract_filter:
+        fuel_type: diesel
+        region: berlin
+      metadata:
+        name: "Berlin: Retail Fuel Price Diesel (avg)"
+        description: Average retail price for Diesel in Berlin region (Tankerkoenig/MTS-K)
+        frequency: 5 min
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: diesel
+        aggregation_level: city
+    # --- Munich ---
+    - unique_id: tankerkoenig_munich_e5
+      extract_filter:
+        fuel_type: e5
+        region: munich
+      metadata:
+        name: "Munich: Retail Fuel Price E5 (avg)"
+        description: Average retail price for E5 gasoline in Munich region (Tankerkoenig/MTS-K)
+        frequency: 5 min
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e5
+        aggregation_level: city
+    - unique_id: tankerkoenig_munich_e10
+      extract_filter:
+        fuel_type: e10
+        region: munich
+      metadata:
+        name: "Munich: Retail Fuel Price E10 (avg)"
+        description: Average retail price for E10 gasoline in Munich region (Tankerkoenig/MTS-K)
+        frequency: 5 min
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e10
+        aggregation_level: city
+    - unique_id: tankerkoenig_munich_diesel
+      extract_filter:
+        fuel_type: diesel
+        region: munich
+      metadata:
+        name: "Munich: Retail Fuel Price Diesel (avg)"
+        description: Average retail price for Diesel in Munich region (Tankerkoenig/MTS-K)
+        frequency: 5 min
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: diesel
+        aggregation_level: city
+    # --- Paderborn ---
+    - unique_id: tankerkoenig_paderborn_e5
+      extract_filter:
+        fuel_type: e5
+        region: paderborn
+      metadata:
+        name: "Paderborn: Retail Fuel Price E5 (avg)"
+        description: Average retail price for E5 gasoline in Paderborn region (Tankerkoenig/MTS-K)
+        frequency: 5 min
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e5
+        aggregation_level: city
+    - unique_id: tankerkoenig_paderborn_e10
+      extract_filter:
+        fuel_type: e10
+        region: paderborn
+      metadata:
+        name: "Paderborn: Retail Fuel Price E10 (avg)"
+        description: Average retail price for E10 gasoline in Paderborn region (Tankerkoenig/MTS-K)
+        frequency: 5 min
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e10
+        aggregation_level: city
+    - unique_id: tankerkoenig_paderborn_diesel
+      extract_filter:
+        fuel_type: diesel
+        region: paderborn
+      metadata:
+        name: "Paderborn: Retail Fuel Price Diesel (avg)"
+        description: Average retail price for Diesel in Paderborn region (Tankerkoenig/MTS-K)
+        frequency: 5 min
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: diesel
+        aggregation_level: city
 
 
 timeseries:
