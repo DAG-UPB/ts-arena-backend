@@ -347,7 +347,7 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
                     df.loc[df[fuel] <= 0, fuel] = pd.NA
 
             # Build 10-min time index for the day
-            day_start = day.tz_localize("Europe/Berlin")
+            day_start = day.tz_localize("Europe/Berlin") if day.tzinfo is None else day.tz_convert("Europe/Berlin")
             day_end = day_start + pd.Timedelta(days=1) - pd.Timedelta(
                 minutes=10
             )
