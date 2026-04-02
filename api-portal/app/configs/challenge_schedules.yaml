@@ -414,7 +414,7 @@ schedules:
     evaluation_delay: 0 hours
 
 - id: tankerkoenig_fuel_challenge_24h_15min
-  cron: 0 12 * * *
+  cron: 0 2 * * *
   run_on_startup: false
   params:
     description: 'Tankerkoenig Fuel Price Challenge: 24h horizon, 15-min frequency'
