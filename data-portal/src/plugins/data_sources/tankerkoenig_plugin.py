@@ -1,21 +1,31 @@
-"""Tankerkoenig Multi-Series Plugin - German retail fuel prices at 5-min resolution
+"""Tankerkoenig Multi-Series Plugin - German retail fuel prices at 10-min resolution
 
-Fetches current station prices from the Tankerkoenig list.php API across a grid
-of coordinates covering Germany, deduplicates stations, and computes national
-and regional (city-level) averages for E5, E10, and Diesel every 5 minutes.
+Uses one representative gas station per city as a proxy for local fuel prices.
+Station IDs are configured in sources.yaml via extract_filter.station_id.
+Ongoing price polling uses prices.php with all station IDs in a single API call.
 
-Historical backfill uses the Tankerkoenig daily price CSV archive:
-  https://creativecommons.tankerkoenig.de/history/prices/YYYY/MM/YYYY-MM-DD-prices.csv
-Each CSV contains per-station price change events. The plugin takes the last
-known price per station per day and computes daily averages.
+Per Tankerkoenig terms of use:
+- Max 1 request per 5 minutes for automated systems
+- Avoid round-time queries (add random offset)
+- Use prices.php for batch price queries (up to 10 stations per call)
+
+Historical backfill uses the Tankerkoenig authenticated Git data repository:
+  https://data.tankerkoenig.de/tankerkoenig-organization/tankerkoenig-data/
+Authentication via Basic Auth (USERNAME_TANKERKOENIG / API_KEY_TANKERKOENIG).
+
+The raw price data is event-based (only entries when a price changes).
+We resample to regular 10-minute intervals using forward-fill.
+
+Data license: Creative Commons BY-NC-SA 4.0
+https://creativecommons.org/licenses/by-nc-sa/4.0/
 """
 
 import asyncio
 import io
 import logging
-import math
 import os
-from typing import Dict, Any, List, Optional, Set, Tuple
+import random
+from typing import Dict, Any, List, Optional, Tuple
 
 import pandas as pd
 import requests
@@ -24,88 +34,33 @@ from src.plugins.base_plugin import MultiSeriesPlugin, TimeSeriesDefinition
 
 logger = logging.getLogger(__name__)
 
-LIST_URL = "https://creativecommons.tankerkoenig.de/json/list.php"
-HISTORY_CSV_URL = (
-    "https://creativecommons.tankerkoenig.de/history/prices"
-    "/{year}/{month:02d}/{year}-{month:02d}-{day:02d}-prices.csv"
+PRICES_URL = "https://creativecommons.tankerkoenig.de/json/prices.php"
+
+# New authenticated Git repository for historical data
+HISTORY_CSV_BASE = (
+    "https://data.tankerkoenig.de/tankerkoenig-organization/"
+    "tankerkoenig-data/raw/branch/master"
 )
+HISTORY_PRICES_URL = (
+    HISTORY_CSV_BASE
+    + "/prices/{year}/{month:02d}/{year}-{month:02d}-{day:02d}-prices.csv"
+)
+HISTORY_STATIONS_URL = (
+    HISTORY_CSV_BASE
+    + "/stations/{year}/{month:02d}/{year}-{month:02d}-{day:02d}-stations.csv"
+)
+
+RESAMPLE_FREQ = "10min"
 FUEL_COLUMNS = ["e5", "e10", "diesel"]
-
-# Grid of coordinates covering Germany (25 km radius per point).
-# Major cities + fill points for even geographic coverage.
-# Germany bounding box: ~47.3-55.1°N, ~5.9-15.0°E
-GERMANY_GRID = [
-    # Northern Germany
-    (54.8, 9.5),   # Flensburg
-    (54.3, 13.1),  # Stralsund
-    (53.9, 10.7),  # Luebeck
-    (53.55, 10.0), # Hamburg
-    (53.5, 8.1),   # Bremerhaven
-    (53.1, 8.8),   # Bremen
-    (53.1, 12.0),  # Pritzwalk
-    (52.7, 7.3),   # Meppen
-    # Central-North
-    (52.5, 13.4),  # Berlin
-    (52.4, 9.7),   # Hanover
-    (52.3, 11.6),  # Magdeburg
-    (52.0, 8.5),   # Bielefeld
-    (51.9, 7.6),   # Muenster
-    (51.7, 14.3),  # Cottbus
-    # Central
-    (51.5, 7.0),   # Essen/Ruhr
-    (51.3, 9.5),   # Kassel
-    (51.3, 12.4),  # Leipzig
-    (51.05, 13.7), # Dresden
-    (50.9, 7.0),   # Cologne
-    (50.7, 11.0),  # Jena
-    (50.6, 8.7),   # Giessen
-    # Central-South
-    (50.1, 8.7),   # Frankfurt
-    (50.0, 12.1),  # Hof
-    (49.9, 6.9),   # Trier
-    (49.5, 11.1),  # Nuremberg
-    (49.5, 8.5),   # Mannheim
-    (49.2, 7.0),   # Saarbruecken
-    # Southern Germany
-    (48.8, 9.2),   # Stuttgart
-    (48.8, 13.0),  # Passau area
-    (48.4, 10.9),  # Augsburg
-    (48.1, 11.6),  # Munich
-    (48.0, 7.8),   # Freiburg
-    (47.7, 10.3),  # Kempten
-    (47.6, 9.5),   # Lindau/Konstanz
-]
-
-# City regions: (lat, lng, radius_km)
-CITY_REGIONS: Dict[str, Tuple[float, float, float]] = {
-    "hamburg":   (53.55, 10.0, 30),
-    "berlin":    (52.52, 13.41, 30),
-    "munich":    (48.14, 11.58, 30),
-    "paderborn": (51.72, 8.75, 25),
-}
-
-
-def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Great-circle distance between two points in km."""
-    R = 6371.0
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = (math.sin(dlat / 2) ** 2
-         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
-         * math.sin(dlon / 2) ** 2)
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
 class TankerkoenigPlugin(MultiSeriesPlugin):
     """
     Multi-series plugin for German retail fuel prices (Tankerkoenig/MTS-K).
 
-    Queries the list.php endpoint across a grid of ~35 coordinates covering
-    Germany, deduplicates stations by ID, and computes national and regional
-    average prices for each fuel type.
-
-    For historical backfill, downloads daily price CSVs from the Tankerkoenig
-    archive and computes daily averages per region.
+    Each city series references a fixed station_id in its extract_filter.
+    Every 10 minutes a single prices.php call fetches all station prices.
+    National average = mean of the city station prices.
     """
 
     def __init__(
@@ -118,21 +73,44 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
         super().__init__(group_id, request_params, series_definitions, schedule)
 
         self.api_key = os.getenv("API_KEY_TANKERKOENIG", "")
+        self.username = os.getenv("USERNAME_TANKERKOENIG", "")
         if not self.api_key:
             logger.error("API_KEY_TANKERKOENIG not set — plugin will not work")
+        if not self.username:
+            logger.warning(
+                "USERNAME_TANKERKOENIG not set — historical data download "
+                "from authenticated repository will not work"
+            )
 
         self.session = requests.Session()
 
-        # Build mapping: (region, fuel_type) → unique_id
+        # Build mappings from series definitions
+        # (region, fuel_type) -> unique_id
         self._filter_to_unique_id: Dict[Tuple[str, str], str] = {}
+        # station_id -> city name (for city series that have a station_id)
+        self._station_to_city: Dict[str, str] = {}
+        # All unique station IDs to query
+        self._station_ids: List[str] = []
+
+        seen_stations = set()
         for series_def in self._series_definitions:
             fuel_type = series_def.extract_filter.get("fuel_type")
             region = series_def.extract_filter.get("region", "national")
+            station_id = series_def.extract_filter.get("station_id")
+
             if fuel_type:
                 self._filter_to_unique_id[(region, fuel_type)] = series_def.unique_id
 
-        # Cached station coordinates: station_uuid → (lat, lng)
-        self._station_coords: Dict[str, Tuple[float, float]] = {}
+            if station_id and station_id not in seen_stations:
+                seen_stations.add(station_id)
+                self._station_ids.append(station_id)
+                if region != "national":
+                    self._station_to_city[station_id] = region
+
+        logger.info(
+            f"Tankerkoenig: {len(self._station_ids)} stations configured, "
+            f"{len(self._filter_to_unique_id)} series"
+        )
 
     def get_detected_timezone(self, unique_id: str) -> Optional[str]:
         return "Europe/Berlin"
@@ -142,6 +120,19 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
         start_date: str,
         end_date: Optional[str] = None,
     ) -> Dict[str, List[Dict[str, Any]]]:
+        """Fetch historical + live fuel prices.
+
+        Strategy:
+        1. **Initial load** (start far in the past): downloads daily CSV
+           files for the full requested range. At 10-min resolution,
+           ~7 days = 1008 data points which is enough context.
+        2. **Daily reconciliation** (scheduled runs): *always* re-downloads
+           yesterday's CSV even if start_date is only 24h ago. This
+           ensures the event-based CSV data (every price change recorded)
+           overwrites the less accurate live-polled snapshots. Since
+           the DB uses upsert, duplicate timestamps are harmless.
+        3. **Today**: uses the live prices.php API for the current snapshot.
+        """
         result: Dict[str, List[Dict[str, Any]]] = {
             uid: [] for uid in self._filter_to_unique_id.values()
         }
@@ -151,19 +142,20 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
             return result
 
         today = pd.Timestamp.now(tz="Europe/Berlin").normalize()
+        yesterday = today - pd.Timedelta(days=1)
         start = pd.Timestamp(start_date, tz="Europe/Berlin")
         end = pd.Timestamp(end_date, tz="Europe/Berlin") if end_date else today
 
-        # Historical backfill: download daily CSVs for past days
-        has_city_series = any(
-            r != "national" for r, _ in self._filter_to_unique_id
-        )
-        if start.normalize() < today:
-            if has_city_series:
-                await self._load_station_coords()
-            await self._backfill_from_csv(result, start, min(end, today - pd.Timedelta(days=1)))
+        # Historical backfill via daily CSVs (available up to yesterday).
+        # Even for short lookbacks (e.g. scheduled 24h window), we always
+        # include yesterday for daily reconciliation of live data.
+        csv_start = min(start.normalize(), yesterday)
+        if csv_start < today:
+            await self._backfill_from_csv(
+                result, csv_start, min(end, yesterday)
+            )
 
-        # Live fetch for today (current prices via list.php)
+        # Live fetch for today via prices.php
         if end.normalize() >= today:
             await self._fetch_live_prices(result)
 
@@ -172,23 +164,82 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
     async def _fetch_live_prices(
         self, result: Dict[str, List[Dict[str, Any]]]
     ) -> None:
-        """Fetch current prices via list.php and compute averages."""
-        stations = await self._fetch_all_stations()
-        if not stations:
-            logger.warning("Tankerkoenig: No stations collected for live prices")
+        """Fetch current prices for all configured stations in one prices.php call."""
+        if not self._station_ids:
+            logger.warning("Tankerkoenig: No station IDs configured, skipping")
             return
 
-        ts_str = pd.Timestamp.now(tz="Europe/Berlin").floor("5min").isoformat()
+        # Random jitter to avoid round-time queries
+        jitter = random.uniform(5, 30)
+        logger.info(f"Tankerkoenig: Waiting {jitter:.0f}s jitter before price query")
+        await asyncio.sleep(jitter)
 
-        # National averages
-        for fuel in FUEL_COLUMNS:
-            prices = [
-                s[fuel] for s in stations.values()
-                if s.get(fuel) is not None and 0 < s[fuel] < 5
-            ]
-            if not prices:
+        ids_param = ",".join(self._station_ids)
+        loop = asyncio.get_event_loop()
+
+        try:
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.session.get(
+                    PRICES_URL,
+                    params={"ids": ids_param, "apikey": self.api_key},
+                    timeout=30,
+                ),
+            )
+        except requests.RequestException as exc:
+            logger.error(f"Tankerkoenig: prices.php request failed: {exc}")
+            return
+
+        if response.status_code != 200:
+            logger.error(f"Tankerkoenig: prices.php HTTP {response.status_code}")
+            return
+
+        data = response.json()
+        if not data.get("ok"):
+            logger.error(f"Tankerkoenig: prices.php error: {data.get('message')}")
+            return
+
+        prices_data = data.get("prices", {})
+        ts_str = pd.Timestamp.now(tz="Europe/Berlin").floor("10min").isoformat()
+
+        # Collect city prices for national average
+        all_fuel_prices: Dict[str, List[float]] = {f: [] for f in FUEL_COLUMNS}
+
+        for sid in self._station_ids:
+            station_info = prices_data.get(sid, {})
+            city = self._station_to_city.get(sid)
+
+            if station_info.get("status") != "open":
+                logger.info(f"Tankerkoenig: Station {sid} ({city or 'extra'}) closed")
                 continue
 
+            for fuel in FUEL_COLUMNS:
+                price = station_info.get(fuel)
+                if price is None or price is False or not (0 < price < 5):
+                    continue
+
+                price = round(price, 4)
+                all_fuel_prices[fuel].append(price)
+
+                # City-level series
+                if city:
+                    uid = self._filter_to_unique_id.get((city, fuel))
+                    if uid:
+                        result[uid].append({"ts": ts_str, "value": price})
+
+            if city:
+                logger.info(
+                    f"Tankerkoenig live {city}: "
+                    f"e5={station_info.get('e5', '-')} "
+                    f"e10={station_info.get('e10', '-')} "
+                    f"diesel={station_info.get('diesel', '-')}"
+                )
+
+        # National average = mean of all station prices
+        for fuel in FUEL_COLUMNS:
+            prices = all_fuel_prices[fuel]
+            if not prices:
+                continue
             avg = round(sum(prices) / len(prices), 4)
             uid = self._filter_to_unique_id.get(("national", fuel))
             if uid:
@@ -198,62 +249,32 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
                     f"(from {len(prices)} stations)"
                 )
 
-        # City-level averages
-        for city, (clat, clng, radius) in CITY_REGIONS.items():
-            city_stations = [
-                s for s in stations.values()
-                if s.get("lat") is not None and s.get("lng") is not None
-                and _haversine_km(clat, clng, s["lat"], s["lng"]) <= radius
-            ]
-
-            for fuel in FUEL_COLUMNS:
-                prices = [
-                    s[fuel] for s in city_stations
-                    if s.get(fuel) is not None and 0 < s[fuel] < 5
-                ]
-                if not prices:
-                    continue
-
-                avg = round(sum(prices) / len(prices), 4)
-                uid = self._filter_to_unique_id.get((city, fuel))
-                if uid:
-                    result[uid].append({"ts": ts_str, "value": avg})
-                    logger.info(
-                        f"Tankerkoenig live {city} {fuel}: {avg:.4f} EUR/L "
-                        f"(from {len(prices)} stations)"
-                    )
-
-    async def _load_station_coords(self) -> None:
-        """Load station coordinates from list.php (needed for city-level CSV filtering)."""
-        if self._station_coords:
-            return  # already cached
-
-        stations = await self._fetch_all_stations()
-        for sid, s in stations.items():
-            lat, lng = s.get("lat"), s.get("lng")
-            if lat is not None and lng is not None:
-                self._station_coords[sid] = (lat, lng)
-
-        logger.info(
-            f"Tankerkoenig: Cached coordinates for {len(self._station_coords)} stations"
-        )
-
     async def _backfill_from_csv(
         self,
         result: Dict[str, List[Dict[str, Any]]],
         start: pd.Timestamp,
         end: pd.Timestamp,
     ) -> None:
-        """Download daily price CSVs and compute averages for each day."""
+        """Download daily price CSVs and resample to 10-min intervals.
+
+        The raw CSV data is event-based: rows are only created when a price
+        changes. We resample each station's prices to regular 10-minute
+        intervals using forward-fill, then compute per-interval averages.
+
+        City series: resampled price of the configured station.
+        National series: mean of all stations' resampled prices per interval.
+
+        Uses the authenticated Git data repository:
+          https://data.tankerkoenig.de/tankerkoenig-organization/tankerkoenig-data/
+        """
         loop = asyncio.get_event_loop()
 
-        # Pre-compute city station sets for filtering
-        city_station_sets: Dict[str, Set[str]] = {}
-        for city, (clat, clng, radius) in CITY_REGIONS.items():
-            city_station_sets[city] = {
-                sid for sid, (slat, slng) in self._station_coords.items()
-                if _haversine_km(clat, clng, slat, slng) <= radius
-            }
+        if not self.username:
+            logger.error(
+                "Tankerkoenig CSV: USERNAME_TANKERKOENIG not set, "
+                "cannot download from authenticated repository"
+            )
+            return
 
         days = pd.date_range(start.normalize(), end.normalize(), freq="D")
         logger.info(
@@ -262,7 +283,7 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
         )
 
         for day in days:
-            url = HISTORY_CSV_URL.format(
+            url = HISTORY_PRICES_URL.format(
                 year=day.year, month=day.month, day=day.day
             )
 
@@ -271,8 +292,8 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
                     None,
                     lambda url=url: self.session.get(
                         url,
-                        params={"apikey": self.api_key},
-                        timeout=60,
+                        auth=(self.username, self.api_key),
+                        timeout=120,
                     ),
                 )
             except requests.RequestException as exc:
@@ -282,6 +303,12 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
             if response.status_code == 404:
                 logger.debug(f"Tankerkoenig CSV: No data for {day.date()} (404)")
                 continue
+            if response.status_code == 401:
+                logger.error(
+                    f"Tankerkoenig CSV: Authentication failed (401) for {day.date()}. "
+                    "Check USERNAME_TANKERKOENIG and API_KEY_TANKERKOENIG."
+                )
+                return  # stop trying — creds are wrong
             if response.status_code != 200:
                 logger.warning(
                     f"Tankerkoenig CSV: HTTP {response.status_code} for {day.date()}"
@@ -300,108 +327,87 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
             if df.empty:
                 continue
 
-            # Keep last price per station (CSV is chronologically ordered)
-            df_last = df.groupby("station_uuid").last().reset_index()
+            # ── Filter to configured stations only ────────────────────
+            # The full CSV has ~14K stations (~35MB). We only need our
+            # configured ones, so filter early to save memory & compute.
+            df = df[df["station_uuid"].isin(self._station_ids)]
+            if df.empty:
+                logger.debug(
+                    f"Tankerkoenig CSV: {day.date()} — none of our "
+                    f"{len(self._station_ids)} stations found in CSV"
+                )
+                continue
 
-            # Timestamp at noon Berlin time for the day
-            ts_str = day.tz_localize("Europe/Berlin").replace(hour=12).isoformat()
+            df["date"] = pd.to_datetime(df["date"])
 
-            # National averages
+            # Replace 0.000 with NaN (0 means "no price available")
             for fuel in FUEL_COLUMNS:
-                if fuel not in df_last.columns:
-                    continue
-                prices = pd.to_numeric(df_last[fuel], errors="coerce")
-                valid = prices[(prices > 0) & (prices < 5)].dropna()
-                if valid.empty:
-                    continue
+                if fuel in df.columns:
+                    df[fuel] = pd.to_numeric(df[fuel], errors="coerce")
+                    df.loc[df[fuel] <= 0, fuel] = pd.NA
 
-                avg = round(float(valid.mean()), 4)
+            # Build 10-min time index for the day
+            day_start = day.tz_localize("Europe/Berlin")
+            day_end = day_start + pd.Timedelta(days=1) - pd.Timedelta(
+                minutes=10
+            )
+            time_index = pd.date_range(day_start, day_end, freq=RESAMPLE_FREQ)
+
+            # ── National average at 10-min resolution ─────────────────
+            # Group by station, resample each, then average across stations
+            national_prices: Dict[str, List[pd.Series]] = {
+                f: [] for f in FUEL_COLUMNS
+            }
+
+            station_groups = df.groupby("station_uuid")
+            for sid, sdf in station_groups:
+                sdf = sdf.set_index("date").sort_index()
+                for fuel in FUEL_COLUMNS:
+                    if fuel not in sdf.columns:
+                        continue
+                    series = sdf[fuel].dropna()
+                    if series.empty:
+                        continue
+                    # Reindex to include regular intervals, then ffill
+                    combined_idx = series.index.union(time_index)
+                    resampled = series.reindex(combined_idx).ffill()
+                    resampled = resampled.reindex(time_index)
+                    national_prices[fuel].append(resampled)
+
+                    # City-level series for configured stations
+                    if sid in self._station_to_city:
+                        city = self._station_to_city[sid]
+                        uid = self._filter_to_unique_id.get((city, fuel))
+                        if uid:
+                            for ts, val in resampled.dropna().items():
+                                result[uid].append({
+                                    "ts": ts.isoformat(),
+                                    "value": round(float(val), 4),
+                                })
+
+            # Compute national average per time step
+            for fuel in FUEL_COLUMNS:
+                if not national_prices[fuel]:
+                    continue
+                stacked = pd.concat(national_prices[fuel], axis=1)
+                avg_series = stacked.mean(axis=1).dropna()
                 uid = self._filter_to_unique_id.get(("national", fuel))
                 if uid:
-                    result[uid].append({"ts": ts_str, "value": avg})
+                    for ts, val in avg_series.items():
+                        result[uid].append({
+                            "ts": ts.isoformat(),
+                            "value": round(float(val), 4),
+                        })
 
-            # City-level averages
-            for city, station_ids in city_station_sets.items():
-                if not station_ids:
-                    continue
-                df_city = df_last[df_last["station_uuid"].isin(station_ids)]
-                if df_city.empty:
-                    continue
-
-                for fuel in FUEL_COLUMNS:
-                    if fuel not in df_city.columns:
-                        continue
-                    prices = pd.to_numeric(df_city[fuel], errors="coerce")
-                    valid = prices[(prices > 0) & (prices < 5)].dropna()
-                    if valid.empty:
-                        continue
-
-                    avg = round(float(valid.mean()), 4)
-                    uid = self._filter_to_unique_id.get((city, fuel))
-                    if uid:
-                        result[uid].append({"ts": ts_str, "value": avg})
-
+            n_stations = df["station_uuid"].nunique()
+            n_points = len(time_index)
             logger.info(
-                f"Tankerkoenig CSV: {day.date()} — "
-                f"{len(df_last)} stations processed"
+                f"Tankerkoenig CSV: {day.date()} — {n_stations} stations, "
+                f"{n_points} time steps per station"
             )
 
-            # Small delay between CSV downloads
-            await asyncio.sleep(0.2)
+            # small delay to avoid hammering the server
+            await asyncio.sleep(0.5)
 
         total = sum(len(v) for v in result.values())
         logger.info(f"Tankerkoenig CSV backfill complete: {total} data points")
-
-    async def _fetch_all_stations(self) -> Dict[str, Dict[str, Any]]:
-        """Query list.php across the Germany grid and deduplicate stations."""
-        all_stations: Dict[str, Dict[str, Any]] = {}
-        loop = asyncio.get_event_loop()
-
-        for lat, lng in GERMANY_GRID:
-            try:
-                response = await loop.run_in_executor(
-                    None,
-                    lambda lat=lat, lng=lng: self.session.get(
-                        LIST_URL,
-                        params={
-                            "lat": lat,
-                            "lng": lng,
-                            "rad": 25,
-                            "sort": "dist",
-                            "type": "all",
-                            "apikey": self.api_key,
-                        },
-                        timeout=30,
-                    ),
-                )
-            except requests.RequestException as exc:
-                logger.warning(f"Tankerkoenig: Request failed for ({lat},{lng}): {exc}")
-                continue
-
-            if response.status_code != 200:
-                logger.warning(
-                    f"Tankerkoenig: HTTP {response.status_code} for ({lat},{lng})"
-                )
-                continue
-
-            data = response.json()
-            if not data.get("ok"):
-                logger.warning(
-                    f"Tankerkoenig: API error for ({lat},{lng}): "
-                    f"{data.get('message', 'unknown')}"
-                )
-                continue
-
-            for station in data.get("stations", []):
-                sid = station.get("id")
-                if sid and sid not in all_stations:
-                    all_stations[sid] = station
-
-            # Rate-limit courtesy: 500ms between requests to avoid 503s
-            await asyncio.sleep(0.5)
-
-        logger.info(
-            f"Tankerkoenig: Collected {len(all_stations)} unique stations "
-            f"from {len(GERMANY_GRID)} grid points"
-        )
-        return all_stations

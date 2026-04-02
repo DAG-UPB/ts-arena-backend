@@ -37,6 +37,9 @@ The data used in this platform are obtained from the [SMARD electricity and gas 
 ### Fingrid (Finnish Transmission System Operator)
 The data used in this platform are obtained from [Fingrid's Open Data Platform](https://data.fingrid.fi/en/). The data, licensed under the [Creative Commons Attribution 4.0 International License (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/), are accessed and partially used for non-commercial, scientific purposes. Source: Fingrid / data.fingrid.fi. Any modifications or aggregations of the data are the sole responsibility of the authors. For full license terms, see [Fingrid's Legal Terms](https://www.fingrid.fi/en/legal-terms/).
 
+### Tankerkönig
+The fuel price data used in this platform are obtained from the [Tankerkönig API / MTS-K](https://creativecommons.org/licenses/by/4.0/). Access to the historical data repository was kindly provided by Tankerkönig. The data, licensed under the [Creative Commons Attribution 4.0 International Licence (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/), are accessed and partially used for non-commercial, scientific purposes. For more information, please visit [Tankerkönig Info](https://creativecommons.tankerkoenig.de/?page=info). Any modifications or aggregations of the data are the sole responsibility of the authors.
+
 ## Getting Started (Self-Hosting)
 
 To host the TS-Arena backend yourself, you primarily need Docker and Docker Compose.

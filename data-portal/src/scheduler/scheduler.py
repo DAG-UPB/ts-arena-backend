@@ -254,11 +254,11 @@ class DataPortalScheduler:
                         update_frequency=metadata.update_frequency
                     )
                     
-                    # Determine start date to fetch - always get last 1000 values based on frequency
-                    # No end_date is provided as APIs may operate in different timezones
-                    # and should return data up to the latest available
+                    # Determine start date: check DB for context, extend lookback if needed
                     interval_seconds = get_interval_seconds(metadata.update_frequency)
-                    start_date = (datetime.now() - timedelta(seconds=1000 * interval_seconds)).isoformat()
+                    start_date = await self._compute_start_date_single(
+                        repo, unique_id, interval_seconds
+                    )
                     
                     logger.info(f"[{unique_id}] Fetching data from {start_date} to latest available")
                     
@@ -322,10 +322,15 @@ class DataPortalScheduler:
                     exc_info=True
                 )
     
+    MIN_CONTEXT_POINTS = 1000  # Minimum data points per series for sufficient context
+
     async def _fetch_and_store_multi_series_data(self, group_id: str, plugin: MultiSeriesPlugin):
         """
         Fetch data from multi-series plugin and store in database.
         Makes ONE API call and stores data for multiple time series.
+        
+        Checks DB for existing data count — if any series has fewer than
+        MIN_CONTEXT_POINTS, extends the lookback to fetch enough history.
         """
         job_start = datetime.now()
         series_definitions = plugin.get_series_definitions()
@@ -343,14 +348,17 @@ class DataPortalScheduler:
                     repo = TimeSeriesDataRepository(session)
                     imputation_service = ImputationService()
                     
-                    # Determine start date based on the smallest update frequency
+                    # ── Determine start_date based on DB context ──────
+                    # Check how many data points each series already has.
+                    # If any series is below the minimum, extend lookback.
                     min_interval = min(
-                        get_interval_seconds(s.update_frequency or '15 minutes') 
+                        get_interval_seconds(s.update_frequency or s.frequency or '15 minutes') 
                         for s in series_definitions
                     )
-                    # Use fixed 24-hour lookback for multi-series plugins
-                    # (prevents hitting Fingrid API pagination limits)
-                    start_date = (datetime.now() - timedelta(hours=24)).isoformat()
+                    
+                    start_date = await self._compute_start_date_multi(
+                        repo, series_definitions, min_interval, group_id
+                    )
                     
                     logger.info(f"[{group_id}] Fetching data from {start_date} to latest available")
                     
@@ -432,6 +440,99 @@ class DataPortalScheduler:
                     exc_info=True
                 )
     
+    async def _compute_start_date_single(
+        self,
+        repo: TimeSeriesDataRepository,
+        unique_id: str,
+        interval_seconds: int,
+    ) -> str:
+        """Compute start_date for a single-series plugin based on DB context.
+
+        If the series has fewer than MIN_CONTEXT_POINTS data points,
+        extends the lookback to fetch enough history. Otherwise uses a
+        standard 24-hour window for incremental updates.
+        """
+        default_lookback = timedelta(hours=24)
+        max_lookback = timedelta(days=30)
+
+        try:
+            # Look up series_id without creating it (it may not exist yet)
+            from sqlalchemy import text as sa_text
+            result = await repo.session.execute(
+                sa_text("SELECT series_id FROM data_portal.time_series WHERE unique_id = :uid"),
+                {"uid": unique_id},
+            )
+            row = result.fetchone()
+            if row:
+                count = await repo.get_data_count(row[0])
+                if count < self.MIN_CONTEXT_POINTS:
+                    needed = self.MIN_CONTEXT_POINTS - count
+                    lookback = min(
+                        timedelta(seconds=needed * interval_seconds),
+                        max_lookback,
+                    )
+                    logger.info(
+                        f"[{unique_id}] Insufficient context: {count}/{self.MIN_CONTEXT_POINTS} "
+                        f"points — extending lookback to {lookback}"
+                    )
+                    return (datetime.now() - lookback).isoformat()
+        except Exception as exc:
+            logger.debug(f"[{unique_id}] Context check failed, using default lookback: {exc}")
+
+        return (datetime.now() - default_lookback).isoformat()
+
+    async def _compute_start_date_multi(
+        self,
+        repo: TimeSeriesDataRepository,
+        series_definitions,
+        min_interval_seconds: int,
+        group_id: str,
+    ) -> str:
+        """Compute start_date for a multi-series plugin based on DB context.
+
+        Checks each series in the group. If *any* series has fewer than
+        MIN_CONTEXT_POINTS, extends the lookback to cover the gap.
+        Falls back to 24h for routine incremental updates.
+        """
+        default_lookback = timedelta(hours=24)
+        max_lookback = timedelta(days=30)
+
+        try:
+            from sqlalchemy import text as sa_text
+            max_needed = 0
+
+            for series_def in series_definitions:
+                result = await repo.session.execute(
+                    sa_text("SELECT series_id FROM data_portal.time_series WHERE unique_id = :uid"),
+                    {"uid": series_def.unique_id},
+                )
+                row = result.fetchone()
+                if not row:
+                    # Series doesn't exist yet → needs full context
+                    max_needed = max(max_needed, self.MIN_CONTEXT_POINTS)
+                    continue
+
+                count = await repo.get_data_count(row[0])
+                if count < self.MIN_CONTEXT_POINTS:
+                    needed = self.MIN_CONTEXT_POINTS - count
+                    max_needed = max(max_needed, needed)
+
+            if max_needed > 0:
+                lookback = min(
+                    timedelta(seconds=max_needed * min_interval_seconds),
+                    max_lookback,
+                )
+                logger.info(
+                    f"[{group_id}] Insufficient context detected — need ~{max_needed} more "
+                    f"points, extending lookback to {lookback}"
+                )
+                return (datetime.now() - lookback).isoformat()
+
+        except Exception as exc:
+            logger.debug(f"[{group_id}] Context check failed, using default lookback: {exc}")
+
+        return (datetime.now() - default_lookback).isoformat()
+
     async def _fetch_multi_with_retry(
         self, 
         plugin: MultiSeriesPlugin, 
