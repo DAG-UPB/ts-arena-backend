@@ -77,7 +77,7 @@ request_groups:
         name: Fingrid-Fingrid-emission_factor_consumed_electricity
         description: Emission factor for electricity consumed in Finland - updated
           every 15 minutes
-        frequency: 15 minutes
+        frequency: 10 minutes
         unit: gCO2/kWh
         domain: energy
         category: emissions
@@ -126,7 +126,7 @@ request_groups:
         name: Fingrid-Fingrid-non_fossil_generation_share
         description: Share of non-fossil electricity generation in Finland - updated
           every 15 minutes
-        frequency: 15 minutes
+        frequency: 10 minutes
         unit: \%
         domain: energy
         category: generation
@@ -170,7 +170,7 @@ request_groups:
       metadata:
         name: CAISO-CAISO-Batteries
         description: California ISO battery storage generation
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: generation
@@ -182,7 +182,7 @@ request_groups:
       metadata:
         name: CAISO-CAISO-Biogas
         description: California ISO biogas generation
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: generation
@@ -194,7 +194,7 @@ request_groups:
       metadata:
         name: CAISO-CAISO-Biomass
         description: California ISO biomass generation
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: generation
@@ -206,7 +206,7 @@ request_groups:
       metadata:
         name: CAISO-CAISO-Geothermal
         description: California ISO geothermal generation
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: generation
@@ -218,7 +218,7 @@ request_groups:
       metadata:
         name: CAISO-CAISO-Imports
         description: California ISO electricity imports
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: generation
@@ -230,7 +230,7 @@ request_groups:
       metadata:
         name: CAISO-CAISO-LargeHydro
         description: California ISO large hydropower generation
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: generation
@@ -242,7 +242,7 @@ request_groups:
       metadata:
         name: CAISO-CAISO-NaturalGas
         description: California ISO natural gas generation
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: generation
@@ -254,7 +254,7 @@ request_groups:
       metadata:
         name: CAISO-CAISO-Nuclear
         description: California ISO nuclear generation
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: generation
@@ -266,7 +266,7 @@ request_groups:
       metadata:
         name: CAISO-CAISO-Solar
         description: California ISO solar photovoltaic generation
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: generation
@@ -278,7 +278,7 @@ request_groups:
       metadata:
         name: CAISO-CAISO-SmallHydro
         description: California ISO small hydropower generation
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: generation
@@ -290,7 +290,7 @@ request_groups:
       metadata:
         name: CAISO-CAISO-Wind
         description: California ISO onshore wind generation
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: generation
@@ -310,7 +310,7 @@ request_groups:
       metadata:
         name: CAISO-CAISO-Load
         description: California ISO net electricity consumption
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: load
@@ -331,7 +331,7 @@ request_groups:
       metadata:
         name: CAISO-NP15-LMP-Congestion
         description: California ISO NP15 trading hub LMP congestion component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -345,7 +345,7 @@ request_groups:
       metadata:
         name: CAISO-SP15-LMP-Congestion
         description: California ISO SP15 trading hub LMP congestion component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -359,7 +359,7 @@ request_groups:
       metadata:
         name: CAISO-ZP26-LMP-Congestion
         description: California ISO ZP26 trading hub LMP congestion component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -373,7 +373,7 @@ request_groups:
       metadata:
         name: CAISO-NP15-LMP-Energy
         description: California ISO NP15 trading hub LMP energy component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -387,7 +387,7 @@ request_groups:
       metadata:
         name: CAISO-SP15-LMP-Energy
         description: California ISO SP15 trading hub LMP energy component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -401,7 +401,7 @@ request_groups:
       metadata:
         name: CAISO-ZP26-LMP-Energy
         description: California ISO ZP26 trading hub LMP energy component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -415,7 +415,7 @@ request_groups:
       metadata:
         name: CAISO-NP15-LMP-Loss
         description: California ISO NP15 trading hub LMP loss component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -429,7 +429,7 @@ request_groups:
       metadata:
         name: CAISO-SP15-LMP-Loss
         description: California ISO SP15 trading hub LMP loss component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -443,7 +443,7 @@ request_groups:
       metadata:
         name: CAISO-ZP26-LMP-Loss
         description: California ISO ZP26 trading hub LMP loss component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -457,7 +457,7 @@ request_groups:
       metadata:
         name: CAISO-NP15-MarketPrice
         description: California ISO NP15 trading hub total market price
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -471,7 +471,7 @@ request_groups:
       metadata:
         name: CAISO-SP15-MarketPrice
         description: California ISO SP15 trading hub total market price
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -485,7 +485,7 @@ request_groups:
       metadata:
         name: CAISO-ZP26-MarketPrice
         description: California ISO ZP26 trading hub total market price
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -507,7 +507,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-DualFuel
         description: New York ISO dual fuel generation
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: generation
@@ -519,7 +519,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-Hydro
         description: New York ISO hydropower generation
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: generation
@@ -531,7 +531,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-NaturalGas
         description: New York ISO natural gas generation
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: generation
@@ -543,7 +543,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-Nuclear
         description: New York ISO nuclear generation
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: generation
@@ -555,7 +555,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-OtherFossil
         description: New York ISO other fossil fuel generation
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: generation
@@ -567,7 +567,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-OtherRenewable
         description: New York ISO other renewable generation
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: generation
@@ -579,7 +579,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-Wind
         description: New York ISO onshore wind generation
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: generation
@@ -599,7 +599,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-CAPITL-Load
         description: New York ISO capitl load
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: load
@@ -611,7 +611,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-CENTRL-Load
         description: New York ISO centrl load
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: load
@@ -623,7 +623,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-DUNWOD-Load
         description: New York ISO dunwod load
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: load
@@ -635,7 +635,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-GENESE-Load
         description: New York ISO genese load
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: load
@@ -647,7 +647,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-HUD VL-Load
         description: New York ISO hud vl load
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: load
@@ -659,7 +659,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-LONGIL-Load
         description: New York ISO longil load
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: load
@@ -671,7 +671,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-MHK VL-Load
         description: New York ISO mhk vl load
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: load
@@ -683,7 +683,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-MILLWD-Load
         description: New York ISO millwd load
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: load
@@ -695,7 +695,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-N.Y.C.-Load
         description: New York ISO n.y.c. load
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: load
@@ -707,7 +707,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-Load
         description: New York ISO net electricity consumption
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: load
@@ -719,7 +719,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-NORTH-Load
         description: New York ISO north load
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: load
@@ -731,7 +731,7 @@ request_groups:
       metadata:
         name: NYISO-NYISO-WEST-Load
         description: New York ISO west load
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: MW
         domain: energy
         category: load
@@ -752,7 +752,7 @@ request_groups:
       metadata:
         name: NYISO-CENTRL-LMP-Congestion
         description: New York ISO Central zone LMP congestion component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -766,7 +766,7 @@ request_groups:
       metadata:
         name: NYISO-LONGIL-LMP-Congestion
         description: New York ISO Long Island zone LMP congestion component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -780,7 +780,7 @@ request_groups:
       metadata:
         name: NYISO-O H-LMP-Congestion
         description: New York ISO Ontario Hydro zone LMP congestion component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -794,7 +794,7 @@ request_groups:
       metadata:
         name: NYISO-PJM-LMP-Congestion
         description: New York ISO PJM zone LMP congestion component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -808,7 +808,7 @@ request_groups:
       metadata:
         name: NYISO-WEST-LMP-Congestion
         description: New York ISO West zone LMP congestion component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -822,7 +822,7 @@ request_groups:
       metadata:
         name: NYISO-CAPITL-LMP-Energy
         description: New York ISO Capital zone LMP energy component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -836,7 +836,7 @@ request_groups:
       metadata:
         name: NYISO-CENTRL-LMP-Energy
         description: New York ISO Central zone LMP energy component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -850,7 +850,7 @@ request_groups:
       metadata:
         name: NYISO-DUNWOD-LMP-Energy
         description: New York ISO Dunwoodie zone LMP energy component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -864,7 +864,7 @@ request_groups:
       metadata:
         name: NYISO-GENESE-LMP-Energy
         description: New York ISO Genesee zone LMP energy component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -878,7 +878,7 @@ request_groups:
       metadata:
         name: NYISO-H Q-LMP-Energy
         description: New York ISO Hydro-Quebec zone LMP energy component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -892,7 +892,7 @@ request_groups:
       metadata:
         name: NYISO-HUD VL-LMP-Energy
         description: New York ISO Hudson Valley zone LMP energy component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -906,7 +906,7 @@ request_groups:
       metadata:
         name: NYISO-LONGIL-LMP-Energy
         description: New York ISO Long Island zone LMP energy component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -920,7 +920,7 @@ request_groups:
       metadata:
         name: NYISO-MHK VL-LMP-Energy
         description: New York ISO Mohawk Valley zone LMP energy component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -934,7 +934,7 @@ request_groups:
       metadata:
         name: NYISO-MILLWD-LMP-Energy
         description: New York ISO Millwood zone LMP energy component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -948,7 +948,7 @@ request_groups:
       metadata:
         name: NYISO-N.Y.C.-LMP-Energy
         description: New York ISO New York City zone LMP energy component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -962,7 +962,7 @@ request_groups:
       metadata:
         name: NYISO-NORTH-LMP-Energy
         description: New York ISO North zone LMP energy component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -976,7 +976,7 @@ request_groups:
       metadata:
         name: NYISO-NPX-LMP-Energy
         description: New York ISO NPX zone LMP energy component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -990,7 +990,7 @@ request_groups:
       metadata:
         name: NYISO-O H-LMP-Energy
         description: New York ISO Ontario Hydro zone LMP energy component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1004,7 +1004,7 @@ request_groups:
       metadata:
         name: NYISO-PJM-LMP-Energy
         description: New York ISO PJM zone LMP energy component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1018,7 +1018,7 @@ request_groups:
       metadata:
         name: NYISO-WEST-LMP-Energy
         description: New York ISO West zone LMP energy component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1032,7 +1032,7 @@ request_groups:
       metadata:
         name: NYISO-CAPITL-LMP-Loss
         description: New York ISO Capital zone LMP loss component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1046,7 +1046,7 @@ request_groups:
       metadata:
         name: NYISO-CENTRL-LMP-Loss
         description: New York ISO Central zone LMP loss component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1060,7 +1060,7 @@ request_groups:
       metadata:
         name: NYISO-DUNWOD-LMP-Loss
         description: New York ISO Dunwoodie zone LMP loss component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1074,7 +1074,7 @@ request_groups:
       metadata:
         name: NYISO-GENESE-LMP-Loss
         description: New York ISO Genesee zone LMP loss component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1088,7 +1088,7 @@ request_groups:
       metadata:
         name: NYISO-H Q-LMP-Loss
         description: New York ISO Hydro-Quebec zone LMP loss component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1102,7 +1102,7 @@ request_groups:
       metadata:
         name: NYISO-HUD VL-LMP-Loss
         description: New York ISO Hudson Valley zone LMP loss component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1116,7 +1116,7 @@ request_groups:
       metadata:
         name: NYISO-LONGIL-LMP-Loss
         description: New York ISO Long Island zone LMP loss component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1130,7 +1130,7 @@ request_groups:
       metadata:
         name: NYISO-MHK VL-LMP-Loss
         description: New York ISO Mohawk Valley zone LMP loss component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1144,7 +1144,7 @@ request_groups:
       metadata:
         name: NYISO-MILLWD-LMP-Loss
         description: New York ISO Millwood zone LMP loss component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1158,7 +1158,7 @@ request_groups:
       metadata:
         name: NYISO-N.Y.C.-LMP-Loss
         description: New York ISO New York City zone LMP loss component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1172,7 +1172,7 @@ request_groups:
       metadata:
         name: NYISO-NORTH-LMP-Loss
         description: New York ISO North zone LMP loss component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1186,7 +1186,7 @@ request_groups:
       metadata:
         name: NYISO-NPX-LMP-Loss
         description: New York ISO NPX zone LMP loss component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1200,7 +1200,7 @@ request_groups:
       metadata:
         name: NYISO-O H-LMP-Loss
         description: New York ISO Ontario Hydro zone LMP loss component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1214,7 +1214,7 @@ request_groups:
       metadata:
         name: NYISO-PJM-LMP-Loss
         description: New York ISO PJM zone LMP loss component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1228,7 +1228,7 @@ request_groups:
       metadata:
         name: NYISO-WEST-LMP-Loss
         description: New York ISO West zone LMP loss component
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1242,7 +1242,7 @@ request_groups:
       metadata:
         name: NYISO-CAPITL-MarketPrice
         description: New York ISO Capital zone total market price
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1256,7 +1256,7 @@ request_groups:
       metadata:
         name: NYISO-CENTRL-MarketPrice
         description: New York ISO Central zone total market price
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1270,7 +1270,7 @@ request_groups:
       metadata:
         name: NYISO-DUNWOD-MarketPrice
         description: New York ISO Dunwoodie zone total market price
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1284,7 +1284,7 @@ request_groups:
       metadata:
         name: NYISO-GENESE-MarketPrice
         description: New York ISO Genesee zone total market price
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1298,7 +1298,7 @@ request_groups:
       metadata:
         name: NYISO-H Q-MarketPrice
         description: New York ISO Hydro-Quebec zone total market price
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1312,7 +1312,7 @@ request_groups:
       metadata:
         name: NYISO-HUD VL-MarketPrice
         description: New York ISO Hudson Valley zone total market price
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1326,7 +1326,7 @@ request_groups:
       metadata:
         name: NYISO-LONGIL-MarketPrice
         description: New York ISO Long Island zone total market price
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1340,7 +1340,7 @@ request_groups:
       metadata:
         name: NYISO-MHK VL-MarketPrice
         description: New York ISO Mohawk Valley zone total market price
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1354,7 +1354,7 @@ request_groups:
       metadata:
         name: NYISO-MILLWD-MarketPrice
         description: New York ISO Millwood zone total market price
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1368,7 +1368,7 @@ request_groups:
       metadata:
         name: NYISO-N.Y.C.-MarketPrice
         description: New York ISO New York City zone total market price
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1382,7 +1382,7 @@ request_groups:
       metadata:
         name: NYISO-NORTH-MarketPrice
         description: New York ISO North zone total market price
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1396,7 +1396,7 @@ request_groups:
       metadata:
         name: NYISO-NPX-MarketPrice
         description: New York ISO NPX zone total market price
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1410,7 +1410,7 @@ request_groups:
       metadata:
         name: NYISO-O H-MarketPrice
         description: New York ISO Ontario Hydro zone total market price
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1424,7 +1424,7 @@ request_groups:
       metadata:
         name: NYISO-PJM-MarketPrice
         description: New York ISO PJM zone total market price
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1438,7 +1438,7 @@ request_groups:
       metadata:
         name: NYISO-WEST-MarketPrice
         description: New York ISO West zone total market price
-        frequency: 5 minutes
+        frequency: 10 minutes
         unit: $/MWh
         domain: energy
         category: price
@@ -1448,6 +1448,225 @@ request_groups:
         value_column: LMP
         filter_column: Location
         filter_value: WEST
+
+  tankerkoenig-fuel-prices:
+    module: src.plugins.data_sources.tankerkoenig_plugin
+    class: TankerkoenigPlugin
+    schedule: 10 minutes
+    request_params: {}
+    timeseries:
+    # --- National averages ---
+    - unique_id: tankerkoenig_de_e5
+      extract_filter:
+        fuel_type: e5
+        region: national
+      metadata:
+        name: "Germany: Retail Fuel Price E5 (avg)"
+        description: National average retail price for E5 gasoline in Germany (Tankerkoenig/MTS-K)
+        frequency: 10 minutes
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e5
+        aggregation_level: national
+    - unique_id: tankerkoenig_de_e10
+      extract_filter:
+        fuel_type: e10
+        region: national
+      metadata:
+        name: "Germany: Retail Fuel Price E10 (avg)"
+        description: National average retail price for E10 gasoline in Germany (Tankerkoenig/MTS-K)
+        frequency: 10 minutes
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e10
+        aggregation_level: national
+    - unique_id: tankerkoenig_de_diesel
+      extract_filter:
+        fuel_type: diesel
+        region: national
+      metadata:
+        name: "Germany: Retail Fuel Price Diesel (avg)"
+        description: National average retail price for Diesel in Germany (Tankerkoenig/MTS-K)
+        frequency: 10 minutes
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: diesel
+        aggregation_level: national
+    # --- Hamburg --- (star Tankstelle, STAR, lat=53.555 lng=10.01)
+    - unique_id: tankerkoenig_hamburg_e5
+      extract_filter:
+        fuel_type: e5
+        region: hamburg
+        station_id: 005056ba-7cb6-1ed2-bceb-ad79c434cd45
+      metadata:
+        name: "Hamburg: Retail Fuel Price E5"
+        description: Retail price for E5 gasoline at a representative Hamburg station (Tankerkoenig/MTS-K)
+        frequency: 10 minutes
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e5
+        aggregation_level: city
+    - unique_id: tankerkoenig_hamburg_e10
+      extract_filter:
+        fuel_type: e10
+        region: hamburg
+        station_id: 005056ba-7cb6-1ed2-bceb-ad79c434cd45
+      metadata:
+        name: "Hamburg: Retail Fuel Price E10"
+        description: Retail price for E10 gasoline at a representative Hamburg station (Tankerkoenig/MTS-K)
+        frequency: 10 minutes
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e10
+        aggregation_level: city
+    - unique_id: tankerkoenig_hamburg_diesel
+      extract_filter:
+        fuel_type: diesel
+        region: hamburg
+        station_id: 005056ba-7cb6-1ed2-bceb-ad79c434cd45
+      metadata:
+        name: "Hamburg: Retail Fuel Price Diesel"
+        description: Retail price for Diesel at a representative Hamburg station (Tankerkoenig/MTS-K)
+        frequency: 10 minutes
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: diesel
+        aggregation_level: city
+    # --- Berlin --- (Aral Tankstelle, ARAL, lat=52.514 lng=13.421)
+    - unique_id: tankerkoenig_berlin_e5
+      extract_filter:
+        fuel_type: e5
+        region: berlin
+        station_id: 278130b1-e062-4a0f-80cc-19e486b4c024
+      metadata:
+        name: "Berlin: Retail Fuel Price E5"
+        description: Retail price for E5 gasoline at a representative Berlin station (Tankerkoenig/MTS-K)
+        frequency: 10 minutes
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e5
+        aggregation_level: city
+    - unique_id: tankerkoenig_berlin_e10
+      extract_filter:
+        fuel_type: e10
+        region: berlin
+        station_id: 278130b1-e062-4a0f-80cc-19e486b4c024
+      metadata:
+        name: "Berlin: Retail Fuel Price E10"
+        description: Retail price for E10 gasoline at a representative Berlin station (Tankerkoenig/MTS-K)
+        frequency: 10 minutes
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e10
+        aggregation_level: city
+    - unique_id: tankerkoenig_berlin_diesel
+      extract_filter:
+        fuel_type: diesel
+        region: berlin
+        station_id: 278130b1-e062-4a0f-80cc-19e486b4c024
+      metadata:
+        name: "Berlin: Retail Fuel Price Diesel"
+        description: Retail price for Diesel at a representative Berlin station (Tankerkoenig/MTS-K)
+        frequency: 10 minutes
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: diesel
+        aggregation_level: city
+    # --- Munich --- (BK Tankstelle Isarparkhaus, BK, lat=48.133 lng=11.581)
+    - unique_id: tankerkoenig_munich_e5
+      extract_filter:
+        fuel_type: e5
+        region: munich
+        station_id: 41c5eac2-7a17-46d8-90fe-d0a8c56db5fc
+      metadata:
+        name: "Munich: Retail Fuel Price E5"
+        description: Retail price for E5 gasoline at a representative Munich station (Tankerkoenig/MTS-K)
+        frequency: 10 minutes
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e5
+        aggregation_level: city
+    - unique_id: tankerkoenig_munich_e10
+      extract_filter:
+        fuel_type: e10
+        region: munich
+        station_id: 41c5eac2-7a17-46d8-90fe-d0a8c56db5fc
+      metadata:
+        name: "Munich: Retail Fuel Price E10"
+        description: Retail price for E10 gasoline at a representative Munich station (Tankerkoenig/MTS-K)
+        frequency: 10 minutes
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e10
+        aggregation_level: city
+    - unique_id: tankerkoenig_munich_diesel
+      extract_filter:
+        fuel_type: diesel
+        region: munich
+        station_id: 41c5eac2-7a17-46d8-90fe-d0a8c56db5fc
+      metadata:
+        name: "Munich: Retail Fuel Price Diesel"
+        description: Retail price for Diesel at a representative Munich station (Tankerkoenig/MTS-K)
+        frequency: 10 minutes
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: diesel
+        aggregation_level: city
+    # --- Paderborn --- (Aral Tankstelle, ARAL, lat=51.711 lng=8.746)
+    - unique_id: tankerkoenig_paderborn_e5
+      extract_filter:
+        fuel_type: e5
+        region: paderborn
+        station_id: 1234fb52-c302-4fd4-9d8a-30dc26a661e2
+      metadata:
+        name: "Paderborn: Retail Fuel Price E5"
+        description: Retail price for E5 gasoline at a representative Paderborn station (Tankerkoenig/MTS-K)
+        frequency: 10 minutes
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e5
+        aggregation_level: city
+    - unique_id: tankerkoenig_paderborn_e10
+      extract_filter:
+        fuel_type: e10
+        region: paderborn
+        station_id: 1234fb52-c302-4fd4-9d8a-30dc26a661e2
+      metadata:
+        name: "Paderborn: Retail Fuel Price E10"
+        description: Retail price for E10 gasoline at a representative Paderborn station (Tankerkoenig/MTS-K)
+        frequency: 10 minutes
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: e10
+        aggregation_level: city
+    - unique_id: tankerkoenig_paderborn_diesel
+      extract_filter:
+        fuel_type: diesel
+        region: paderborn
+        station_id: 1234fb52-c302-4fd4-9d8a-30dc26a661e2
+      metadata:
+        name: "Paderborn: Retail Fuel Price Diesel"
+        description: Retail price for Diesel at a representative Paderborn station (Tankerkoenig/MTS-K)
+        frequency: 10 minutes
+        unit: EUR/L
+        domain: energy
+        category: fuel
+        sub_category: diesel
+        aggregation_level: city
 
 
 timeseries:
