@@ -414,7 +414,7 @@ schedules:
     evaluation_delay: 0 hours
 
 - id: tankerkoenig_fuel_challenge_24h_15min
-  cron: 0 2 * * *
+  cron: 0 7 * * *
   run_on_startup: false
   params:
     description: 'Tankerkoenig Fuel Price Challenge: 24h horizon, 15-min frequency'
@@ -426,22 +426,16 @@ schedules:
     - fuel
     subcategories: []
     required_time_series:
-    - tankerkoenig_de_e5
-    - tankerkoenig_de_e10
-    - tankerkoenig_de_diesel
     - tankerkoenig_hamburg_e5
     - tankerkoenig_hamburg_e10
     - tankerkoenig_hamburg_diesel
     - tankerkoenig_berlin_e5
     - tankerkoenig_berlin_e10
     - tankerkoenig_berlin_diesel
-    - tankerkoenig_munich_e5
-    - tankerkoenig_munich_e10
-    - tankerkoenig_munich_diesel
     - tankerkoenig_paderborn_e5
     - tankerkoenig_paderborn_e10
     - tankerkoenig_paderborn_diesel
-    n_time_series: 15
+    n_time_series: 12
     frequency: 15 minutes
     context_length: 1000
     forecast_horizon: 1 day
@@ -449,7 +443,7 @@ schedules:
     evaluation_delay: 0 hours
 
 - id: tankerkoenig_fuel_challenge_24h_1h
-  cron: 0 1 * * *
+  cron: 15 7 * * *
   run_on_startup: false
   params:
     description: 'Tankerkoenig Fuel Price Challenge: 24h horizon, 1h frequency'
@@ -461,22 +455,16 @@ schedules:
     - fuel
     subcategories: []
     required_time_series:
-    - tankerkoenig_de_e5
-    - tankerkoenig_de_e10
-    - tankerkoenig_de_diesel
     - tankerkoenig_hamburg_e5
     - tankerkoenig_hamburg_e10
     - tankerkoenig_hamburg_diesel
     - tankerkoenig_berlin_e5
     - tankerkoenig_berlin_e10
     - tankerkoenig_berlin_diesel
-    - tankerkoenig_munich_e5
-    - tankerkoenig_munich_e10
-    - tankerkoenig_munich_diesel
     - tankerkoenig_paderborn_e5
     - tankerkoenig_paderborn_e10
     - tankerkoenig_paderborn_diesel
-    n_time_series: 15
+    n_time_series: 12
     frequency: 1 hour
     context_length: 1000
     forecast_horizon: 1 day
