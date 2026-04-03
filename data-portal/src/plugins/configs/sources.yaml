@@ -1581,12 +1581,12 @@ request_groups:
         category: fuel
         sub_category: diesel
         aggregation_level: city
-    # --- Munich --- (BK Tankstelle Isarparkhaus, BK, lat=48.133 lng=11.581)
+    # --- Munich --- (Esso Tankstelle, ESSO, lat=48.131 lng=11.558, 1.7 km from center)
     - unique_id: tankerkoenig_munich_e5
       extract_filter:
         fuel_type: e5
         region: munich
-        station_id: 41c5eac2-7a17-46d8-90fe-d0a8c56db5fc
+        station_id: b457a782-e3d4-4513-a258-c4d3e199d79a
       metadata:
         name: "Munich: Retail Fuel Price E5"
         description: Retail price for E5 gasoline at a representative Munich station (Tankerkoenig/MTS-K)
@@ -1600,7 +1600,7 @@ request_groups:
       extract_filter:
         fuel_type: e10
         region: munich
-        station_id: 41c5eac2-7a17-46d8-90fe-d0a8c56db5fc
+        station_id: b457a782-e3d4-4513-a258-c4d3e199d79a
       metadata:
         name: "Munich: Retail Fuel Price E10"
         description: Retail price for E10 gasoline at a representative Munich station (Tankerkoenig/MTS-K)
@@ -1614,7 +1614,7 @@ request_groups:
       extract_filter:
         fuel_type: diesel
         region: munich
-        station_id: 41c5eac2-7a17-46d8-90fe-d0a8c56db5fc
+        station_id: b457a782-e3d4-4513-a258-c4d3e199d79a
       metadata:
         name: "Munich: Retail Fuel Price Diesel"
         description: Retail price for Diesel at a representative Munich station (Tankerkoenig/MTS-K)
