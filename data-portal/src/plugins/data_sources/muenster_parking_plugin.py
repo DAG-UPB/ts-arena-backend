@@ -9,19 +9,25 @@ Data source:
 Open Data page:
     https://opendata.stadt-muenster.de/dataset/parkleitsystem-parkhausbelegung-aktuell
 
-Each parking garage in the XML has a <ParkingFacility> element with:
-    <ShortDescription>  — short name / ID used to match series
-    <TotalCapacity>     — total number of spaces
-    <VacantSpaces>      — currently available (free) spaces
+XML structure (plain, no namespaces):
+    <parkhaeuser>
+      <parkhaus>
+        <bezeichnung>Parkhaus Cineplex</bezeichnung>
+        <gesamt>590</gesamt>
+        <frei>485</frei>
+        <status>frei</status>
+        <zeitstempel>08.04.2026 14:33</zeitstempel>
+      </parkhaus>
+      ...
+    </parkhaeuser>
 
 Series selection via extract_filter:
-    garage_id: "total"           → sum of VacantSpaces across all open garages
-    garage_id: "<ShortDescription>" → VacantSpaces for one specific garage
+    garage_id: "total"           → sum of <frei> across all garages
+    garage_id: "<bezeichnung>"   → <frei> for one specific garage
 
 License: CC-BY 4.0 — Stadt Münster / Tiefbauamt
 """
 
-import asyncio
 import logging
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -35,11 +41,6 @@ logger = logging.getLogger(__name__)
 
 PLS_URL = "https://www.stadt-muenster.de/ms/tiefbauamt/pls/PLS-INet.xml"
 
-# Namespaces used in the PLS XML
-_NS = {
-    "d2": "http://datex2.eu/schema/2/2_0",
-}
-
 TOTAL_GARAGE_ID = "total"
 
 
@@ -47,11 +48,11 @@ class MuensterParkingPlugin(MultiSeriesPlugin):
     """
     Multi-series plugin for Münster parking garage occupancy (PLS feed).
 
-    One HTTP GET fetches the XML feed and populates all configured series
-    from a single response. Series are identified by extract_filter.garage_id:
-    - "total" → sum of available spaces across all open garages
-    - any other string → available spaces for that specific garage
-      (matched against the <shortDescription> element, case-insensitive)
+    One HTTP GET fetches the XML feed and populates all configured series.
+    Series are identified by extract_filter.garage_id:
+    - "total" → sum of free spaces across all garages
+    - any other string → free spaces for that specific garage
+      (matched against <bezeichnung>, case-insensitive)
     """
 
     def __init__(
@@ -63,7 +64,6 @@ class MuensterParkingPlugin(MultiSeriesPlugin):
     ):
         super().__init__(group_id, request_params, series_definitions, schedule)
 
-        # Map garage_id (lower) → unique_id for fast lookup
         self._garage_to_uid: Dict[str, str] = {}
         self._has_total = False
         self._total_uid: Optional[str] = None
@@ -98,12 +98,8 @@ class MuensterParkingPlugin(MultiSeriesPlugin):
     ) -> Dict[str, List[Dict[str, Any]]]:
         """Fetch current parking occupancy from the PLS XML feed.
 
-        Since the PLS does not expose historical data, this method always
-        returns the current snapshot (one data point per series per call).
-        The scheduler accumulates these snapshots over time.
-
-        start_date and end_date are accepted for interface compatibility
-        but are not used.
+        No historical data available — always returns the current snapshot.
+        The scheduler accumulates these over time.
         """
         result: Dict[str, List[Dict[str, Any]]] = {
             uid: [] for uid in (
@@ -124,7 +120,7 @@ class MuensterParkingPlugin(MultiSeriesPlugin):
         return result
 
     async def _fetch_xml(self) -> Optional[str]:
-        """Download the PLS XML feed. Returns raw text or None on error."""
+        """Download the PLS XML feed."""
         timeout = httpx.Timeout(30.0)
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
@@ -144,106 +140,80 @@ class MuensterParkingPlugin(MultiSeriesPlugin):
         xml_text: str,
         result: Dict[str, List[Dict[str, Any]]],
     ) -> None:
-        """Parse PLS XML and populate result with data points.
+        """Parse PLS XML and populate result dict.
 
-        The PLS XML is a DATEX II publication. We look for
-        <parkingFacilityStatus> elements and extract:
-          - facilityName / shortDescription → garage identifier
-          - vacantParkingSpaces → available spaces
-          - parkingFacilityStatusTime → timestamp (fallback: now)
-
-        Falls back to a simple tag scan when DATEX II namespaces are absent.
+        XML structure:
+            <parkhaeuser>
+              <parkhaus>
+                <bezeichnung>Name</bezeichnung>
+                <gesamt>total_capacity</gesamt>
+                <frei>free_spaces</frei>
+                <status>frei|besetzt|geschlossen</status>
+                <zeitstempel>DD.MM.YYYY HH:MM</zeitstempel>
+              </parkhaus>
+              ...
+            </parkhaeuser>
         """
         root = ET.fromstring(xml_text)
+        facilities = root.findall("parkhaus")
 
-        # Try namespace-aware parse first, then plain tag scan
-        facilities = root.findall(".//d2:parkingFacilityStatus", _NS)
-        if not facilities:
-            # Fall back to namespace-stripped scan
-            facilities = root.findall(".//{*}parkingFacilityStatus")
-        if not facilities:
-            # Last resort: look for any ParkingFacility or similar element
-            facilities = root.findall(".//{*}ParkingFacility")
-
-        total_vacant = 0
+        total_free = 0
         total_count = 0
 
-        for facility in facilities:
-            name = self._get_text(facility, "shortDescription") or \
-                   self._get_text(facility, "facilityName") or \
-                   self._get_text(facility, "ShortDescription") or \
-                   self._get_text(facility, "Name")
+        for parkhaus in facilities:
+            name_el = parkhaus.find("bezeichnung")
+            frei_el = parkhaus.find("frei")
+            status_el = parkhaus.find("status")
+            ts_el = parkhaus.find("zeitstempel")
 
-            vacant_str = (
-                self._get_text(facility, "vacantParkingSpaces")
-                or self._get_text(facility, "VacantSpaces")
-                or self._get_text(facility, "freeCapacity")
-            )
-
-            if vacant_str is None:
+            if frei_el is None or frei_el.text is None:
                 continue
 
             try:
-                vacant = int(vacant_str)
+                free_spaces = int(frei_el.text.strip())
             except ValueError:
-                logger.debug(
-                    f"[{self._group_id}] Non-integer vacantParkingSpaces "
-                    f"for {name!r}: {vacant_str!r}"
-                )
                 continue
 
-            # Timestamp: prefer the feed's own timestamp, fall back to now
-            ts_raw = (
-                self._get_text(facility, "parkingFacilityStatusTime")
-                or self._get_text(facility, "lastUpdated")
-            )
-            ts = self._parse_ts(ts_raw)
+            name = name_el.text.strip() if name_el is not None and name_el.text else "unknown"
+            status = status_el.text.strip().lower() if status_el is not None and status_el.text else ""
 
-            total_vacant += vacant
+            # Parse timestamp: "DD.MM.YYYY HH:MM" in Europe/Berlin
+            ts_str = self._parse_zeitstempel(ts_el)
+
+            total_free += free_spaces
             total_count += 1
 
-            if name and name.lower() in self._garage_to_uid:
+            # Match individual garage series
+            if name.lower() in self._garage_to_uid:
                 uid = self._garage_to_uid[name.lower()]
-                result[uid].append({"ts": ts, "value": float(vacant)})
+                result[uid].append({"ts": ts_str, "value": float(free_spaces)})
                 logger.debug(
-                    f"[{self._group_id}] Garage {name!r}: {vacant} free spaces @ {ts}"
+                    f"[{self._group_id}] {name}: {free_spaces} free ({status}) @ {ts_str}"
                 )
 
         if self._has_total and self._total_uid and total_count > 0:
             ts_now = datetime.now(timezone.utc).isoformat()
             result[self._total_uid].append(
-                {"ts": ts_now, "value": float(total_vacant)}
+                {"ts": ts_now, "value": float(total_free)}
             )
             logger.info(
-                f"[{self._group_id}] Total free spaces: {total_vacant} "
+                f"[{self._group_id}] Total free spaces: {total_free} "
                 f"(across {total_count} garages)"
             )
         elif self._has_total and total_count == 0:
             logger.warning(
-                f"[{self._group_id}] No facility data found in PLS XML — "
-                "check XML structure / namespace"
+                f"[{self._group_id}] No <parkhaus> elements found in PLS XML"
             )
 
     @staticmethod
-    def _get_text(element: ET.Element, tag: str) -> Optional[str]:
-        """Return text of first child with local name matching tag (namespace-agnostic)."""
-        # Exact match
-        child = element.find(tag)
-        if child is not None and child.text:
-            return child.text.strip()
-        # Namespace-wildcard match
-        child = element.find(f"{{*}}{tag}")
-        if child is not None and child.text:
-            return child.text.strip()
-        return None
-
-    @staticmethod
-    def _parse_ts(ts_raw: Optional[str]) -> str:
-        """Parse an ISO-8601 timestamp string or return current UTC time."""
-        if ts_raw:
+    def _parse_zeitstempel(ts_el: Optional[ET.Element]) -> str:
+        """Parse 'DD.MM.YYYY HH:MM' timestamp to ISO-8601 UTC string."""
+        if ts_el is not None and ts_el.text:
             try:
-                dt = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+                from zoneinfo import ZoneInfo
+                dt = datetime.strptime(ts_el.text.strip(), "%d.%m.%Y %H:%M")
+                dt = dt.replace(tzinfo=ZoneInfo("Europe/Berlin"))
                 return dt.astimezone(timezone.utc).isoformat()
-            except ValueError:
+            except (ValueError, KeyError):
                 pass
         return datetime.now(timezone.utc).isoformat()
