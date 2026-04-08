@@ -14,7 +14,9 @@ Historical backfill uses the Tankerkoenig authenticated Git data repository:
 Authentication via Basic Auth (USERNAME_TANKERKOENIG / API_KEY_TANKERKOENIG).
 
 The raw price data is event-based (only entries when a price changes).
-We resample to regular 10-minute intervals using forward-fill.
+We resample to regular 10-minute intervals: if a real price change falls
+within a bin, we average the carry-in price with the new price(s);
+otherwise we forward-fill the last known price.
 
 Data license: Creative Commons BY-NC-SA 4.0
 https://creativecommons.org/licenses/by-nc-sa/4.0/
@@ -257,9 +259,14 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
     ) -> None:
         """Download daily price CSVs and resample to 10-min intervals.
 
-        The raw CSV data is event-based: rows are only created when a price
-        changes. We resample each station's prices to regular 10-minute
-        intervals using forward-fill, then compute per-interval averages.
+        The raw CSV data is event-based: rows are only created when ANY fuel
+        price changes for a station.  This means each fuel column contains
+        many "echo" rows where its value didn't actually change.
+
+        For each 10-minute bin we compute:
+          - If no actual price change falls inside the bin: last known price.
+          - If one or more actual price changes fall inside the bin: simple
+            (unweighted) average of the carry-in price and the new prices.
 
         City series: resampled price of the configured station.
         National series: mean of all stations' resampled prices per interval.
@@ -281,6 +288,10 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
             f"Tankerkoenig CSV backfill: {len(days)} days "
             f"({start.date()} to {end.date()})"
         )
+
+        # Track last known price per (station_uuid, fuel) across days
+        # to fill the midnight-to-first-event gap via forward-fill.
+        carry_over: Dict[str, Dict[str, float]] = {}
 
         for day in days:
             url = HISTORY_PRICES_URL.format(
@@ -338,7 +349,7 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
                 )
                 continue
 
-            df["date"] = pd.to_datetime(df["date"])
+            df["date"] = pd.to_datetime(df["date"], utc=True).dt.tz_convert("Europe/Berlin")
 
             # Replace 0.000 with NaN (0 means "no price available")
             for fuel in FUEL_COLUMNS:
@@ -362,16 +373,28 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
             station_groups = df.groupby("station_uuid")
             for sid, sdf in station_groups:
                 sdf = sdf.set_index("date").sort_index()
+                if sid not in carry_over:
+                    carry_over[sid] = {}
                 for fuel in FUEL_COLUMNS:
                     if fuel not in sdf.columns:
                         continue
-                    series = sdf[fuel].dropna()
-                    if series.empty:
+                    fuel_series = sdf[fuel].dropna()
+                    prev = carry_over.get(sid, {}).get(fuel)
+
+                    resampled = _resample_fuel_series(
+                        fuel_series, time_index, prev, day_start
+                    )
+
+                    if resampled is None:
                         continue
-                    # Reindex to include regular intervals, then ffill
-                    combined_idx = series.index.union(time_index)
-                    resampled = series.reindex(combined_idx).ffill()
-                    resampled = resampled.reindex(time_index)
+
+                    # Update carry-over with last known price
+                    last_valid = resampled.last_valid_index()
+                    if last_valid is not None:
+                        carry_over[sid][fuel] = float(
+                            resampled[last_valid]
+                        )
+
                     national_prices[fuel].append(resampled)
 
                     # City-level series for configured stations
@@ -411,3 +434,87 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
 
         total = sum(len(v) for v in result.values())
         logger.info(f"Tankerkoenig CSV backfill complete: {total} data points")
+
+
+def _resample_fuel_series(
+    series: pd.Series,
+    time_index: pd.DatetimeIndex,
+    prev_price: Optional[float],
+    day_start: pd.Timestamp,
+) -> Optional[pd.Series]:
+    """Resample a single fuel's event series to 10-min chunks.
+
+    Raw Tankerkoenig data emits a row when ANY fuel column changes,
+    so each individual fuel column contains many "echo" rows where
+    its value didn't actually change.  We first strip consecutive
+    duplicates, then for each 10-minute bin:
+
+      - If no actual price change falls inside the bin: use the
+        last known (carried-forward) price.
+      - If one or more actual price changes fall inside the bin:
+        compute the simple (unweighted) average of the carry-in
+        price and all new prices.
+
+    Args:
+        series: Non-null price values for one fuel, sorted by time.
+                May contain echo rows (consecutive duplicates).
+        time_index: The regular 10-min grid for the day.
+        prev_price: Last known price from the previous day (carry-over).
+        day_start: Start of the calendar day (tz-aware).
+
+    Returns:
+        A pd.Series indexed by time_index, or None if no data at all.
+    """
+    if series.empty and prev_price is None:
+        return None
+
+    # ── Deduplicate: keep only actual price changes ──────────────────
+    # Strip consecutive duplicates so that only real price changes are
+    # treated as events for averaging purposes.
+    if not series.empty:
+        changes_only = series[series != series.shift()]
+    else:
+        changes_only = series
+
+    freq = pd.Timedelta(minutes=10)
+    result_values = []
+
+    # Build a forward-filled "last known price" series for lookups.
+    # Include prev_price as a seed just before day_start so ffill works.
+    if prev_price is not None and (changes_only.empty or changes_only.index[0] > day_start):
+        seed = pd.Series([prev_price], index=[day_start - pd.Timedelta(seconds=1)])
+        full_series = pd.concat([seed, changes_only])
+    else:
+        full_series = changes_only
+
+    # Create a forward-filled version at union of events + grid
+    combined_idx = full_series.index.union(time_index)
+    ffilled = full_series.reindex(combined_idx).ffill()
+
+    for t in time_index:
+        bin_start = t
+        bin_end = t + freq
+
+        # Price valid at (or just before) this bin's start = carry-in price
+        carry_in = ffilled.get(bin_start)
+
+        # Actual price changes strictly inside the bin
+        events_in_bin = changes_only[
+            (changes_only.index > bin_start) & (changes_only.index < bin_end)
+        ]
+
+        if events_in_bin.empty:
+            # No price change during this chunk — use the carry-in price
+            result_values.append(carry_in)
+        else:
+            # Average: carry-in price + all new prices in the bin
+            prices = [carry_in] + events_in_bin.tolist()
+            # Remove None/NaN
+            prices = [p for p in prices if p is not None and pd.notna(p)]
+            if prices:
+                result_values.append(sum(prices) / len(prices))
+            else:
+                result_values.append(None)
+
+    return pd.Series(result_values, index=time_index, dtype=float)
+
