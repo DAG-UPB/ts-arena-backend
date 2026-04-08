@@ -1668,6 +1668,39 @@ request_groups:
         sub_category: diesel
         aggregation_level: city
 
+  # ---------------------------------------------------------------------------
+  # Münster Parking (PLS) — free spaces in city parking garages
+  # Data source: https://www.stadt-muenster.de/ms/tiefbauamt/pls/PLS-INet.xml
+  # License: CC-BY 4.0 — Stadt Münster / Tiefbauamt
+  # No historical API → polled every 5 minutes; data accumulates over time.
+  #
+  # Series with garage_id: "total" → sum of free spaces across all garages.
+  # Series with garage_id: "<ShortDescription>" → free spaces for that garage.
+  # ---------------------------------------------------------------------------
+  muenster-parking:
+    module: src.plugins.data_sources.muenster_parking_plugin
+    class: MuensterParkingPlugin
+    schedule: 5 minutes
+    request_params: {}
+    timeseries:
+    - unique_id: muenster_parking_total_free_spaces_5min
+      extract_filter:
+        garage_id: total
+      metadata:
+        name: "Münster: Total Free Parking Spaces"
+        description: >
+          Sum of currently available (free) parking spaces across all open
+          city-centre garages in Münster, Germany. Sourced from the municipal
+          Parkleitsystem (PLS) XML feed; polled every 5 minutes.
+        frequency: 5 minutes
+        unit: spaces
+        domain: traffic
+        category: parking
+        subdomain: urban
+        subcategory: free_spaces
+        aggregation_level: city
+        ts_timezone: Europe/Berlin
+
 
 timeseries:
   electricity_biomass_power_plant_generation_BZ_AT_quarterhour_4066:
