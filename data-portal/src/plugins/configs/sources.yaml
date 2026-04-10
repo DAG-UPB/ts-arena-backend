@@ -1701,6 +1701,607 @@ request_groups:
         aggregation_level: city
         ts_timezone: Europe/Berlin
 
+  # ---------------------------------------------------------------------------
+  # CityBikes — Los Angeles (Metro Bike Share)
+  # Live bike-sharing availability polled every 5 minutes from api.citybik.es
+  # No historical API → data accumulates over time.
+  # ---------------------------------------------------------------------------
+  citybikes-metro-bike-share:
+    module: src.plugins.data_sources.citybikes_plugin
+    class: CityBikesPlugin
+    schedule: 5 minutes
+    request_params:
+      network_id: metro-bike-share
+    timeseries:
+    - unique_id: citybikes_metro_bike_share_free_bikes_5min
+      extract_filter:
+        metric: free_bikes
+      metadata:
+        name: "Los Angeles: Available Bikes"
+        description: >
+          Total currently available bikes across all Metro Bike Share stations
+          in Los Angeles. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: free_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+    - unique_id: citybikes_metro_bike_share_ebikes_5min
+      extract_filter:
+        metric: ebikes
+      metadata:
+        name: "Los Angeles: Available E-Bikes"
+        description: >
+          Total currently available e-bikes across all Metro Bike Share stations
+          in Los Angeles. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: ebikes
+        aggregation_level: city
+        ts_timezone: UTC
+    - unique_id: citybikes_metro_bike_share_normal_bikes_5min
+      extract_filter:
+        metric: normal_bikes
+      metadata:
+        name: "Los Angeles: Available Normal Bikes"
+        description: >
+          Total currently available normal bikes across all Metro Bike Share stations
+          in Los Angeles. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: normal_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+
+  # ---------------------------------------------------------------------------
+  # CityBikes — San Francisco (Bay Wheels)
+  # Live bike-sharing availability polled every 5 minutes from api.citybik.es
+  # No historical API → data accumulates over time.
+  # ---------------------------------------------------------------------------
+  citybikes-bay-wheels:
+    module: src.plugins.data_sources.citybikes_plugin
+    class: CityBikesPlugin
+    schedule: 5 minutes
+    request_params:
+      network_id: bay-wheels
+    timeseries:
+    - unique_id: citybikes_bay_wheels_free_bikes_5min
+      extract_filter:
+        metric: free_bikes
+      metadata:
+        name: "San Francisco: Available Bikes"
+        description: >
+          Total currently available bikes across all Bay Wheels stations
+          in San Francisco. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: free_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+    - unique_id: citybikes_bay_wheels_ebikes_5min
+      extract_filter:
+        metric: ebikes
+      metadata:
+        name: "San Francisco: Available E-Bikes"
+        description: >
+          Total currently available e-bikes across all Bay Wheels stations
+          in San Francisco. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: ebikes
+        aggregation_level: city
+        ts_timezone: UTC
+    - unique_id: citybikes_bay_wheels_normal_bikes_5min
+      extract_filter:
+        metric: normal_bikes
+      metadata:
+        name: "San Francisco: Available Normal Bikes"
+        description: >
+          Total currently available normal bikes across all Bay Wheels stations
+          in San Francisco. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: normal_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+
+  # ---------------------------------------------------------------------------
+  # CityBikes — New York (Citi Bike)
+  # Live bike-sharing availability polled every 5 minutes from api.citybik.es
+  # No historical API → data accumulates over time.
+  # ---------------------------------------------------------------------------
+  citybikes-citi-bike-nyc:
+    module: src.plugins.data_sources.citybikes_plugin
+    class: CityBikesPlugin
+    schedule: 5 minutes
+    request_params:
+      network_id: citi-bike-nyc
+    timeseries:
+    - unique_id: citybikes_citi_bike_nyc_free_bikes_5min
+      extract_filter:
+        metric: free_bikes
+      metadata:
+        name: "New York: Available Bikes"
+        description: >
+          Total currently available bikes across all Citi Bike stations
+          in New York. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: free_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+    - unique_id: citybikes_citi_bike_nyc_ebikes_5min
+      extract_filter:
+        metric: ebikes
+      metadata:
+        name: "New York: Available E-Bikes"
+        description: >
+          Total currently available e-bikes across all Citi Bike stations
+          in New York. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: ebikes
+        aggregation_level: city
+        ts_timezone: UTC
+    - unique_id: citybikes_citi_bike_nyc_normal_bikes_5min
+      extract_filter:
+        metric: normal_bikes
+      metadata:
+        name: "New York: Available Normal Bikes"
+        description: >
+          Total currently available normal bikes across all Citi Bike stations
+          in New York. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: normal_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+
+  # ---------------------------------------------------------------------------
+  # CityBikes — Chicago (Divvy)
+  # Live bike-sharing availability polled every 5 minutes from api.citybik.es
+  # No historical API → data accumulates over time.
+  # ---------------------------------------------------------------------------
+  citybikes-divvy:
+    module: src.plugins.data_sources.citybikes_plugin
+    class: CityBikesPlugin
+    schedule: 5 minutes
+    request_params:
+      network_id: divvy
+    timeseries:
+    - unique_id: citybikes_divvy_free_bikes_5min
+      extract_filter:
+        metric: free_bikes
+      metadata:
+        name: "Chicago: Available Bikes"
+        description: >
+          Total currently available bikes across all Divvy stations
+          in Chicago. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: free_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+    - unique_id: citybikes_divvy_ebikes_5min
+      extract_filter:
+        metric: ebikes
+      metadata:
+        name: "Chicago: Available E-Bikes"
+        description: >
+          Total currently available e-bikes across all Divvy stations
+          in Chicago. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: ebikes
+        aggregation_level: city
+        ts_timezone: UTC
+    - unique_id: citybikes_divvy_normal_bikes_5min
+      extract_filter:
+        metric: normal_bikes
+      metadata:
+        name: "Chicago: Available Normal Bikes"
+        description: >
+          Total currently available normal bikes across all Divvy stations
+          in Chicago. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: normal_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+
+  # ---------------------------------------------------------------------------
+  # CityBikes — Madrid (BiciMAD)
+  # Live bike-sharing availability polled every 5 minutes from api.citybik.es
+  # No historical API → data accumulates over time.
+  # ---------------------------------------------------------------------------
+  citybikes-bicimad:
+    module: src.plugins.data_sources.citybikes_plugin
+    class: CityBikesPlugin
+    schedule: 5 minutes
+    request_params:
+      network_id: bicimad
+    timeseries:
+    - unique_id: citybikes_bicimad_free_bikes_5min
+      extract_filter:
+        metric: free_bikes
+      metadata:
+        name: "Madrid: Available Bikes"
+        description: >
+          Total currently available bikes across all BiciMAD stations
+          in Madrid. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: free_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+
+  # ---------------------------------------------------------------------------
+  # CityBikes — Barcelona (Bicing)
+  # Live bike-sharing availability polled every 5 minutes from api.citybik.es
+  # No historical API → data accumulates over time.
+  # ---------------------------------------------------------------------------
+  citybikes-bicing:
+    module: src.plugins.data_sources.citybikes_plugin
+    class: CityBikesPlugin
+    schedule: 5 minutes
+    request_params:
+      network_id: bicing
+    timeseries:
+    - unique_id: citybikes_bicing_free_bikes_5min
+      extract_filter:
+        metric: free_bikes
+      metadata:
+        name: "Barcelona: Available Bikes"
+        description: >
+          Total currently available bikes across all Bicing stations
+          in Barcelona. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: free_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+    - unique_id: citybikes_bicing_ebikes_5min
+      extract_filter:
+        metric: ebikes
+      metadata:
+        name: "Barcelona: Available E-Bikes"
+        description: >
+          Total currently available e-bikes across all Bicing stations
+          in Barcelona. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: ebikes
+        aggregation_level: city
+        ts_timezone: UTC
+    - unique_id: citybikes_bicing_normal_bikes_5min
+      extract_filter:
+        metric: normal_bikes
+      metadata:
+        name: "Barcelona: Available Normal Bikes"
+        description: >
+          Total currently available normal bikes across all Bicing stations
+          in Barcelona. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: normal_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+
+  # ---------------------------------------------------------------------------
+  # CityBikes — Paris (Vélib' Métropole)
+  # Live bike-sharing availability polled every 5 minutes from api.citybik.es
+  # No historical API → data accumulates over time.
+  # ---------------------------------------------------------------------------
+  citybikes-velib:
+    module: src.plugins.data_sources.citybikes_plugin
+    class: CityBikesPlugin
+    schedule: 5 minutes
+    request_params:
+      network_id: velib
+    timeseries:
+    - unique_id: citybikes_velib_free_bikes_5min
+      extract_filter:
+        metric: free_bikes
+      metadata:
+        name: "Paris: Available Bikes"
+        description: >
+          Total currently available bikes across all Vélib' Métropole stations
+          in Paris. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: free_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+    - unique_id: citybikes_velib_ebikes_5min
+      extract_filter:
+        metric: ebikes
+      metadata:
+        name: "Paris: Available E-Bikes"
+        description: >
+          Total currently available e-bikes across all Vélib' Métropole stations
+          in Paris. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: ebikes
+        aggregation_level: city
+        ts_timezone: UTC
+    - unique_id: citybikes_velib_normal_bikes_5min
+      extract_filter:
+        metric: normal_bikes
+      metadata:
+        name: "Paris: Available Normal Bikes"
+        description: >
+          Total currently available normal bikes across all Vélib' Métropole stations
+          in Paris. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: normal_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+
+  # ---------------------------------------------------------------------------
+  # CityBikes — Berlin (Call-A-Bike)
+  # Live bike-sharing availability polled every 5 minutes from api.citybik.es
+  # No historical API → data accumulates over time.
+  # ---------------------------------------------------------------------------
+  citybikes-callabike-berlin:
+    module: src.plugins.data_sources.citybikes_plugin
+    class: CityBikesPlugin
+    schedule: 5 minutes
+    request_params:
+      network_id: callabike-berlin
+    timeseries:
+    - unique_id: citybikes_callabike_berlin_free_bikes_5min
+      extract_filter:
+        metric: free_bikes
+      metadata:
+        name: "Berlin: Available Bikes"
+        description: >
+          Total currently available bikes across all Call-A-Bike stations
+          in Berlin. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: free_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+
+  # ---------------------------------------------------------------------------
+  # CityBikes — Antwerp (Velo Antwerpen)
+  # Live bike-sharing availability polled every 5 minutes from api.citybik.es
+  # No historical API → data accumulates over time.
+  # ---------------------------------------------------------------------------
+  citybikes-velo-antwerpen:
+    module: src.plugins.data_sources.citybikes_plugin
+    class: CityBikesPlugin
+    schedule: 5 minutes
+    request_params:
+      network_id: velo-antwerpen
+    timeseries:
+    - unique_id: citybikes_velo_antwerpen_free_bikes_5min
+      extract_filter:
+        metric: free_bikes
+      metadata:
+        name: "Antwerp: Available Bikes"
+        description: >
+          Total currently available bikes across all Velo Antwerpen stations
+          in Antwerp. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: free_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+
+  # ---------------------------------------------------------------------------
+  # CityBikes — London (Santander Cycles)
+  # Live bike-sharing availability polled every 5 minutes from api.citybik.es
+  # No historical API → data accumulates over time.
+  # ---------------------------------------------------------------------------
+  citybikes-santander-cycles:
+    module: src.plugins.data_sources.citybikes_plugin
+    class: CityBikesPlugin
+    schedule: 5 minutes
+    request_params:
+      network_id: santander-cycles
+    timeseries:
+    - unique_id: citybikes_santander_cycles_free_bikes_5min
+      extract_filter:
+        metric: free_bikes
+      metadata:
+        name: "London: Available Bikes"
+        description: >
+          Total currently available bikes across all Santander Cycles stations
+          in London. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: free_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+
+  # ---------------------------------------------------------------------------
+  # CityBikes — Warsaw (VETURILO 3.0)
+  # Live bike-sharing availability polled every 5 minutes from api.citybik.es
+  # No historical API → data accumulates over time.
+  # ---------------------------------------------------------------------------
+  citybikes-veturilo-nextbike-warsaw:
+    module: src.plugins.data_sources.citybikes_plugin
+    class: CityBikesPlugin
+    schedule: 5 minutes
+    request_params:
+      network_id: veturilo-nextbike-warsaw
+    timeseries:
+    - unique_id: citybikes_veturilo_nextbike_warsaw_free_bikes_5min
+      extract_filter:
+        metric: free_bikes
+      metadata:
+        name: "Warsaw: Available Bikes"
+        description: >
+          Total currently available bikes across all VETURILO 3.0 stations
+          in Warsaw. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: free_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+
+  # ---------------------------------------------------------------------------
+  # CityBikes — Milan (BikeMi)
+  # Live bike-sharing availability polled every 5 minutes from api.citybik.es
+  # No historical API → data accumulates over time.
+  # ---------------------------------------------------------------------------
+  citybikes-bikemi:
+    module: src.plugins.data_sources.citybikes_plugin
+    class: CityBikesPlugin
+    schedule: 5 minutes
+    request_params:
+      network_id: bikemi
+    timeseries:
+    - unique_id: citybikes_bikemi_free_bikes_5min
+      extract_filter:
+        metric: free_bikes
+      metadata:
+        name: "Milan: Available Bikes"
+        description: >
+          Total currently available bikes across all BikeMi stations
+          in Milan. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: free_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+    - unique_id: citybikes_bikemi_ebikes_5min
+      extract_filter:
+        metric: ebikes
+      metadata:
+        name: "Milan: Available E-Bikes"
+        description: >
+          Total currently available e-bikes across all BikeMi stations
+          in Milan. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: ebikes
+        aggregation_level: city
+        ts_timezone: UTC
+    - unique_id: citybikes_bikemi_normal_bikes_5min
+      extract_filter:
+        metric: normal_bikes
+      metadata:
+        name: "Milan: Available Normal Bikes"
+        description: >
+          Total currently available normal bikes across all BikeMi stations
+          in Milan. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: normal_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+
+  # ---------------------------------------------------------------------------
+  # CityBikes — Tokyo (Docomo Bike Share)
+  # Live bike-sharing availability polled every 5 minutes from api.citybik.es
+  # No historical API → data accumulates over time.
+  # ---------------------------------------------------------------------------
+  citybikes-docomo-cycle-tokyo:
+    module: src.plugins.data_sources.citybikes_plugin
+    class: CityBikesPlugin
+    schedule: 5 minutes
+    request_params:
+      network_id: docomo-cycle-tokyo
+    timeseries:
+    - unique_id: citybikes_docomo_cycle_tokyo_free_bikes_5min
+      extract_filter:
+        metric: free_bikes
+      metadata:
+        name: "Tokyo: Available Bikes"
+        description: >
+          Total currently available bikes across all Docomo Bike Share stations
+          in Tokyo. Polled every 5 minutes from the CityBikes API.
+        frequency: 5 minutes
+        unit: bikes
+        domain: mobility
+        category: bike_sharing
+        subdomain: urban
+        subcategory: free_bikes
+        aggregation_level: city
+        ts_timezone: UTC
+
 
 timeseries:
   electricity_biomass_power_plant_generation_BZ_AT_quarterhour_4066:
