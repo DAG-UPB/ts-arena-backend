@@ -1,5 +1,6 @@
 """SMARD Data Portal Plugin"""
 
+import asyncio
 from datetime import datetime
 import requests
 import pandas as pd
@@ -187,13 +188,17 @@ class SmardDataSourcePlugin(BasePlugin):
         # end_date is optional, SMARD will return up to latest if not provided
         end_dt = pd.Timestamp(end_date).tz_localize(None) if end_date else None
         
-        # Call processed history
-        processed = self.portal.get_processed_history(
-            filter_value=self.filter,
-            region=self.region,
-            resolution=self.resolution,
-            start_date=start_dt,
-            end_date=end_dt,
+        # Run blocking HTTP calls in a thread to avoid blocking the event loop
+        loop = asyncio.get_event_loop()
+        processed = await loop.run_in_executor(
+            None,
+            lambda: self.portal.get_processed_history(
+                filter_value=self.filter,
+                region=self.region,
+                resolution=self.resolution,
+                start_date=start_dt,
+                end_date=end_dt,
+            ),
         )
         
         # Return processed data in standardized format
