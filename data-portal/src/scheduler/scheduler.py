@@ -30,7 +30,7 @@ class DataPortalScheduler:
         self.scheduler: Optional[AsyncIOScheduler] = None
         self.plugins: Dict[str, BasePlugin] = {}
         self.multi_series_plugins: Dict[str, MultiSeriesPlugin] = {}
-        self.max_concurrent_jobs = 10  # Global limit for parallel jobs
+        self.max_concurrent_jobs = 30
         self.job_semaphore = asyncio.Semaphore(self.max_concurrent_jobs)
         
     async def initialize(self):
@@ -61,8 +61,8 @@ class DataPortalScheduler:
         
         job_defaults = {
             'coalesce': True,  # Combine missed runs into one
-            'max_instances': 1,  # Prevent concurrent runs of same job
-            'misfire_grace_time': 300  # Allow 5 minutes grace for missed jobs
+            'max_instances': 1,
+            'misfire_grace_time': 300
         }
         
         self.scheduler = AsyncIOScheduler(
@@ -95,11 +95,11 @@ class DataPortalScheduler:
             except Exception as e:
                 logger.error(f"Failed to register multi-series job for {group_id}: {e}", exc_info=True)
         
-        self.scheduler.start()
-        logger.info(f"Scheduler started with {len(self.scheduler.get_jobs())} jobs")
-        
         logger.info("Triggering initial data fetch for all plugins...")
         await self._run_initial_fetch()
+
+        self.scheduler.start()
+        logger.info(f"Scheduler started with {len(self.scheduler.get_jobs())} jobs")
     
     async def _run_initial_fetch(self):
         """Run initial data fetch for all plugins on startup in batches"""
@@ -161,14 +161,14 @@ class DataPortalScheduler:
         """Register a scheduled job for a plugin"""
         metadata = plugin.get_metadata()
         update_frequency = metadata.update_frequency
-        
+
         try:
             interval_params = parse_frequency(update_frequency)
         except ValueError as e:
             logger.error(f"Invalid frequency '{update_frequency}' for {unique_id}: {e}")
             return
-        
-        trigger = IntervalTrigger(**interval_params)
+
+        trigger = IntervalTrigger(**interval_params, jitter=60)
         
         job_id = f"fetch_{unique_id}"
         self.scheduler.add_job(
@@ -188,14 +188,14 @@ class DataPortalScheduler:
     async def _register_multi_series_job(self, group_id: str, plugin: MultiSeriesPlugin):
         """Register a scheduled job for a multi-series plugin"""
         schedule = plugin.schedule
-        
+
         try:
             interval_params = parse_frequency(schedule)
         except ValueError as e:
             logger.error(f"Invalid schedule '{schedule}' for multi-series group {group_id}: {e}")
             return
-        
-        trigger = IntervalTrigger(**interval_params)
+
+        trigger = IntervalTrigger(**interval_params, jitter=60)
         
         job_id = f"fetch_multi_{group_id}"
         series_count = len(plugin.get_series_definitions())
@@ -222,13 +222,20 @@ class DataPortalScheduler:
         """
         metadata = plugin.get_metadata()
         job_start = datetime.now()
-        
+
         logger.info(f"[{unique_id}] Starting data fetch job...")
-        
-        # Use semaphore to limit concurrent jobs
+
+        semaphore_wait_start = datetime.now()
         async with self.job_semaphore:
+            wait_seconds = (datetime.now() - semaphore_wait_start).total_seconds()
             active_jobs = self.max_concurrent_jobs - self.job_semaphore._value
-            logger.info(f"[{unique_id}] Acquired job semaphore (active jobs: {active_jobs}/{self.max_concurrent_jobs})")
+            if wait_seconds > 5:
+                logger.warning(
+                    f"[{unique_id}] Semaphore wait: {wait_seconds:.1f}s "
+                    f"(active jobs: {active_jobs}/{self.max_concurrent_jobs})"
+                )
+            else:
+                logger.info(f"[{unique_id}] Acquired job semaphore (active jobs: {active_jobs}/{self.max_concurrent_jobs})")
             
             # Log pool status periodically (every 10th job)
             if active_jobs % 10 == 0:
@@ -302,13 +309,19 @@ class DataPortalScheduler:
                     scd2_stats = await scd2_repo.upsert_data_points(series_id, imputed_data)
                     
                     duration = (datetime.now() - job_start).total_seconds()
+                    interval_seconds = get_interval_seconds(metadata.update_frequency)
+                    if duration > interval_seconds * 0.5:
+                        logger.warning(
+                            f"[{unique_id}] Job took {duration:.1f}s, exceeding 50% of "
+                            f"{interval_seconds}s interval — risk of skipped runs"
+                        )
                     logger.info(
-                        f"[{unique_id}] Job completed successfully in {duration:.2f}s. "
+                        f"[{unique_id}] Job completed in {duration:.2f}s. "
                         f"Stored {rows_affected} data points. "
                         f"SCD2: {scd2_stats['inserted']} new, {scd2_stats['updated']} updated, "
                         f"{scd2_stats['unchanged']} unchanged."
                     )
-                    
+
                     # Update timezone if detected
                     detected_timezone = plugin.get_detected_timezone()
                     if detected_timezone:
@@ -336,11 +349,18 @@ class DataPortalScheduler:
         series_definitions = plugin.get_series_definitions()
         
         logger.info(f"[{group_id}] Starting multi-series data fetch for {len(series_definitions)} series...")
-        
-        # Use semaphore to limit concurrent jobs
+
+        semaphore_wait_start = datetime.now()
         async with self.job_semaphore:
+            wait_seconds = (datetime.now() - semaphore_wait_start).total_seconds()
             active_jobs = self.max_concurrent_jobs - self.job_semaphore._value
-            logger.info(f"[{group_id}] Acquired job semaphore (active jobs: {active_jobs}/{self.max_concurrent_jobs})")
+            if wait_seconds > 5:
+                logger.warning(
+                    f"[{group_id}] Semaphore wait: {wait_seconds:.1f}s "
+                    f"(active jobs: {active_jobs}/{self.max_concurrent_jobs})"
+                )
+            else:
+                logger.info(f"[{group_id}] Acquired job semaphore (active jobs: {active_jobs}/{self.max_concurrent_jobs})")
             
             try:
                 # Get database session using async context manager
