@@ -42,7 +42,7 @@ class Config:
     PLUGIN_CONFIG_PATH = os.getenv("PLUGIN_CONFIG_PATH", "src/plugins/configs/sources.yaml")
     
     MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
-    RETRY_DELAY_SECONDS = int(os.getenv("RETRY_DELAY_SECONDS", "60"))
+    RETRY_DELAY_SECONDS = int(os.getenv("RETRY_DELAY_SECONDS", "10"))
     
     HEALTHCHECK_INTERVAL_SECONDS = int(os.getenv("HEALTHCHECK_INTERVAL_SECONDS", "300"))
     

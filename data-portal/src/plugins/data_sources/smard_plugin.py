@@ -18,7 +18,7 @@ class SmardDataPortal:
         """Fetch available timestamps from SMARD API"""
         base_url = "https://www.smard.de/app/chart_data/{filter}/{region}/index_hour.json"
         url = base_url.format(filter=filter, region=region)
-        response = requests.get(url)
+        response = requests.get(url, timeout=30)
         if response.status_code == 200:
             data = response.json()
             return data.get("timestamps")
@@ -69,11 +69,12 @@ class SmardDataPortal:
         else:
             target = sorted({int(ts.timestamp()) * 1000 for ts in pd_ts})[-1:]
 
+        target = target[-5:]
         all_series = []
         seen = set()
         for ts in target:
             url = self.construct_url(filter, region, resolution, ts)
-            resp = requests.get(url)
+            resp = requests.get(url, timeout=30)
             if resp.status_code == 200:
                 data = resp.json()
                 for point in data.get("series", []):

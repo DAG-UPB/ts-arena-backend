@@ -125,14 +125,13 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
         """Fetch historical + live fuel prices.
 
         Strategy:
-        1. **Initial load** (start far in the past): downloads daily CSV
-           files for the full requested range. At 10-min resolution,
-           ~7 days = 1008 data points which is enough context.
-        2. **Daily reconciliation** (scheduled runs): *always* re-downloads
-           yesterday's CSV even if start_date is only 24h ago. This
-           ensures the event-based CSV data (every price change recorded)
-           overwrites the less accurate live-polled snapshots. Since
-           the DB uses upsert, duplicate timestamps are harmless.
+        1. **Historical backfill** (start_date before today): downloads daily
+           CSV files from the authenticated Tankerkoenig repository, capped at
+           7 days per run to avoid downloading hundreds of MB in a single call.
+           CSV processing (pd.read_csv + resample) runs in a thread executor so
+           the async event loop is not blocked.
+        2. **Incremental runs** (start_date is today or later): skips CSV
+           download entirely — no 35 MB fetch every 10 minutes.
         3. **Today**: uses the live prices.php API for the current snapshot.
         """
         result: Dict[str, List[Dict[str, Any]]] = {
@@ -149,9 +148,8 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
         end = pd.Timestamp(end_date, tz="Europe/Berlin") if end_date else today
 
         # Historical backfill via daily CSVs (available up to yesterday).
-        # Even for short lookbacks (e.g. scheduled 24h window), we always
-        # include yesterday for daily reconciliation of live data.
-        csv_start = min(start.normalize(), yesterday)
+        # Only download CSVs if the requested start is before today.
+        csv_start = start.normalize()
         if csv_start < today:
             await self._backfill_from_csv(
                 result, csv_start, min(end, yesterday)
@@ -284,9 +282,11 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
             return
 
         days = pd.date_range(start.normalize(), end.normalize(), freq="D")
+        if len(days) > 7:
+            days = days[-7:]
         logger.info(
             f"Tankerkoenig CSV backfill: {len(days)} days "
-            f"({start.date()} to {end.date()})"
+            f"({days[0].date()} to {days[-1].date()})"
         )
 
         # Track last known price per (station_uuid, fuel) across days
@@ -326,104 +326,142 @@ class TankerkoenigPlugin(MultiSeriesPlugin):
                 )
                 continue
 
-            try:
-                df = pd.read_csv(
-                    io.StringIO(response.text),
-                    dtype={"station_uuid": str},
+            response_text = response.text
+
+            def _process_day_csv(
+                text: str,
+                station_ids: List[str],
+                station_to_city: Dict[str, str],
+                filter_to_unique_id: Dict[Tuple[str, str], str],
+                carry_over_snapshot: Dict[str, Dict[str, float]],
+                day: pd.Timestamp,
+            ):
+                """Parse and resample one day's CSV in a thread.
+
+                Returns:
+                    (day_result, updated_carry_over, n_stations, n_points)
+                    day_result: Dict[uid, List[dict]]
+                    or None if the CSV is empty / stations not found.
+                """
+                try:
+                    df = pd.read_csv(
+                        io.StringIO(text),
+                        dtype={"station_uuid": str},
+                    )
+                except Exception as exc:
+                    return None, carry_over_snapshot, 0, 0, str(exc)
+
+                if df.empty:
+                    return None, carry_over_snapshot, 0, 0, None
+
+                df = df[df["station_uuid"].isin(station_ids)]
+                if df.empty:
+                    return None, carry_over_snapshot, 0, 0, "no_stations"
+
+                df["date"] = pd.to_datetime(df["date"], utc=True).dt.tz_convert("Europe/Berlin")
+
+                for fuel in FUEL_COLUMNS:
+                    if fuel in df.columns:
+                        df[fuel] = pd.to_numeric(df[fuel], errors="coerce")
+                        df.loc[df[fuel] <= 0, fuel] = pd.NA
+
+                day_start = day.tz_localize("Europe/Berlin") if day.tzinfo is None else day.tz_convert("Europe/Berlin")
+                day_end = day_start + pd.Timedelta(days=1) - pd.Timedelta(minutes=10)
+                time_index = pd.date_range(day_start, day_end, freq=RESAMPLE_FREQ)
+
+                national_prices: Dict[str, List[pd.Series]] = {f: [] for f in FUEL_COLUMNS}
+                day_result: Dict[str, List[Dict[str, Any]]] = {}
+                new_carry_over = {k: dict(v) for k, v in carry_over_snapshot.items()}
+
+                station_groups = df.groupby("station_uuid")
+                for sid, sdf in station_groups:
+                    sdf = sdf.set_index("date").sort_index()
+                    if sid not in new_carry_over:
+                        new_carry_over[sid] = {}
+                    for fuel in FUEL_COLUMNS:
+                        if fuel not in sdf.columns:
+                            continue
+                        fuel_series = sdf[fuel].dropna()
+                        prev = new_carry_over.get(sid, {}).get(fuel)
+
+                        resampled = _resample_fuel_series(
+                            fuel_series, time_index, prev, day_start
+                        )
+
+                        if resampled is None:
+                            continue
+
+                        last_valid = resampled.last_valid_index()
+                        if last_valid is not None:
+                            new_carry_over[sid][fuel] = float(resampled[last_valid])
+
+                        national_prices[fuel].append(resampled)
+
+                        if sid in station_to_city:
+                            city = station_to_city[sid]
+                            uid = filter_to_unique_id.get((city, fuel))
+                            if uid:
+                                if uid not in day_result:
+                                    day_result[uid] = []
+                                for ts, val in resampled.dropna().items():
+                                    day_result[uid].append({
+                                        "ts": ts.isoformat(),
+                                        "value": round(float(val), 4),
+                                    })
+
+                for fuel in FUEL_COLUMNS:
+                    if not national_prices[fuel]:
+                        continue
+                    stacked = pd.concat(national_prices[fuel], axis=1)
+                    avg_series = stacked.mean(axis=1).dropna()
+                    uid = filter_to_unique_id.get(("national", fuel))
+                    if uid:
+                        if uid not in day_result:
+                            day_result[uid] = []
+                        for ts, val in avg_series.items():
+                            day_result[uid].append({
+                                "ts": ts.isoformat(),
+                                "value": round(float(val), 4),
+                            })
+
+                n_stations = df["station_uuid"].nunique()
+                n_points = len(time_index)
+                return day_result, new_carry_over, n_stations, n_points, None
+
+            day_result, new_carry_over, n_stations, n_points, err = (
+                await loop.run_in_executor(
+                    None,
+                    lambda: _process_day_csv(
+                        response_text,
+                        self._station_ids,
+                        self._station_to_city,
+                        self._filter_to_unique_id,
+                        carry_over,
+                        day,
+                    ),
                 )
-            except Exception as exc:
-                logger.warning(f"Tankerkoenig CSV: Parse error for {day.date()}: {exc}")
-                continue
+            )
 
-            if df.empty:
-                continue
-
-            # ── Filter to configured stations only ────────────────────
-            # The full CSV has ~14K stations (~35MB). We only need our
-            # configured ones, so filter early to save memory & compute.
-            df = df[df["station_uuid"].isin(self._station_ids)]
-            if df.empty:
+            if err == "no_stations":
                 logger.debug(
                     f"Tankerkoenig CSV: {day.date()} — none of our "
                     f"{len(self._station_ids)} stations found in CSV"
                 )
+                await asyncio.sleep(0.5)
+                continue
+            if err is not None:
+                logger.warning(f"Tankerkoenig CSV: Parse error for {day.date()}: {err}")
+                await asyncio.sleep(0.5)
+                continue
+            if day_result is None:
+                await asyncio.sleep(0.5)
                 continue
 
-            df["date"] = pd.to_datetime(df["date"], utc=True).dt.tz_convert("Europe/Berlin")
+            # Merge results back into the main result dict
+            carry_over = new_carry_over
+            for uid, points in day_result.items():
+                result[uid].extend(points)
 
-            # Replace 0.000 with NaN (0 means "no price available")
-            for fuel in FUEL_COLUMNS:
-                if fuel in df.columns:
-                    df[fuel] = pd.to_numeric(df[fuel], errors="coerce")
-                    df.loc[df[fuel] <= 0, fuel] = pd.NA
-
-            # Build 10-min time index for the day
-            day_start = day.tz_localize("Europe/Berlin") if day.tzinfo is None else day.tz_convert("Europe/Berlin")
-            day_end = day_start + pd.Timedelta(days=1) - pd.Timedelta(
-                minutes=10
-            )
-            time_index = pd.date_range(day_start, day_end, freq=RESAMPLE_FREQ)
-
-            # ── National average at 10-min resolution ─────────────────
-            # Group by station, resample each, then average across stations
-            national_prices: Dict[str, List[pd.Series]] = {
-                f: [] for f in FUEL_COLUMNS
-            }
-
-            station_groups = df.groupby("station_uuid")
-            for sid, sdf in station_groups:
-                sdf = sdf.set_index("date").sort_index()
-                if sid not in carry_over:
-                    carry_over[sid] = {}
-                for fuel in FUEL_COLUMNS:
-                    if fuel not in sdf.columns:
-                        continue
-                    fuel_series = sdf[fuel].dropna()
-                    prev = carry_over.get(sid, {}).get(fuel)
-
-                    resampled = _resample_fuel_series(
-                        fuel_series, time_index, prev, day_start
-                    )
-
-                    if resampled is None:
-                        continue
-
-                    # Update carry-over with last known price
-                    last_valid = resampled.last_valid_index()
-                    if last_valid is not None:
-                        carry_over[sid][fuel] = float(
-                            resampled[last_valid]
-                        )
-
-                    national_prices[fuel].append(resampled)
-
-                    # City-level series for configured stations
-                    if sid in self._station_to_city:
-                        city = self._station_to_city[sid]
-                        uid = self._filter_to_unique_id.get((city, fuel))
-                        if uid:
-                            for ts, val in resampled.dropna().items():
-                                result[uid].append({
-                                    "ts": ts.isoformat(),
-                                    "value": round(float(val), 4),
-                                })
-
-            # Compute national average per time step
-            for fuel in FUEL_COLUMNS:
-                if not national_prices[fuel]:
-                    continue
-                stacked = pd.concat(national_prices[fuel], axis=1)
-                avg_series = stacked.mean(axis=1).dropna()
-                uid = self._filter_to_unique_id.get(("national", fuel))
-                if uid:
-                    for ts, val in avg_series.items():
-                        result[uid].append({
-                            "ts": ts.isoformat(),
-                            "value": round(float(val), 4),
-                        })
-
-            n_stations = df["station_uuid"].nunique()
-            n_points = len(time_index)
             logger.info(
                 f"Tankerkoenig CSV: {day.date()} — {n_stations} stations, "
                 f"{n_points} time steps per station"
