@@ -2407,6 +2407,75 @@ request_groups:
           subcategory: count
           aggregation_level: sensor
 
+  # ---------------------------------------------------------------------------
+  # Urban Paderborn — Water Temperature Sensors (Teuto.net Data Hub)
+  #
+  # Project: paderborn.spb-a67-003
+  # Metric:  water_temperature_degrees_celsius (native cadence ~15 min)
+  # Sensors: 3 (Padersee, Waschfrauendenkmal, Spielplatz Fürstenallee)
+  #
+  # One HTTP call fetches all three sensors; plugin splits by devid.
+  # License: CC-BY 4.0 — Stadt Paderborn / Urban Data Hub
+  # ---------------------------------------------------------------------------
+  urban-paderborn-water-temperature:
+    module: src.plugins.data_sources.urban_paderborn_sensors_plugin
+    class: UrbanPaderbornSensorsPlugin
+    schedule: 15 minutes
+    request_params:
+      project: paderborn.spb-a67-003
+      metric: water_temperature_degrees_celsius
+      lookback: "1h"
+      ssl_verify: false
+      timeout_seconds: 60
+    timeseries:
+      - unique_id: urban_paderborn.padersee.water_temperature
+        extract_filter:
+          devid: lsn50v2-e182a4a9
+        metadata:
+          name: "Paderborn Padersee: Water Temperature"
+          description: >
+            Water temperature at Padersee (sensor lsn50v2-e182a4a9),
+            Urban Data Hub Paderborn.
+          frequency: 15 minutes
+          unit: "°C"
+          domain: environment
+          category: water
+          subdomain: urban
+          subcategory: temperature
+          aggregation_level: sensor
+
+      - unique_id: urban_paderborn.waschfrauendenkmal.water_temperature
+        extract_filter:
+          devid: lsn50v2-5182a461
+        metadata:
+          name: "Paderborn Waschfrauendenkmal: Water Temperature"
+          description: >
+            Water temperature at Waschfrauendenkmal (sensor lsn50v2-5182a461),
+            Urban Data Hub Paderborn.
+          frequency: 15 minutes
+          unit: "°C"
+          domain: environment
+          category: water
+          subdomain: urban
+          subcategory: temperature
+          aggregation_level: sensor
+
+      - unique_id: urban_paderborn.spielplatz-fuerstenallee.water_temperature
+        extract_filter:
+          devid: lsn50v2-f182a4ce
+        metadata:
+          name: "Paderborn Spielplatz Fürstenallee: Water Temperature"
+          description: >
+            Water temperature at Spielplatz Fürstenallee (sensor lsn50v2-f182a4ce),
+            Urban Data Hub Paderborn.
+          frequency: 15 minutes
+          unit: "°C"
+          domain: environment
+          category: water
+          subdomain: urban
+          subcategory: temperature
+          aggregation_level: sensor
+
 
 timeseries:
   electricity_biomass_power_plant_generation_BZ_AT_quarterhour_4066:
