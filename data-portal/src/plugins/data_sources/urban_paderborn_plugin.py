@@ -13,15 +13,22 @@ Key design decisions:
   `direction` property.
 - Multi-metric stacking is NOT supported by the API (duplicate `query=` param
   returns HTTP 400).  One HTTP call is made per metric per devid.
-- Aggregation (avg, count) is computed client-side from the raw time-series
-  values returned in the `values` list of each feature.
+- Aggregation (average_speed, count) is computed client-side from the raw
+  time-series values returned in the `values` list of each feature.
 - Only aggregate rows are stored — raw per-vehicle rows are never persisted.
 
 Series unique_id scheme:
-    traffic_<devid>_dir<N>_<class_group>_<metric>_<aggregate>_5min
+    urban_paderborn.<location-slug>.dir<N>.<class_group>.<aggregate>
+
+    Location slugs use German transliteration: ä→ae, ö→oe, ü→ue, ß→ss.
 
 Example:
-    traffic_topo004932_dir0_motorvehicles_speed_kilometers_per_hour_avg_5min
+    urban_paderborn.muensterstrasse-31.dir0.motorvehicles.average_speed
+    urban_paderborn.muensterstrasse-31.dir0.motorvehicles.count
+
+Supported aggregate names in extract_filter:
+    average_speed — arithmetic mean of the speed_kilometers_per_hour values
+    count         — number of vehicle observations in the bucket
 
 License: CC-BY 4.0 — Stadt Paderborn / Urban Data Hub
 """
@@ -61,7 +68,7 @@ def _build_query_url(
         devid: e.g. "topo004932"
         class_regex: e.g. "car|bus|truck"
         metric: e.g. "speed_kilometers_per_hour"
-        lookback: e.g. "1h" or "96h"
+        lookback: e.g. "1h"
     """
     selector = (
         f'{metric}'
@@ -114,23 +121,10 @@ def _compute_aggregates(
     for bts, vals in buckets.items():
         row: Dict[str, Optional[float]] = {}
         for agg in aggregates:
-            if agg == "avg":
-                row["avg"] = sum(vals) / len(vals) if vals else None
+            if agg in ("avg", "average_speed"):
+                row[agg] = sum(vals) / len(vals) if vals else None
             elif agg == "count":
                 row["count"] = float(len(vals))
-            elif agg == "min":
-                row["min"] = min(vals) if vals else None
-            elif agg == "max":
-                row["max"] = max(vals) if vals else None
-            elif agg == "sum":
-                row["sum"] = sum(vals) if vals else None
-            elif agg == "stddev":
-                if len(vals) > 1:
-                    mean = sum(vals) / len(vals)
-                    variance = sum((v - mean) ** 2 for v in vals) / len(vals)
-                    row["stddev"] = variance ** 0.5
-                else:
-                    row["stddev"] = 0.0
             else:
                 logger.warning("Unknown aggregate: %s", agg)
         result[bts] = row
@@ -141,17 +135,17 @@ class UrbanPaderbornPlugin(MultiSeriesPlugin):
     """
     Multi-series plugin for Urban Paderborn traffic data.
 
-    Makes one HTTP call per configured (devid, metric) combination, then
-    splits the response by direction client-side and computes aggregates
+    Makes one HTTP call per configured (devid, class_group, metric) combination,
+    then splits the response by direction client-side and computes aggregates
     per 5-minute bucket.
 
     request_params (from sources.yaml):
         project (str): Data Hub project ID.
-        lookback (str): PromQL range, e.g. "1h" or "96h".
+        lookback (str): PromQL range, e.g. "1h".
         ssl_verify (bool): Whether to verify TLS certificate (default True).
 
     Series unique_id encodes:
-        traffic_{devid}_dir{N}_{class_group}_{metric}_{aggregate}_5min
+        urban_paderborn.<location-slug>.dir<N>.<class_group>.<aggregate>
     """
 
     BUCKET_SECONDS = 300  # 5-minute aggregation buckets

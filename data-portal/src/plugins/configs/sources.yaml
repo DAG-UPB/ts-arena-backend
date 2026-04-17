@@ -2304,29 +2304,16 @@ request_groups:
 
 
   # ---------------------------------------------------------------------------
-  # Urban Paderborn — Traffic sensors (teuto.net Data Hub)
-  # Detector: topo004932 / Münsterstraße 31
+  # Urban Paderborn — Traffic sensor (teuto.net Data Hub)
+  # Location: Münsterstraße 31 (devid topo004932 in the upstream API)
   # API: https://export.data-hub.teuto.net/geojson
-  # Query format: metric{devid="<id>",class=~"<regex>"}[<lookback>]
-  # - No direction filter in URL; split client-side on `direction` property.
-  # - Multi-metric stacking NOT supported (duplicate query= returns HTTP 400).
-  # - Aggregation (avg, count) computed client-side per 5-minute bucket.
   # License: CC-BY 4.0 — Stadt Paderborn / Urban Data Hub
   #
-  # Two request groups for the same sensor:
-  #   urban-paderborn-topo004932       → every 5 min, 1 h lookback (incremental)
-  #   urban-paderborn-topo004932-daily → daily at 01:00 UTC via 86400s schedule,
-  #                                      96 h lookback (gap/outage recovery)
-  #
-  # extract_filter fields (consumed by UrbanPaderbornPlugin):
-  #   devid          Device ID string
-  #   direction      0 or 1 (int)
-  #   class_group    Human-readable group name (for logging)
-  #   class_regex    PromQL regex used in URL query
-  #   metric         Metric name
-  #   aggregate      One of: avg, count, min, max, stddev
+  # One HTTP call per poll (speed_kilometers_per_hour, motorvehicles).
+  # Both aggregates (count, average_speed) derive from that single call.
+  # Long-history backfill tracked in issue #26.
   # ---------------------------------------------------------------------------
-  urban-paderborn-topo004932:
+  urban-paderborn-muensterstrasse-31:
     module: src.plugins.data_sources.urban_paderborn_plugin
     class: UrbanPaderbornPlugin
     schedule: 5 minutes
@@ -2336,20 +2323,18 @@ request_groups:
       ssl_verify: false
       timeout_seconds: 60
     timeseries:
-      # ── Direction 0 ── motorvehicles ─────────────────────────────────────
-      - unique_id: traffic_topo004932_dir0_motorvehicles_speed_kilometers_per_hour_avg_5min
+      - unique_id: urban_paderborn.muensterstrasse-31.dir0.motorvehicles.average_speed
         extract_filter:
           devid: topo004932
           direction: 0
           class_group: motorvehicles
           class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
           metric: speed_kilometers_per_hour
-          aggregate: avg
+          aggregate: average_speed
         metadata:
-          name: "Paderborn topo004932 Dir0 Motorvehicles: Avg Speed"
+          name: "Paderborn Münsterstraße 31 Dir0 Motorvehicles: Avg Speed"
           description: >
-            Average speed of motor vehicles (car, van, bus, motorcycle, truck,
-            truck_with_trailer, car_with_trailer) at topo004932 (Münsterstraße 31),
+            Average speed of motor vehicles at Münsterstraße 31 (topo004932),
             direction 0. 5-minute aggregate from Urban Data Hub Paderborn.
           frequency: 5 minutes
           unit: km/h
@@ -2359,7 +2344,7 @@ request_groups:
           subcategory: speed
           aggregation_level: sensor
 
-      - unique_id: traffic_topo004932_dir0_motorvehicles_speed_kilometers_per_hour_count_5min
+      - unique_id: urban_paderborn.muensterstrasse-31.dir0.motorvehicles.count
         extract_filter:
           devid: topo004932
           direction: 0
@@ -2368,451 +2353,11 @@ request_groups:
           metric: speed_kilometers_per_hour
           aggregate: count
         metadata:
-          name: "Paderborn topo004932 Dir0 Motorvehicles: Vehicle Count (speed)"
+          name: "Paderborn Münsterstraße 31 Dir0 Motorvehicles: Vehicle Count"
           description: >
-            Count of motor vehicles with a speed measurement at topo004932
-            (Münsterstraße 31), direction 0. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: vehicles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: count
-          aggregation_level: sensor
-
-      # ── Direction 0 ── motorvehicles ── acoustic_pressure ────────────────
-      - unique_id: traffic_topo004932_dir0_motorvehicles_acoustic_pressure_decibels_avg_5min
-        extract_filter:
-          devid: topo004932
-          direction: 0
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: acoustic_pressure_decibels
-          aggregate: avg
-        metadata:
-          name: "Paderborn topo004932 Dir0 Motorvehicles: Avg Acoustic Pressure"
-          description: >
-            Average acoustic pressure (dB) of motor vehicles at topo004932
-            (Münsterstraße 31), direction 0. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: dB
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: noise
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir0_motorvehicles_acoustic_pressure_decibels_count_5min
-        extract_filter:
-          devid: topo004932
-          direction: 0
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: acoustic_pressure_decibels
-          aggregate: count
-        metadata:
-          name: "Paderborn topo004932 Dir0 Motorvehicles: Vehicle Count (acoustic)"
-          description: >
-            Count of motor vehicles with an acoustic pressure measurement at topo004932
-            (Münsterstraße 31), direction 0. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: vehicles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: count
-          aggregation_level: sensor
-
-      # ── Direction 0 ── motorvehicles ── vehicle_length ───────────────────
-      - unique_id: traffic_topo004932_dir0_motorvehicles_vehicle_length_meters_avg_5min
-        extract_filter:
-          devid: topo004932
-          direction: 0
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: vehicle_length_meters
-          aggregate: avg
-        metadata:
-          name: "Paderborn topo004932 Dir0 Motorvehicles: Avg Vehicle Length"
-          description: >
-            Average vehicle length (m) of motor vehicles at topo004932
-            (Münsterstraße 31), direction 0. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: m
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: vehicle_length
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir0_motorvehicles_vehicle_length_meters_count_5min
-        extract_filter:
-          devid: topo004932
-          direction: 0
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: vehicle_length_meters
-          aggregate: count
-        metadata:
-          name: "Paderborn topo004932 Dir0 Motorvehicles: Vehicle Count (length)"
-          description: >
-            Count of motor vehicles with a length measurement at topo004932
-            (Münsterstraße 31), direction 0. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: vehicles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: count
-          aggregation_level: sensor
-
-      # ── Direction 0 ── motorvehicles ── vehicle_axles ────────────────────
-      - unique_id: traffic_topo004932_dir0_motorvehicles_vehicle_axles_total_avg_5min
-        extract_filter:
-          devid: topo004932
-          direction: 0
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: vehicle_axles_total
-          aggregate: avg
-        metadata:
-          name: "Paderborn topo004932 Dir0 Motorvehicles: Avg Axle Count"
-          description: >
-            Average axle count of motor vehicles at topo004932 (Münsterstraße 31),
-            direction 0. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: axles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: vehicle_axles
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir0_motorvehicles_vehicle_axles_total_count_5min
-        extract_filter:
-          devid: topo004932
-          direction: 0
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: vehicle_axles_total
-          aggregate: count
-        metadata:
-          name: "Paderborn topo004932 Dir0 Motorvehicles: Vehicle Count (axles)"
-          description: >
-            Count of motor vehicles with an axle measurement at topo004932
-            (Münsterstraße 31), direction 0. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: vehicles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: count
-          aggregation_level: sensor
-
-      # ── Direction 1 ── motorvehicles ─────────────────────────────────────
-      - unique_id: traffic_topo004932_dir1_motorvehicles_speed_kilometers_per_hour_avg_5min
-        extract_filter:
-          devid: topo004932
-          direction: 1
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: speed_kilometers_per_hour
-          aggregate: avg
-        metadata:
-          name: "Paderborn topo004932 Dir1 Motorvehicles: Avg Speed"
-          description: >
-            Average speed of motor vehicles at topo004932 (Münsterstraße 31),
-            direction 1. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: km/h
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: speed
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir1_motorvehicles_speed_kilometers_per_hour_count_5min
-        extract_filter:
-          devid: topo004932
-          direction: 1
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: speed_kilometers_per_hour
-          aggregate: count
-        metadata:
-          name: "Paderborn topo004932 Dir1 Motorvehicles: Vehicle Count (speed)"
-          description: >
-            Count of motor vehicles with a speed measurement at topo004932
-            (Münsterstraße 31), direction 1. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: vehicles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: count
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir1_motorvehicles_acoustic_pressure_decibels_avg_5min
-        extract_filter:
-          devid: topo004932
-          direction: 1
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: acoustic_pressure_decibels
-          aggregate: avg
-        metadata:
-          name: "Paderborn topo004932 Dir1 Motorvehicles: Avg Acoustic Pressure"
-          description: >
-            Average acoustic pressure (dB) of motor vehicles at topo004932
-            (Münsterstraße 31), direction 1. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: dB
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: noise
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir1_motorvehicles_acoustic_pressure_decibels_count_5min
-        extract_filter:
-          devid: topo004932
-          direction: 1
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: acoustic_pressure_decibels
-          aggregate: count
-        metadata:
-          name: "Paderborn topo004932 Dir1 Motorvehicles: Vehicle Count (acoustic)"
-          description: >
-            Count of motor vehicles with an acoustic pressure measurement at topo004932
-            (Münsterstraße 31), direction 1. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: vehicles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: count
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir1_motorvehicles_vehicle_length_meters_avg_5min
-        extract_filter:
-          devid: topo004932
-          direction: 1
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: vehicle_length_meters
-          aggregate: avg
-        metadata:
-          name: "Paderborn topo004932 Dir1 Motorvehicles: Avg Vehicle Length"
-          description: >
-            Average vehicle length (m) of motor vehicles at topo004932
-            (Münsterstraße 31), direction 1. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: m
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: vehicle_length
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir1_motorvehicles_vehicle_length_meters_count_5min
-        extract_filter:
-          devid: topo004932
-          direction: 1
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: vehicle_length_meters
-          aggregate: count
-        metadata:
-          name: "Paderborn topo004932 Dir1 Motorvehicles: Vehicle Count (length)"
-          description: >
-            Count of motor vehicles with a length measurement at topo004932
-            (Münsterstraße 31), direction 1. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: vehicles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: count
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir1_motorvehicles_vehicle_axles_total_avg_5min
-        extract_filter:
-          devid: topo004932
-          direction: 1
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: vehicle_axles_total
-          aggregate: avg
-        metadata:
-          name: "Paderborn topo004932 Dir1 Motorvehicles: Avg Axle Count"
-          description: >
-            Average axle count of motor vehicles at topo004932 (Münsterstraße 31),
-            direction 1. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: axles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: vehicle_axles
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir1_motorvehicles_vehicle_axles_total_count_5min
-        extract_filter:
-          devid: topo004932
-          direction: 1
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: vehicle_axles_total
-          aggregate: count
-        metadata:
-          name: "Paderborn topo004932 Dir1 Motorvehicles: Vehicle Count (axles)"
-          description: >
-            Count of motor vehicles with an axle measurement at topo004932
-            (Münsterstraße 31), direction 1. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: vehicles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: count
-          aggregation_level: sensor
-
-      # ── all class group ── (includes bicycle) ────────────────────────────
-      - unique_id: traffic_topo004932_dir0_all_speed_kilometers_per_hour_avg_5min
-        extract_filter:
-          devid: topo004932
-          direction: 0
-          class_group: all
-          class_regex: "bicycle|bus|car|car_with_trailer|motorcycle|truck|truck_with_trailer|van"
-          metric: speed_kilometers_per_hour
-          aggregate: avg
-        metadata:
-          name: "Paderborn topo004932 Dir0 All: Avg Speed"
-          description: >
-            Average speed of all vehicle classes (including bicycle) at topo004932
-            (Münsterstraße 31), direction 0. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: km/h
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: speed
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir0_all_speed_kilometers_per_hour_count_5min
-        extract_filter:
-          devid: topo004932
-          direction: 0
-          class_group: all
-          class_regex: "bicycle|bus|car|car_with_trailer|motorcycle|truck|truck_with_trailer|van"
-          metric: speed_kilometers_per_hour
-          aggregate: count
-        metadata:
-          name: "Paderborn topo004932 Dir0 All: Vehicle Count (speed)"
-          description: >
-            Count of all vehicle classes with a speed measurement at topo004932
-            (Münsterstraße 31), direction 0. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: vehicles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: count
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir1_all_speed_kilometers_per_hour_avg_5min
-        extract_filter:
-          devid: topo004932
-          direction: 1
-          class_group: all
-          class_regex: "bicycle|bus|car|car_with_trailer|motorcycle|truck|truck_with_trailer|van"
-          metric: speed_kilometers_per_hour
-          aggregate: avg
-        metadata:
-          name: "Paderborn topo004932 Dir1 All: Avg Speed"
-          description: >
-            Average speed of all vehicle classes (including bicycle) at topo004932
-            (Münsterstraße 31), direction 1. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: km/h
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: speed
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir1_all_speed_kilometers_per_hour_count_5min
-        extract_filter:
-          devid: topo004932
-          direction: 1
-          class_group: all
-          class_regex: "bicycle|bus|car|car_with_trailer|motorcycle|truck|truck_with_trailer|van"
-          metric: speed_kilometers_per_hour
-          aggregate: count
-        metadata:
-          name: "Paderborn topo004932 Dir1 All: Vehicle Count (speed)"
-          description: >
-            Count of all vehicle classes with a speed measurement at topo004932
-            (Münsterstraße 31), direction 1. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: vehicles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: count
-          aggregation_level: sensor
-
-  # ---------------------------------------------------------------------------
-  # Urban Paderborn — Daily recovery job (96 h lookback, same series as above)
-  # Runs every 24 h to backfill any gaps caused by outages.
-  # Same unique_ids → upsert semantics overwrite existing values safely.
-  # ---------------------------------------------------------------------------
-  urban-paderborn-topo004932-daily:
-    module: src.plugins.data_sources.urban_paderborn_plugin
-    class: UrbanPaderbornPlugin
-    schedule: 86400 seconds
-    request_params:
-      project: paderborn.spb-a66-topo
-      lookback: "96h"
-      ssl_verify: false
-      timeout_seconds: 120
-    timeseries:
-      - unique_id: traffic_topo004932_dir0_motorvehicles_speed_kilometers_per_hour_avg_5min
-        extract_filter:
-          devid: topo004932
-          direction: 0
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: speed_kilometers_per_hour
-          aggregate: avg
-        metadata:
-          name: "Paderborn topo004932 Dir0 Motorvehicles: Avg Speed"
-          description: >
-            Average speed of motor vehicles at topo004932 (Münsterstraße 31),
+            Count of motor vehicles at Münsterstraße 31 (topo004932),
             direction 0. 5-minute aggregate from Urban Data Hub Paderborn.
           frequency: 5 minutes
-          unit: km/h
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: speed
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir0_motorvehicles_speed_kilometers_per_hour_count_5min
-        extract_filter:
-          devid: topo004932
-          direction: 0
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: speed_kilometers_per_hour
-          aggregate: count
-        metadata:
-          name: "Paderborn topo004932 Dir0 Motorvehicles: Vehicle Count (speed)"
-          description: >
-            Count of motor vehicles with a speed measurement at topo004932
-            (Münsterstraße 31), direction 0. 5-minute aggregate.
-          frequency: 5 minutes
           unit: vehicles
           domain: traffic
           category: road_traffic
@@ -2820,145 +2365,19 @@ request_groups:
           subcategory: count
           aggregation_level: sensor
 
-      - unique_id: traffic_topo004932_dir0_motorvehicles_acoustic_pressure_decibels_avg_5min
-        extract_filter:
-          devid: topo004932
-          direction: 0
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: acoustic_pressure_decibels
-          aggregate: avg
-        metadata:
-          name: "Paderborn topo004932 Dir0 Motorvehicles: Avg Acoustic Pressure"
-          description: >
-            Average acoustic pressure (dB) of motor vehicles at topo004932
-            (Münsterstraße 31), direction 0. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: dB
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: noise
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir0_motorvehicles_acoustic_pressure_decibels_count_5min
-        extract_filter:
-          devid: topo004932
-          direction: 0
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: acoustic_pressure_decibels
-          aggregate: count
-        metadata:
-          name: "Paderborn topo004932 Dir0 Motorvehicles: Vehicle Count (acoustic)"
-          description: >
-            Count of motor vehicles with an acoustic pressure measurement at topo004932
-            (Münsterstraße 31), direction 0. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: vehicles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: count
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir0_motorvehicles_vehicle_length_meters_avg_5min
-        extract_filter:
-          devid: topo004932
-          direction: 0
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: vehicle_length_meters
-          aggregate: avg
-        metadata:
-          name: "Paderborn topo004932 Dir0 Motorvehicles: Avg Vehicle Length"
-          description: >
-            Average vehicle length (m) of motor vehicles at topo004932
-            (Münsterstraße 31), direction 0. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: m
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: vehicle_length
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir0_motorvehicles_vehicle_length_meters_count_5min
-        extract_filter:
-          devid: topo004932
-          direction: 0
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: vehicle_length_meters
-          aggregate: count
-        metadata:
-          name: "Paderborn topo004932 Dir0 Motorvehicles: Vehicle Count (length)"
-          description: >
-            Count of motor vehicles with a length measurement at topo004932
-            (Münsterstraße 31), direction 0. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: vehicles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: count
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir0_motorvehicles_vehicle_axles_total_avg_5min
-        extract_filter:
-          devid: topo004932
-          direction: 0
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: vehicle_axles_total
-          aggregate: avg
-        metadata:
-          name: "Paderborn topo004932 Dir0 Motorvehicles: Avg Axle Count"
-          description: >
-            Average axle count of motor vehicles at topo004932 (Münsterstraße 31),
-            direction 0. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: axles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: vehicle_axles
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir0_motorvehicles_vehicle_axles_total_count_5min
-        extract_filter:
-          devid: topo004932
-          direction: 0
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: vehicle_axles_total
-          aggregate: count
-        metadata:
-          name: "Paderborn topo004932 Dir0 Motorvehicles: Vehicle Count (axles)"
-          description: >
-            Count of motor vehicles with an axle measurement at topo004932
-            (Münsterstraße 31), direction 0. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: vehicles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: count
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir1_motorvehicles_speed_kilometers_per_hour_avg_5min
+      - unique_id: urban_paderborn.muensterstrasse-31.dir1.motorvehicles.average_speed
         extract_filter:
           devid: topo004932
           direction: 1
           class_group: motorvehicles
           class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
           metric: speed_kilometers_per_hour
-          aggregate: avg
+          aggregate: average_speed
         metadata:
-          name: "Paderborn topo004932 Dir1 Motorvehicles: Avg Speed"
+          name: "Paderborn Münsterstraße 31 Dir1 Motorvehicles: Avg Speed"
           description: >
-            Average speed of motor vehicles at topo004932 (Münsterstraße 31),
-            direction 1. 5-minute aggregate.
+            Average speed of motor vehicles at Münsterstraße 31 (topo004932),
+            direction 1. 5-minute aggregate from Urban Data Hub Paderborn.
           frequency: 5 minutes
           unit: km/h
           domain: traffic
@@ -2967,7 +2386,7 @@ request_groups:
           subcategory: speed
           aggregation_level: sensor
 
-      - unique_id: traffic_topo004932_dir1_motorvehicles_speed_kilometers_per_hour_count_5min
+      - unique_id: urban_paderborn.muensterstrasse-31.dir1.motorvehicles.count
         extract_filter:
           devid: topo004932
           direction: 1
@@ -2976,220 +2395,10 @@ request_groups:
           metric: speed_kilometers_per_hour
           aggregate: count
         metadata:
-          name: "Paderborn topo004932 Dir1 Motorvehicles: Vehicle Count (speed)"
+          name: "Paderborn Münsterstraße 31 Dir1 Motorvehicles: Vehicle Count"
           description: >
-            Count of motor vehicles with a speed measurement at topo004932
-            (Münsterstraße 31), direction 1. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: vehicles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: count
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir1_motorvehicles_acoustic_pressure_decibels_avg_5min
-        extract_filter:
-          devid: topo004932
-          direction: 1
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: acoustic_pressure_decibels
-          aggregate: avg
-        metadata:
-          name: "Paderborn topo004932 Dir1 Motorvehicles: Avg Acoustic Pressure"
-          description: >
-            Average acoustic pressure (dB) of motor vehicles at topo004932
-            (Münsterstraße 31), direction 1. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: dB
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: noise
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir1_motorvehicles_acoustic_pressure_decibels_count_5min
-        extract_filter:
-          devid: topo004932
-          direction: 1
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: acoustic_pressure_decibels
-          aggregate: count
-        metadata:
-          name: "Paderborn topo004932 Dir1 Motorvehicles: Vehicle Count (acoustic)"
-          description: >
-            Count of motor vehicles with an acoustic pressure measurement at topo004932
-            (Münsterstraße 31), direction 1. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: vehicles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: count
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir1_motorvehicles_vehicle_length_meters_avg_5min
-        extract_filter:
-          devid: topo004932
-          direction: 1
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: vehicle_length_meters
-          aggregate: avg
-        metadata:
-          name: "Paderborn topo004932 Dir1 Motorvehicles: Avg Vehicle Length"
-          description: >
-            Average vehicle length (m) of motor vehicles at topo004932
-            (Münsterstraße 31), direction 1. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: m
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: vehicle_length
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir1_motorvehicles_vehicle_length_meters_count_5min
-        extract_filter:
-          devid: topo004932
-          direction: 1
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: vehicle_length_meters
-          aggregate: count
-        metadata:
-          name: "Paderborn topo004932 Dir1 Motorvehicles: Vehicle Count (length)"
-          description: >
-            Count of motor vehicles with a length measurement at topo004932
-            (Münsterstraße 31), direction 1. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: vehicles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: count
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir1_motorvehicles_vehicle_axles_total_avg_5min
-        extract_filter:
-          devid: topo004932
-          direction: 1
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: vehicle_axles_total
-          aggregate: avg
-        metadata:
-          name: "Paderborn topo004932 Dir1 Motorvehicles: Avg Axle Count"
-          description: >
-            Average axle count of motor vehicles at topo004932 (Münsterstraße 31),
-            direction 1. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: axles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: vehicle_axles
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir1_motorvehicles_vehicle_axles_total_count_5min
-        extract_filter:
-          devid: topo004932
-          direction: 1
-          class_group: motorvehicles
-          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
-          metric: vehicle_axles_total
-          aggregate: count
-        metadata:
-          name: "Paderborn topo004932 Dir1 Motorvehicles: Vehicle Count (axles)"
-          description: >
-            Count of motor vehicles with an axle measurement at topo004932
-            (Münsterstraße 31), direction 1. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: vehicles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: count
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir0_all_speed_kilometers_per_hour_avg_5min
-        extract_filter:
-          devid: topo004932
-          direction: 0
-          class_group: all
-          class_regex: "bicycle|bus|car|car_with_trailer|motorcycle|truck|truck_with_trailer|van"
-          metric: speed_kilometers_per_hour
-          aggregate: avg
-        metadata:
-          name: "Paderborn topo004932 Dir0 All: Avg Speed"
-          description: >
-            Average speed of all vehicle classes (including bicycle) at topo004932
-            (Münsterstraße 31), direction 0. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: km/h
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: speed
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir0_all_speed_kilometers_per_hour_count_5min
-        extract_filter:
-          devid: topo004932
-          direction: 0
-          class_group: all
-          class_regex: "bicycle|bus|car|car_with_trailer|motorcycle|truck|truck_with_trailer|van"
-          metric: speed_kilometers_per_hour
-          aggregate: count
-        metadata:
-          name: "Paderborn topo004932 Dir0 All: Vehicle Count (speed)"
-          description: >
-            Count of all vehicle classes with a speed measurement at topo004932
-            (Münsterstraße 31), direction 0. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: vehicles
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: count
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir1_all_speed_kilometers_per_hour_avg_5min
-        extract_filter:
-          devid: topo004932
-          direction: 1
-          class_group: all
-          class_regex: "bicycle|bus|car|car_with_trailer|motorcycle|truck|truck_with_trailer|van"
-          metric: speed_kilometers_per_hour
-          aggregate: avg
-        metadata:
-          name: "Paderborn topo004932 Dir1 All: Avg Speed"
-          description: >
-            Average speed of all vehicle classes (including bicycle) at topo004932
-            (Münsterstraße 31), direction 1. 5-minute aggregate.
-          frequency: 5 minutes
-          unit: km/h
-          domain: traffic
-          category: road_traffic
-          subdomain: urban
-          subcategory: speed
-          aggregation_level: sensor
-
-      - unique_id: traffic_topo004932_dir1_all_speed_kilometers_per_hour_count_5min
-        extract_filter:
-          devid: topo004932
-          direction: 1
-          class_group: all
-          class_regex: "bicycle|bus|car|car_with_trailer|motorcycle|truck|truck_with_trailer|van"
-          metric: speed_kilometers_per_hour
-          aggregate: count
-        metadata:
-          name: "Paderborn topo004932 Dir1 All: Vehicle Count (speed)"
-          description: >
-            Count of all vehicle classes with a speed measurement at topo004932
-            (Münsterstraße 31), direction 1. 5-minute aggregate.
+            Count of motor vehicles at Münsterstraße 31 (topo004932),
+            direction 1. 5-minute aggregate from Urban Data Hub Paderborn.
           frequency: 5 minutes
           unit: vehicles
           domain: traffic
