@@ -2303,6 +2303,180 @@ request_groups:
         ts_timezone: UTC
 
 
+  # ---------------------------------------------------------------------------
+  # Urban Paderborn — Traffic sensor (teuto.net Data Hub)
+  # Location: Münsterstraße 31 (devid topo004932 in the upstream API)
+  # API: https://export.data-hub.teuto.net/geojson
+  # License: CC-BY 4.0 — Stadt Paderborn / Urban Data Hub
+  #
+  # One HTTP call per poll (speed_kilometers_per_hour, motorvehicles).
+  # Both aggregates (count, average_speed) derive from that single call.
+  # Long-history backfill tracked in issue #26.
+  # ---------------------------------------------------------------------------
+  urban-paderborn-muensterstrasse-31:
+    module: src.plugins.data_sources.urban_paderborn_plugin
+    class: UrbanPaderbornPlugin
+    schedule: 5 minutes
+    request_params:
+      project: paderborn.spb-a66-topo
+      lookback: "1h"
+      ssl_verify: false
+      timeout_seconds: 60
+    timeseries:
+      - unique_id: urban_paderborn.muensterstrasse-31.dir0.motorvehicles.average_speed
+        extract_filter:
+          devid: topo004932
+          direction: 0
+          class_group: motorvehicles
+          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
+          metric: speed_kilometers_per_hour
+          aggregate: average_speed
+        metadata:
+          name: "Paderborn Münsterstraße 31 Dir0 Motorvehicles: Avg Speed"
+          description: >
+            Average speed of motor vehicles at Münsterstraße 31 (topo004932),
+            direction 0. 5-minute aggregate from Urban Data Hub Paderborn.
+          frequency: 5 minutes
+          unit: km/h
+          domain: traffic
+          category: road_traffic
+          subdomain: urban
+          subcategory: speed
+          aggregation_level: sensor
+
+      - unique_id: urban_paderborn.muensterstrasse-31.dir0.motorvehicles.count
+        extract_filter:
+          devid: topo004932
+          direction: 0
+          class_group: motorvehicles
+          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
+          metric: speed_kilometers_per_hour
+          aggregate: count
+        metadata:
+          name: "Paderborn Münsterstraße 31 Dir0 Motorvehicles: Vehicle Count"
+          description: >
+            Count of motor vehicles at Münsterstraße 31 (topo004932),
+            direction 0. 5-minute aggregate from Urban Data Hub Paderborn.
+          frequency: 5 minutes
+          unit: vehicles
+          domain: traffic
+          category: road_traffic
+          subdomain: urban
+          subcategory: count
+          aggregation_level: sensor
+
+      - unique_id: urban_paderborn.muensterstrasse-31.dir1.motorvehicles.average_speed
+        extract_filter:
+          devid: topo004932
+          direction: 1
+          class_group: motorvehicles
+          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
+          metric: speed_kilometers_per_hour
+          aggregate: average_speed
+        metadata:
+          name: "Paderborn Münsterstraße 31 Dir1 Motorvehicles: Avg Speed"
+          description: >
+            Average speed of motor vehicles at Münsterstraße 31 (topo004932),
+            direction 1. 5-minute aggregate from Urban Data Hub Paderborn.
+          frequency: 5 minutes
+          unit: km/h
+          domain: traffic
+          category: road_traffic
+          subdomain: urban
+          subcategory: speed
+          aggregation_level: sensor
+
+      - unique_id: urban_paderborn.muensterstrasse-31.dir1.motorvehicles.count
+        extract_filter:
+          devid: topo004932
+          direction: 1
+          class_group: motorvehicles
+          class_regex: "car|car_with_trailer|bus|motorcycle|truck|truck_with_trailer|van"
+          metric: speed_kilometers_per_hour
+          aggregate: count
+        metadata:
+          name: "Paderborn Münsterstraße 31 Dir1 Motorvehicles: Vehicle Count"
+          description: >
+            Count of motor vehicles at Münsterstraße 31 (topo004932),
+            direction 1. 5-minute aggregate from Urban Data Hub Paderborn.
+          frequency: 5 minutes
+          unit: vehicles
+          domain: traffic
+          category: road_traffic
+          subdomain: urban
+          subcategory: count
+          aggregation_level: sensor
+
+  # ---------------------------------------------------------------------------
+  # Urban Paderborn — Water Temperature Sensors (Teuto.net Data Hub)
+  #
+  # Project: paderborn.spb-a67-003
+  # Metric:  water_temperature_degrees_celsius (native cadence ~15 min)
+  # Sensors: 3 (Padersee, Waschfrauendenkmal, Spielplatz Fürstenallee)
+  #
+  # One HTTP call fetches all three sensors; plugin splits by devid.
+  # License: CC-BY 4.0 — Stadt Paderborn / Urban Data Hub
+  # ---------------------------------------------------------------------------
+  urban-paderborn-water-temperature:
+    module: src.plugins.data_sources.urban_paderborn_sensors_plugin
+    class: UrbanPaderbornSensorsPlugin
+    schedule: 15 minutes
+    request_params:
+      project: paderborn.spb-a67-003
+      metric: water_temperature_degrees_celsius
+      lookback: "1h"
+      ssl_verify: false
+      timeout_seconds: 60
+    timeseries:
+      - unique_id: urban_paderborn.padersee.water_temperature
+        extract_filter:
+          devid: lsn50v2-e182a4a9
+        metadata:
+          name: "Paderborn Padersee: Water Temperature"
+          description: >
+            Water temperature at Padersee (sensor lsn50v2-e182a4a9),
+            Urban Data Hub Paderborn.
+          frequency: 15 minutes
+          unit: "°C"
+          domain: environment
+          category: water
+          subdomain: urban
+          subcategory: temperature
+          aggregation_level: sensor
+
+      - unique_id: urban_paderborn.waschfrauendenkmal.water_temperature
+        extract_filter:
+          devid: lsn50v2-5182a461
+        metadata:
+          name: "Paderborn Waschfrauendenkmal: Water Temperature"
+          description: >
+            Water temperature at Waschfrauendenkmal (sensor lsn50v2-5182a461),
+            Urban Data Hub Paderborn.
+          frequency: 15 minutes
+          unit: "°C"
+          domain: environment
+          category: water
+          subdomain: urban
+          subcategory: temperature
+          aggregation_level: sensor
+
+      - unique_id: urban_paderborn.spielplatz-fuerstenallee.water_temperature
+        extract_filter:
+          devid: lsn50v2-f182a4ce
+        metadata:
+          name: "Paderborn Spielplatz Fürstenallee: Water Temperature"
+          description: >
+            Water temperature at Spielplatz Fürstenallee (sensor lsn50v2-f182a4ce),
+            Urban Data Hub Paderborn.
+          frequency: 15 minutes
+          unit: "°C"
+          domain: environment
+          category: water
+          subdomain: urban
+          subcategory: temperature
+          aggregation_level: sensor
+
+
 timeseries:
   electricity_biomass_power_plant_generation_BZ_AT_quarterhour_4066:
     module: src.plugins.data_sources.smard_plugin
