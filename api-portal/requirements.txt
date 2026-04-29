@@ -13,7 +13,7 @@ numpy
 packaging
 debugpy
 sniffio
-apscheduler[psycopg,sqlalchemy,asyncpg]==4.0.0a5
+apscheduler[psycopg,sqlalchemy,asyncpg]==4.0.0a6
 PyJWT[crypto]
 python-multipart
 scikit-learn

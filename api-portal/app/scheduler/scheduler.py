@@ -326,13 +326,16 @@ class ChallengeScheduler:
             # Run at fixed minute marks: :00, :10, :20, :30, :40, :50
             # This ensures consistent execution times (e.g., 12:00, 12:10, 12:20)
             # regardless of service restart time
+            await self.scheduler.configure_task(
+                periodic_challenge_scores_evaluation_job,
+                max_running_jobs=1,
+                misfire_grace_time=300,
+            )
             await self.scheduler.add_schedule(
                 func_or_task_id=periodic_challenge_scores_evaluation_job,
                 trigger=CronTrigger(minute="0,10,20,30,40,50"),
                 id="periodic_challenge_scores_evaluation",
                 coalesce=CoalescePolicy.latest,
-                misfire_grace_time=300,  # 5 minute grace period
-                max_running_jobs=1, 
             )
             self.logger.info(
                 "Scheduled periodic challenge scores evaluation job "
@@ -353,13 +356,16 @@ class ChallengeScheduler:
         
         try:
             # Run 4x daily at fixed hours: 00:00, 06:00, 12:00, 18:00 UTC
+            await self.scheduler.configure_task(
+                periodic_elo_ranking_calculation_job,
+                max_running_jobs=1,
+                misfire_grace_time=3600,
+            )
             await self.scheduler.add_schedule(
                 func_or_task_id=periodic_elo_ranking_calculation_job,
                 trigger=CronTrigger(hour="0,6,12,18", minute="0"),
                 id="periodic_elo_ranking_calculation",
                 coalesce=CoalescePolicy.latest,
-                misfire_grace_time=3600,  # 1 hour grace period
-                max_running_jobs=1,  # Only one ELO calculation at a time
             )
             self.logger.info(
                 "Scheduled periodic ELO ranking calculation job "
