@@ -680,16 +680,17 @@ WHERE cs.mase IS NOT NULL
   AND cs.mase != 'Infinity'
   AND cs.mase != '-Infinity'
   AND cs.final_evaluation
+  AND cr.is_cancelled = FALSE
   -- Exclude series marked as excluded in definition_series_scd2
   AND NOT EXISTS (
       SELECT 1 FROM challenges.definition_series_scd2 ds
-      WHERE ds.definition_id = cr.definition_id 
+      WHERE ds.definition_id = cr.definition_id
         AND ds.series_id = cs.series_id
         AND ds.is_excluded = TRUE
   );
-COMMENT ON VIEW forecasts.v_ranking_base IS 
-'Base view for model rankings with all filter dimensions. 
-Filters out invalid MASE values (NULL, NaN, Infinity) and excluded series.';
+COMMENT ON VIEW forecasts.v_ranking_base IS
+'Base view for model rankings with all filter dimensions.
+Filters out invalid MASE values (NULL, NaN, Infinity), excluded series, and cancelled rounds.';
 
 -- ==========================================================
 -- 9) Indexes for Ranking Performance
@@ -1006,10 +1007,11 @@ WHERE s.mase IS NOT NULL
   AND s.mase != 'Infinity'::double precision
   AND s.mase != '-Infinity'::double precision
   AND s.final_evaluation = TRUE
+  AND r.is_cancelled = FALSE
   -- Exclude series marked as excluded in definition_series_scd2
   AND NOT EXISTS (
       SELECT 1 FROM challenges.definition_series_scd2 ds
-      WHERE ds.definition_id = r.definition_id 
+      WHERE ds.definition_id = r.definition_id
         AND ds.series_id = s.series_id
         AND ds.is_excluded = TRUE
   )
@@ -1035,9 +1037,10 @@ WHERE s.mase IS NOT NULL
   AND s.mase != 'Infinity'::double precision
   AND s.mase != '-Infinity'::double precision
   AND s.final_evaluation = TRUE
+  AND r.is_cancelled = FALSE
   AND NOT EXISTS (
       SELECT 1 FROM challenges.definition_series_scd2 ds
-      WHERE ds.definition_id = r.definition_id 
+      WHERE ds.definition_id = r.definition_id
         AND ds.series_id = s.series_id
         AND ds.is_excluded = TRUE
   )
@@ -1064,9 +1067,10 @@ WHERE s.mase IS NOT NULL
   AND s.mase != 'Infinity'::double precision
   AND s.mase != '-Infinity'::double precision
   AND s.final_evaluation = TRUE
+  AND r.is_cancelled = FALSE
   AND NOT EXISTS (
       SELECT 1 FROM challenges.definition_series_scd2 ds
-      WHERE ds.definition_id = r.definition_id 
+      WHERE ds.definition_id = r.definition_id
         AND ds.series_id = s.series_id
         AND ds.is_excluded = TRUE
   )
@@ -1080,10 +1084,10 @@ CREATE INDEX IF NOT EXISTS idx_round_scores_date ON forecasts.round_model_scores
 CREATE INDEX IF NOT EXISTS idx_round_scores_model ON forecasts.round_model_scores(model_id);
 CREATE INDEX IF NOT EXISTS idx_round_scores_scope ON forecasts.round_model_scores(scope_type, scope_id);
 
-COMMENT ON MATERIALIZED VIEW forecasts.round_model_scores IS 
+COMMENT ON MATERIALIZED VIEW forecasts.round_model_scores IS
 'Round-level aggregated model scores. Stores per-round MASE/RMSE sums for computing
 cumulative metrics up to any calculation_date. Granularity is per-round (= per-day).
-Filters: final_evaluation=TRUE, excludes problematic series, excludes invalid MASE values.';
+Filters: final_evaluation=TRUE, excludes problematic series, excludes invalid MASE values, excludes cancelled rounds.';
 
 -- Refresh Procedure for Round Scores
 -- TimescaleDB user-defined actions must accept (job_id INT, config JSONB)
