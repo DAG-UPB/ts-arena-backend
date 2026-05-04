@@ -132,7 +132,7 @@ SELECT create_hypertable(
 -- Compression & Policy
 ALTER TABLE data_portal.time_series_data_scd2 SET (
   timescaledb.compress,
-  timescaledb.compress_segmentby = 'series_id, ts',
+  timescaledb.compress_segmentby = 'series_id',
   timescaledb.compress_orderby = 'valid_from DESC'
 );
 SELECT add_compression_policy('data_portal.time_series_data_scd2', INTERVAL '120 days', if_not_exists => TRUE);
