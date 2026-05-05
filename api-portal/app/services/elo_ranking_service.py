@@ -136,7 +136,8 @@ class EloRankingService:
                 result = await self._calculate_and_store_single(
                     **calc,
                     n_bootstraps=n_bootstraps,
-                    calculation_date=calc_date
+                    calculation_date=calc_date,
+                    score_cutoff_date=calc_date
                 )
                 
                 calc_duration = int((time.time() - calc_start) * 1000)
@@ -179,7 +180,8 @@ class EloRankingService:
         frequency: Optional[timedelta],
         horizon: Optional[timedelta],
         n_bootstraps: int,
-        calculation_date: date
+        calculation_date: date,
+        score_cutoff_date: Optional[date] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Calculate and store ELO ratings for a single scope configuration.
@@ -201,7 +203,8 @@ class EloRankingService:
                 definition_id=definition_id,
                 frequency=frequency,
                 horizon=horizon,
-                n_bootstraps=n_bootstraps
+                n_bootstraps=n_bootstraps,
+                score_cutoff_date=score_cutoff_date
             )
             
             if ratings:
@@ -235,13 +238,16 @@ class EloRankingService:
         horizon: Optional[timedelta] = None,
         n_bootstraps: int = DEFAULT_N_BOOTSTRAPS,
         k_factor: float = DEFAULT_K_FACTOR,
-        base_rating: float = DEFAULT_BASE_RATING
+        base_rating: float = DEFAULT_BASE_RATING,
+        score_cutoff_date: Optional[date] = None
     ) -> List[EloRating]:
         """
         Calculate bootstrapped ELO ratings for models.
-        
-        Uses FULL historical data - no time-window truncation.
-        
+
+        Uses full historical data by default. If score_cutoff_date is set,
+        only rounds with registration_start::date <= cutoff are considered —
+        used for reconstructing historical month-end snapshots.
+
         Args:
             definition_id: If provided, filter to this challenge definition.
                           If None, calculate across relevant challenges.
@@ -250,7 +256,9 @@ class EloRankingService:
             n_bootstraps: Number of bootstrap iterations (default 500)
             k_factor: ELO K-factor for rating updates
             base_rating: Starting ELO rating (default 1000)
-            
+            score_cutoff_date: If set, only include rounds that started on
+                              or before this date.
+
         Returns:
             List of EloRating objects, sorted by elo_score descending
         """
@@ -274,7 +282,8 @@ class EloRankingService:
         mase_matrix, match_ids, model_ids = await self._get_scores_matrix(
             definition_id=definition_id,
             frequency=frequency,
-            horizon=horizon
+            horizon=horizon,
+            score_cutoff_date=score_cutoff_date
         )
         
         if mase_matrix.size == 0 or len(model_ids) < 2:
@@ -332,7 +341,8 @@ class EloRankingService:
         self,
         definition_id: Optional[int] = None,
         frequency: Optional[timedelta] = None,
-        horizon: Optional[timedelta] = None
+        horizon: Optional[timedelta] = None,
+        score_cutoff_date: Optional[date] = None
     ) -> Tuple[np.ndarray, List[int], List[int]]:
         """
         Build pivot matrix: rows=round_id matches, cols=model_id, values=AVG(MASE).
@@ -378,14 +388,18 @@ class EloRankingService:
             # Filter by frequency+horizon via challenges.definitions
             base_query += """
                 AND cr.definition_id IN (
-                    SELECT id FROM challenges.definitions 
-                    WHERE frequency = :frequency 
+                    SELECT id FROM challenges.definitions
+                    WHERE frequency = :frequency
                       AND horizon = :horizon
                 )
             """
             params["frequency"] = frequency
             params["horizon"] = horizon
-        
+
+        if score_cutoff_date is not None:
+            base_query += " AND cr.registration_start::date <= :score_cutoff_date"
+            params["score_cutoff_date"] = score_cutoff_date
+
         base_query += " GROUP BY fs.round_id, fs.model_id"
         base_query += " ORDER BY fs.round_id, fs.model_id"
         
