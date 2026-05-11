@@ -40,3 +40,27 @@ class ModelSeriesByDefinitionSchema(BaseModel):
     model_readable_id: str
     model_name: str
     definitions: List[DefinitionWithSeriesSchema]
+
+
+class ModelActiveRoundSchema(BaseModel):
+    """A round the model is currently registered for (status in {registration, active})."""
+    round_id: int
+    round_name: str
+    description: Optional[str] = None
+    definition_id: Optional[int] = None
+    definition_name: Optional[str] = None
+    status: str
+    registration_start: Optional[datetime] = None
+    registration_end: Optional[datetime] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    frequency: Optional[str] = None
+    horizon: Optional[str] = None
+
+
+class ModelActiveRoundsResponseSchema(BaseModel):
+    """Response wrapper for the model's active and upcoming rounds."""
+    model_id: int
+    model_readable_id: str
+    model_name: str
+    rounds: List[ModelActiveRoundSchema]

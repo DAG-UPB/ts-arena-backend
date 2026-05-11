@@ -10,7 +10,12 @@ from app.schemas.common import (
     ModelRankingSchema,
     ModelRankingsResponseSchema
 )
-from app.schemas.model import ModelSchema, ModelDetailSchema, ModelSeriesByDefinitionSchema
+from app.schemas.model import (
+    ModelSchema,
+    ModelDetailSchema,
+    ModelSeriesByDefinitionSchema,
+    ModelActiveRoundsResponseSchema,
+)
 from app.schemas.forecast import ModelSeriesForecastsAcrossRoundsSchema
 
 router = APIRouter(prefix="/api/v1", tags=["Models"])
@@ -427,6 +432,72 @@ async def get_model_series_forecasts_across_rounds(
             detail="Model, definition, or series not found"
         )
     
+    return result
+
+
+@router.get(
+    "/models/{model_id}/active-rounds",
+    response_model=ModelActiveRoundsResponseSchema
+)
+async def get_model_active_rounds(
+    model_id: int,
+    api_key: str = Depends(get_api_key),
+    conn = Depends(get_db_connection)
+):
+    """
+    Get all rounds the model is currently registered for whose status is
+    'registration' or 'active' (and which are not cancelled).
+
+    This is the live participation view for the model overview page —
+    "what is this model on right now?". Completed and cancelled rounds are
+    intentionally excluded.
+
+    **Path Parameters:**
+    - model_id: ID of the model
+
+    **Response Structure:**
+    ```json
+    {
+      "model_id": 123,
+      "model_readable_id": "example-model",
+      "model_name": "Example Model",
+      "rounds": [
+        {
+          "round_id": 1001,
+          "round_name": "Day-Ahead Power - 2026-05-12",
+          "description": "...",
+          "definition_id": 1,
+          "definition_name": "Day-Ahead Power Forecast",
+          "status": "registration",
+          "registration_start": "2026-05-11T10:00:00Z",
+          "registration_end": "2026-05-11T22:00:00Z",
+          "start_time": "2026-05-12T00:00:00Z",
+          "end_time": "2026-05-13T00:00:00Z",
+          "frequency": "PT15M",
+          "horizon": "P1D"
+        }
+      ]
+    }
+    ```
+
+    **Headers:**
+    - X-API-Key: Valid API key required
+
+    **Notes:**
+    - Returns 404 if the model does not exist.
+    - Empty `rounds` list is returned if the model has no active or
+      registration-state participations.
+    - Ordered by `registration_end` ascending (closest deadline first).
+    """
+    repo = ModelRepository(conn)
+    result = repo.get_model_active_rounds(model_id)
+
+    if not result:
+        raise HTTPException(
+            status_code=404,
+            detail="Model not found"
+        )
+
     return result
 
 

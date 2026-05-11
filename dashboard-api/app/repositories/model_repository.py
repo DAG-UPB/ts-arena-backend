@@ -367,6 +367,86 @@ class ModelRepository:
                 'definition_rankings': list(scopes_dict.values())
             } 
 
+    def get_model_active_rounds(self, model_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get rounds the model is registered for that are currently in
+        'registration' or 'active' state (and not cancelled).
+
+        Returns:
+            Dict with model identifiers and a list of rounds, or None if the
+            model does not exist.
+        """
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id, readable_id, name
+                FROM models.model_info
+                WHERE id = %s
+                """,
+                (model_id,),
+            )
+            model_row = cur.fetchone()
+            if not model_row:
+                return None
+
+            cur.execute(
+                """
+                SELECT
+                    r.id              AS round_id,
+                    r.name            AS round_name,
+                    r.description     AS description,
+                    r.definition_id   AS definition_id,
+                    d.name            AS definition_name,
+                    CASE
+                        WHEN r.is_cancelled THEN 'cancelled'
+                        WHEN NOW() >= r.registration_start AND NOW() <= r.registration_end THEN 'registration'
+                        WHEN NOW() >  r.registration_end   AND NOW() <= r.end_time          THEN 'active'
+                        WHEN NOW() >  r.end_time                                            THEN 'completed'
+                        ELSE 'undefined'
+                    END               AS status,
+                    r.registration_start,
+                    r.registration_end,
+                    r.start_time,
+                    r.end_time,
+                    r.frequency,
+                    r.horizon
+                FROM challenges.participants p
+                JOIN challenges.rounds r       ON r.id = p.round_id
+                LEFT JOIN challenges.definitions d ON d.id = r.definition_id
+                WHERE p.model_id = %s
+                  AND r.is_cancelled = FALSE
+                  AND NOW() <= r.end_time
+                  AND NOW() >= r.registration_start
+                ORDER BY r.registration_end ASC, r.id ASC
+                """,
+                (model_id,),
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+
+            rounds: List[Dict[str, Any]] = []
+            for row in rows:
+                rounds.append({
+                    'round_id': row['round_id'],
+                    'round_name': row['round_name'],
+                    'description': row['description'],
+                    'definition_id': row['definition_id'],
+                    'definition_name': row['definition_name'],
+                    'status': row['status'],
+                    'registration_start': row['registration_start'],
+                    'registration_end': row['registration_end'],
+                    'start_time': row['start_time'],
+                    'end_time': row['end_time'],
+                    'frequency': self._interval_to_iso8601(row['frequency']) if row['frequency'] is not None else None,
+                    'horizon': self._interval_to_iso8601(row['horizon']) if row['horizon'] is not None else None,
+                })
+
+            return {
+                'model_id': model_row['id'],
+                'model_readable_id': model_row['readable_id'],
+                'model_name': model_row['name'],
+                'rounds': rounds,
+            }
+
     def get_model_series_by_definition(self, model_id: int) -> Optional[Dict[str, Any]]:
         """
         Get all series grouped by definition for a specific model.
