@@ -91,6 +91,8 @@ class ModelRepository:
                     JOIN auth.users u ON u.id = mi.user_id
                     JOIN challenges.rounds c ON c.id = cs.challenge_id
                     WHERE cs.mase IS NOT NULL
+                      AND cs.final_evaluation = TRUE
+                      AND c.is_cancelled = FALSE
                 """
                 params = []
                 if since:
