@@ -71,6 +71,51 @@ async def apply_schema_patches(logger):
         # the api can still serve existing endpoints if a patch fails.
         logger.error("Schema patch failed: %s", e, exc_info=True)
 
+
+async def apply_metadata_seed(logger):
+    """Backfill curated paper/repo/website/arxiv_id for reference models.
+
+    Idempotent: uses COALESCE so any user-set value is preserved. The seed
+    only fills NULL columns. See ``app.data.model_metadata_seed`` for the
+    data and ticket #43 for background.
+    """
+    try:
+        from app.data.model_metadata_seed import MODEL_METADATA_SEED
+    except Exception as e:
+        logger.warning("Could not load model metadata seed: %s", e)
+        return
+
+    updated = 0
+    try:
+        async with engine.begin() as conn:
+            for readable_id, meta in MODEL_METADATA_SEED.items():
+                result = await conn.execute(
+                    text(
+                        """
+                        UPDATE models.model_info
+                           SET paper_url   = COALESCE(paper_url,   :paper_url),
+                               arxiv_id    = COALESCE(arxiv_id,    :arxiv_id),
+                               repo_url    = COALESCE(repo_url,    :repo_url),
+                               website_url = COALESCE(website_url, :website_url)
+                         WHERE readable_id = :readable_id
+                        """
+                    ),
+                    {
+                        "readable_id": readable_id,
+                        "paper_url":   meta.get("paper_url"),
+                        "arxiv_id":    meta.get("arxiv_id"),
+                        "repo_url":    meta.get("repo_url"),
+                        "website_url": meta.get("website_url"),
+                    },
+                )
+                updated += result.rowcount or 0
+        logger.info(
+            "Model metadata seed applied (%d rows touched across %d seeded ids).",
+            updated, len(MODEL_METADATA_SEED),
+        )
+    except Exception as e:
+        logger.error("Metadata seed failed: %s", e, exc_info=True)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.setLevel(getattr(logging, Config.LOG_LEVEL, logging.INFO))
@@ -83,6 +128,7 @@ async def lifespan(app: FastAPI):
             logger.warning("Starting API without stable database connection.")
         else:
             await apply_schema_patches(logger)
+            await apply_metadata_seed(logger)
 
     # Initialize scheduler (uses its own DB connection pool, not SessionLocal)
     scheduler = None
