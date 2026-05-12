@@ -75,20 +75,34 @@ async def apply_schema_patches(logger):
 async def apply_metadata_seed(logger):
     """Backfill curated paper/repo/website/arxiv_id for reference models.
 
-    Idempotent: uses COALESCE so any user-set value is preserved. The seed
-    only fills NULL columns. See ``app.data.model_metadata_seed`` for the
-    data and ticket #43 for background.
+    Two-step, idempotent (COALESCE preserves any user-set value):
+
+    1. Match by ``name`` — the verbatim registration name from
+       ts-arena-models/config.json (e.g. ``"google/timesfm-2.0-500m-pytorch"``).
+       This gives per-version precision (Chronos-2 vs Chronos-Bolt).
+    2. For rows that still have NULL paper/repo/website (newly registered
+       variants, or families we haven't catalogued per-name), fall back to
+       matching on ``model_family``.
+
+    See ``app.data.model_metadata_seed`` for the data and ticket #43 for
+    background. ``generate_readable_id`` appends a random suffix, so we
+    cannot key the seed by ``readable_id``.
     """
     try:
-        from app.data.model_metadata_seed import MODEL_METADATA_SEED
+        from app.data.model_metadata_seed import (
+            MODEL_METADATA_SEED,
+            MODEL_FAMILY_FALLBACK,
+        )
     except Exception as e:
         logger.warning("Could not load model metadata seed: %s", e)
         return
 
-    updated = 0
+    name_updates = 0
+    family_updates = 0
     try:
         async with engine.begin() as conn:
-            for readable_id, meta in MODEL_METADATA_SEED.items():
+            # Step 1: exact `name` match.
+            for name, meta in MODEL_METADATA_SEED.items():
                 result = await conn.execute(
                     text(
                         """
@@ -97,21 +111,53 @@ async def apply_metadata_seed(logger):
                                arxiv_id    = COALESCE(arxiv_id,    :arxiv_id),
                                repo_url    = COALESCE(repo_url,    :repo_url),
                                website_url = COALESCE(website_url, :website_url)
-                         WHERE readable_id = :readable_id
+                         WHERE name = :name
                         """
                     ),
                     {
-                        "readable_id": readable_id,
+                        "name":        name,
                         "paper_url":   meta.get("paper_url"),
                         "arxiv_id":    meta.get("arxiv_id"),
                         "repo_url":    meta.get("repo_url"),
                         "website_url": meta.get("website_url"),
                     },
                 )
-                updated += result.rowcount or 0
+                name_updates += result.rowcount or 0
+
+            # Step 2: family fallback for any row still NULL.
+            for family, meta in MODEL_FAMILY_FALLBACK.items():
+                result = await conn.execute(
+                    text(
+                        """
+                        UPDATE models.model_info
+                           SET paper_url   = COALESCE(paper_url,   :paper_url),
+                               arxiv_id    = COALESCE(arxiv_id,    :arxiv_id),
+                               repo_url    = COALESCE(repo_url,    :repo_url),
+                               website_url = COALESCE(website_url, :website_url)
+                         WHERE model_family = :family
+                           AND (
+                                paper_url   IS NULL
+                             OR arxiv_id    IS NULL
+                             OR repo_url    IS NULL
+                             OR website_url IS NULL
+                           )
+                        """
+                    ),
+                    {
+                        "family":      family,
+                        "paper_url":   meta.get("paper_url"),
+                        "arxiv_id":    meta.get("arxiv_id"),
+                        "repo_url":    meta.get("repo_url"),
+                        "website_url": meta.get("website_url"),
+                    },
+                )
+                family_updates += result.rowcount or 0
+
         logger.info(
-            "Model metadata seed applied (%d rows touched across %d seeded ids).",
-            updated, len(MODEL_METADATA_SEED),
+            "Model metadata seed applied — name match: %d row(s) across %d names; "
+            "family fallback: %d row(s) across %d families.",
+            name_updates, len(MODEL_METADATA_SEED),
+            family_updates, len(MODEL_FAMILY_FALLBACK),
         )
     except Exception as e:
         logger.error("Metadata seed failed: %s", e, exc_info=True)
