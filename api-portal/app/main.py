@@ -101,6 +101,30 @@ async def apply_metadata_seed(logger):
     family_updates = 0
     try:
         async with engine.begin() as conn:
+            # Diagnostic: log what's actually in the table so we know
+            # whether the seed key shape matches reality.
+            try:
+                count_row = (
+                    await conn.execute(
+                        text("SELECT COUNT(*) FROM models.model_info")
+                    )
+                ).scalar_one()
+                sample_rows = (
+                    await conn.execute(
+                        text(
+                            "SELECT name, model_family FROM models.model_info "
+                            "ORDER BY id LIMIT 10"
+                        )
+                    )
+                ).fetchall()
+                logger.info(
+                    "Metadata seed diagnostic: %d total rows; sample (name, family): %s",
+                    count_row,
+                    [(r[0], r[1]) for r in sample_rows],
+                )
+            except Exception as diag_err:
+                logger.warning("Metadata seed diagnostic skipped: %s", diag_err)
+
             # Step 1: exact `name` match.
             for name, meta in MODEL_METADATA_SEED.items():
                 result = await conn.execute(
