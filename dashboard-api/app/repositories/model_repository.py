@@ -38,6 +38,33 @@ class ModelRepository:
             )
             row = cur.fetchone()
             return dict(row) if row else None
+
+    def list_models(self) -> List[Dict[str, Any]]:
+        """List every registered model.
+
+        Thin payload tuned for the frontend's Models tab — see ticket #33.
+        We do *not* include the heavy ``parameters`` JSONB blob here; clients
+        who need it call ``GET /models/{id}`` for the full record.
+        """
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT
+                    mi.id,
+                    mi.readable_id,
+                    mi.name,
+                    mi.model_family,
+                    mi.model_size,
+                    mi.architecture,
+                    mi.paper_url,
+                    mi.repo_url,
+                    mi.website_url,
+                    mi.arxiv_id
+                FROM models.model_info mi
+                ORDER BY mi.model_family NULLS LAST, mi.name
+                """
+            )
+            return [dict(row) for row in cur.fetchall()]
     
     def get_global_rankings(
         self, 

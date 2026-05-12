@@ -14,26 +14,31 @@ class ModelInfoRepository:
         self.session = session
 
 
-    async def create(self, name: str, user_id: int, model_type: Optional[str] = None, parameters: Optional[dict] = None, readable_id: Optional[str] = None, model_family: Optional[str] = None, model_size: Optional[int] = None, organization_id: Optional[int] = None, hosting: Optional[str] = None, architecture: Optional[str] = None, pretraining_data: Optional[str] = None, publishing_date: Optional[str] = None) -> ModelInfo:
+    async def create(
+        self,
+        name: str,
+        user_id: int,
+        model_type: Optional[str] = None,
+        parameters: Optional[dict] = None,
+        readable_id: Optional[str] = None,
+        model_family: Optional[str] = None,
+        model_size: Optional[int] = None,
+        organization_id: Optional[int] = None,
+        hosting: Optional[str] = None,
+        architecture: Optional[str] = None,
+        pretraining_data: Optional[str] = None,
+        publishing_date: Optional[str] = None,
+        paper_url: Optional[str] = None,
+        repo_url: Optional[str] = None,
+        website_url: Optional[str] = None,
+        description: Optional[str] = None,
+        arxiv_id: Optional[str] = None,
+    ) -> ModelInfo:
         """
         Create and persist a ModelInfo instance.
 
-        Parameters:
-            name: model name
-            user_id: ID of the user who owns this model
-            model_type: optional type/category of the model
-            parameters: optional JSON parameters for the model
-            readable_id: optional readable identifier
-            model_family: optional model family
-            model_size: optional model size in millions
-            organization_id: optional organization ID
-            hosting: optional hosting information
-            architecture: optional architecture information
-            pretraining_data: optional pretraining data information
-            publishing_date: optional publishing date
-
-        Returns:
-            The newly created ORM object.
+        Optional discovery / provenance fields (paper_url, repo_url,
+        website_url, description, arxiv_id) accept None and are stored as-is.
         """
         try:
             obj = ModelInfo(
@@ -48,7 +53,12 @@ class ModelInfoRepository:
                 hosting=hosting,
                 architecture=architecture,
                 pretraining_data=pretraining_data,
-                publishing_date=publishing_date
+                publishing_date=publishing_date,
+                paper_url=paper_url,
+                repo_url=repo_url,
+                website_url=website_url,
+                description=description,
+                arxiv_id=arxiv_id,
             )
 
             self.session.add(obj)

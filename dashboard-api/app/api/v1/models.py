@@ -13,6 +13,7 @@ from app.schemas.common import (
 from app.schemas.model import (
     ModelSchema,
     ModelDetailSchema,
+    ModelListItemSchema,
     ModelSeriesByDefinitionSchema,
     ModelActiveRoundsResponseSchema,
 )
@@ -214,6 +215,23 @@ async def get_ranking_filters(
     filter_options = repo.get_available_filter_options()
     
     return filter_options
+
+
+@router.get("/models", response_model=List[ModelListItemSchema])
+async def list_all_models(
+    api_key: str = Depends(get_api_key),
+    conn = Depends(get_db_connection),
+):
+    """List every registered model with discovery metadata.
+
+    Returns a flat list of every row in ``models.model_info``. The payload
+    is intentionally thin — no parameters blob, no aggregate stats — and
+    is intended to back the frontend's Models tab so it no longer has to
+    derive `readable_id → model_id` from the rankings endpoint (see
+    ticket #33).
+    """
+    repo = ModelRepository(conn)
+    return repo.list_models()
 
 
 @router.get("/models/{model_id}", response_model=ModelDetailSchema)

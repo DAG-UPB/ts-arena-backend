@@ -222,6 +222,14 @@ CREATE TABLE models.model_info (
     architecture TEXT,
     pretraining_data TEXT,
     publishing_date DATE,
+    -- Optional discovery / provenance metadata (see ticket #43).
+    -- All nullable; api-portal applies an idempotent ALTER TABLE patch on
+    -- startup so existing dev DBs pick these up without an init rerun.
+    paper_url TEXT,
+    repo_url TEXT,
+    website_url TEXT,
+    description TEXT,
+    arxiv_id TEXT,
     parameters JSONB,
     created_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE (user_id, name)

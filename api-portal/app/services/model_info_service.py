@@ -39,7 +39,12 @@ class ModelInfoService:
             hosting=data.hosting,
             architecture=data.architecture,
             pretraining_data=data.pretraining_data,
-            publishing_date=data.publishing_date
+            publishing_date=data.publishing_date,
+            paper_url=data.paper_url,
+            repo_url=data.repo_url,
+            website_url=data.website_url,
+            description=data.description,
+            arxiv_id=data.arxiv_id,
         )
         return ModelInfo.model_validate(obj)
 

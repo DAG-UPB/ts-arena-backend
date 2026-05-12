@@ -42,9 +42,34 @@ async def wait_for_db(logger, max_retries=10, delay=3.0):
             logger.warning(f"Database not ready yet (attempt {attempt}/{max_retries}): {e}")
             if attempt < max_retries:
                 await asyncio.sleep(delay)
-    
+
     logger.error("Could not connect to database after maximum retries.")
     return False
+
+
+# Idempotent schema patches applied on startup. Each statement must be
+# safe to run repeatedly (use IF NOT EXISTS / IF EXISTS). This is a
+# pragmatic bridge for the dev DB — init_db.sql remains the source of
+# truth for fresh databases. See backend ticket #43.
+_SCHEMA_PATCHES = (
+    "ALTER TABLE models.model_info ADD COLUMN IF NOT EXISTS paper_url TEXT",
+    "ALTER TABLE models.model_info ADD COLUMN IF NOT EXISTS repo_url TEXT",
+    "ALTER TABLE models.model_info ADD COLUMN IF NOT EXISTS website_url TEXT",
+    "ALTER TABLE models.model_info ADD COLUMN IF NOT EXISTS description TEXT",
+    "ALTER TABLE models.model_info ADD COLUMN IF NOT EXISTS arxiv_id TEXT",
+)
+
+
+async def apply_schema_patches(logger):
+    try:
+        async with engine.begin() as conn:
+            for stmt in _SCHEMA_PATCHES:
+                await conn.execute(text(stmt))
+        logger.info("Schema patches applied (%d statements).", len(_SCHEMA_PATCHES))
+    except Exception as e:
+        # Non-fatal: log loudly so we notice, but don't block startup —
+        # the api can still serve existing endpoints if a patch fails.
+        logger.error("Schema patch failed: %s", e, exc_info=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -56,6 +81,8 @@ async def lifespan(app: FastAPI):
         db_ready = await wait_for_db(logger)
         if not db_ready:
             logger.warning("Starting API without stable database connection.")
+        else:
+            await apply_schema_patches(logger)
 
     # Initialize scheduler (uses its own DB connection pool, not SessionLocal)
     scheduler = None

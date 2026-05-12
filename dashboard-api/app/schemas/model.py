@@ -11,6 +11,27 @@ class ModelSchema(BaseModel):
     architecture: str | None
     pretraining_data: str | None
     publishing_date: datetime | None
+    # Optional discovery / provenance metadata. See ticket #43.
+    paper_url: str | None = None
+    repo_url: str | None = None
+    website_url: str | None = None
+    description: str | None = None
+    arxiv_id: str | None = None
+
+
+class ModelListItemSchema(BaseModel):
+    """Single row in the `GET /models` listing — keeps the payload thin."""
+    id: int
+    readable_id: str | None
+    name: str
+    model_family: str | None
+    model_size: int | None
+    architecture: str | None
+    paper_url: str | None = None
+    repo_url: str | None = None
+    website_url: str | None = None
+    arxiv_id: str | None = None
+
 
 class ModelDetailSchema(ModelSchema):
     """Model with aggregated statistics."""
