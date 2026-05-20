@@ -1,3 +1,7 @@
+# ⚠️  LOCAL DEVELOPMENT ONLY — NOT ACTIVELY MAINTAINED
+# This override file is used together with docker-compose.yml for local dev.
+# It is not used in production; production runs on Coolify per-service.
+
 services:
   api-portal:
     ports:

@@ -1,3 +1,9 @@
+# ⚠️  LOCAL DEVELOPMENT ONLY — NOT ACTIVELY MAINTAINED
+# Production deploys each service as an individual container on Coolify.
+# This Compose stack is provided for local development convenience only.
+# Service definitions, environment variables, and dependencies may drift
+# from the live Coolify deployments and are not guaranteed to match production.
+
 services:
 
   api-portal:
