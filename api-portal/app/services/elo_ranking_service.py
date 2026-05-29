@@ -366,6 +366,7 @@ class EloRankingService:
             FROM forecasts.scores fs
             JOIN challenges.rounds cr ON fs.round_id = cr.id
             WHERE fs.final_evaluation = TRUE
+              AND cr.is_cancelled = FALSE
               AND fs.mase IS NOT NULL
               AND fs.mase != 'NaN'
               AND fs.mase != 'Infinity'
@@ -553,6 +554,7 @@ class EloRankingService:
             FROM forecasts.scores fs
             JOIN challenges.rounds cr ON fs.round_id = cr.id
             WHERE fs.final_evaluation = TRUE
+              AND cr.is_cancelled = FALSE
               AND fs.mase IS NOT NULL
               AND cr.definition_id IS NOT NULL
             ORDER BY cr.definition_id
@@ -607,6 +609,7 @@ class EloRankingService:
             JOIN challenges.rounds cr ON cr.definition_id = cd.id
             JOIN forecasts.scores fs ON fs.round_id = cr.id
             WHERE fs.final_evaluation = TRUE
+              AND cr.is_cancelled = FALSE
               AND fs.mase IS NOT NULL
               AND cd.frequency IS NOT NULL
               AND cd.horizon IS NOT NULL
