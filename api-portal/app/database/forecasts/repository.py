@@ -90,7 +90,9 @@ class ForecastRepository:
             SELECT DISTINCT c.id as round_id
             FROM challenges.v_rounds_with_status c
             LEFT JOIN forecasts.scores cs ON c.id = cs.round_id
-            WHERE c.computed_status IN ('active', 'completed')
+            -- Use effective status (respects is_cancelled) so cancelled rounds
+            -- are never (re)scored. 'cancelled' is excluded here on purpose.
+            WHERE c.status IN ('active', 'completed')
               AND (cs.id IS NULL OR cs.final_evaluation = FALSE)
             ORDER BY c.id
         """)
