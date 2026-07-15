@@ -245,7 +245,7 @@ schedules:
     registration_duration: 15 minutes
     evaluation_delay: 0 hours
 - id: gridstatus_load_challenge_24h_15min
-  cron: 0 9 * * *
+  cron: 30 9 * * *
   run_on_startup: false
   params:
     description: 'Gridstatus Load Challenge: 24h horizon, 15-min frequency'

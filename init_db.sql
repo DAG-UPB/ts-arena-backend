@@ -54,6 +54,7 @@ CREATE TABLE data_portal.time_series (
   series_id SERIAL PRIMARY KEY,
   name TEXT UNIQUE NOT NULL,
   description TEXT,
+  display_text TEXT,                     -- Friendly per-series description (additive; populated by series_display_text.sql)
   api_endpoint TEXT,
   frequency INTERVAL,
   aggregation_level_name TEXT,
@@ -247,6 +248,7 @@ CREATE TABLE challenges.definitions (
     schedule_id TEXT UNIQUE NOT NULL,     -- YAML id: "smard_dam_challenge_24h_15min"
     name TEXT NOT NULL,                    -- Human readable name
     description TEXT,
+    display_text TEXT,                     -- Long-form challenge description (additive; populated by challenge_display_text.sql)
     domains TEXT[],                        -- Domain filters for time series selection
     subdomains TEXT[],                     -- Subdomain filters
     categories TEXT[],                     -- Categories filters

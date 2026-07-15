@@ -13,6 +13,7 @@ class ChallengeDefinitionSchema(BaseModel):
     schedule_id: str
     name: str
     description: Optional[str] = None
+    display_text: Optional[str] = None
     domains: List[str] = []
     categories: List[str] = []
     subcategories: List[str] = []
