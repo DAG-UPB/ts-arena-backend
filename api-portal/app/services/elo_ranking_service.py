@@ -45,14 +45,27 @@ class EloRankingService:
     DEFAULT_K_FACTOR = 4.0
     DEFAULT_BASE_RATING = 1000.0
     DEFAULT_N_BOOTSTRAPS = 500
-    
+
+    # Metric -> forecasts.scores column driving the ranking. Both are lower-is-better, so the
+    # bootstrap outcome logic is unchanged; only the source column differs (backend #13).
+    _METRIC_COLUMN: Dict[str, str] = {"mase": "mase", "sql": "sql_score"}
+    SUPPORTED_METRICS: Tuple[str, ...] = ("mase", "sql")
+
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
-    
+
+    def _metric_column(self, metric: str) -> str:
+        """Resolve a metric name to its whitelisted scores column (guards SQL injection)."""
+        try:
+            return self._METRIC_COLUMN[metric]
+        except KeyError:
+            raise ValueError(f"Unsupported ranking metric '{metric}'; expected one of {self.SUPPORTED_METRICS}")
+
     async def calculate_and_store_all_ratings(
         self,
         n_bootstraps: int = DEFAULT_N_BOOTSTRAPS,
-        calculation_date: Optional[date] = None
+        calculation_date: Optional[date] = None,
+        metric: str = "mase"
     ) -> Dict[str, Any]:
         """
         Calculate and store ELO ratings for all scopes:
@@ -94,7 +107,7 @@ class EloRankingService:
         })
         
         # 2. Get all definition_ids with finalized scores
-        definition_ids = await self._get_definitions_with_scores()
+        definition_ids = await self._get_definitions_with_scores(metric=metric)
         logger.info(f"Found {len(definition_ids)} definitions with scores")
         
         for def_id in definition_ids:
@@ -108,7 +121,7 @@ class EloRankingService:
             })
         
         # 3. Get unique frequency+horizon combinations from challenges.definitions
-        freq_horizon_groups = await self._get_frequency_horizon_groups()
+        freq_horizon_groups = await self._get_frequency_horizon_groups(metric=metric)
         logger.info(f"Found {len(freq_horizon_groups)} frequency+horizon groups")
         
         for scope_id, frequency, horizon in freq_horizon_groups:
@@ -137,7 +150,8 @@ class EloRankingService:
                     **calc,
                     n_bootstraps=n_bootstraps,
                     calculation_date=calc_date,
-                    score_cutoff_date=calc_date
+                    score_cutoff_date=calc_date,
+                    metric=metric
                 )
                 
                 calc_duration = int((time.time() - calc_start) * 1000)
@@ -181,7 +195,8 @@ class EloRankingService:
         horizon: Optional[timedelta],
         n_bootstraps: int,
         calculation_date: date,
-        score_cutoff_date: Optional[date] = None
+        score_cutoff_date: Optional[date] = None,
+        metric: str = "mase"
     ) -> Optional[Dict[str, Any]]:
         """
         Calculate and store ELO ratings for a single scope configuration.
@@ -204,15 +219,17 @@ class EloRankingService:
                 frequency=frequency,
                 horizon=horizon,
                 n_bootstraps=n_bootstraps,
-                score_cutoff_date=score_cutoff_date
+                score_cutoff_date=score_cutoff_date,
+                metric=metric
             )
-            
+
             if ratings:
                 await self._store_ratings(
                     ratings=ratings,
                     scope_type=scope_type,
                     scope_id=scope_id,
-                    calculation_date=calculation_date
+                    calculation_date=calculation_date,
+                    metric=metric
                 )
                 
                 return {
@@ -239,7 +256,8 @@ class EloRankingService:
         n_bootstraps: int = DEFAULT_N_BOOTSTRAPS,
         k_factor: float = DEFAULT_K_FACTOR,
         base_rating: float = DEFAULT_BASE_RATING,
-        score_cutoff_date: Optional[date] = None
+        score_cutoff_date: Optional[date] = None,
+        metric: str = "mase"
     ) -> List[EloRating]:
         """
         Calculate bootstrapped ELO ratings for models.
@@ -278,12 +296,13 @@ class EloRankingService:
             scope_type = "global"
             scope_id = None
         
-        # Get scores matrix
+        # Get scores matrix (values are the selected metric; both are lower-is-better)
         mase_matrix, match_ids, model_ids = await self._get_scores_matrix(
             definition_id=definition_id,
             frequency=frequency,
             horizon=horizon,
-            score_cutoff_date=score_cutoff_date
+            score_cutoff_date=score_cutoff_date,
+            metric=metric
         )
         
         if mase_matrix.size == 0 or len(model_ids) < 2:
@@ -342,10 +361,11 @@ class EloRankingService:
         definition_id: Optional[int] = None,
         frequency: Optional[timedelta] = None,
         horizon: Optional[timedelta] = None,
-        score_cutoff_date: Optional[date] = None
+        score_cutoff_date: Optional[date] = None,
+        metric: str = "mase"
     ) -> Tuple[np.ndarray, List[int], List[int]]:
         """
-        Build pivot matrix: rows=round_id matches, cols=model_id, values=AVG(MASE).
+        Build pivot matrix: rows=round_id matches, cols=model_id, values=AVG(metric).
         
         Aggregates MASE values per round (averaging across all series in a round)
         to reduce the number of pairwise comparisons.
@@ -360,17 +380,18 @@ class EloRankingService:
         Returns:
             tuple: (mase_matrix, round_ids, model_ids)
         """
-        # Aggregate MASE per round and model (average across all series in a round)
-        base_query = """
-            SELECT fs.round_id, fs.model_id, AVG(fs.mase) as avg_mase
+        # Aggregate the selected metric per round and model (average across series in a round)
+        col = self._metric_column(metric)
+        base_query = f"""
+            SELECT fs.round_id, fs.model_id, AVG(fs.{col}) as avg_metric
             FROM forecasts.scores fs
             JOIN challenges.rounds cr ON fs.round_id = cr.id
             WHERE fs.final_evaluation = TRUE
               AND cr.is_cancelled = FALSE
-              AND fs.mase IS NOT NULL
-              AND fs.mase != 'NaN'
-              AND fs.mase != 'Infinity'
-              AND fs.mase != '-Infinity'
+              AND fs.{col} IS NOT NULL
+              AND fs.{col} != 'NaN'
+              AND fs.{col} != 'Infinity'
+              AND fs.{col} != '-Infinity'
               -- Exclude series marked as excluded in definition_series_scd2
               AND NOT EXISTS (
                   SELECT 1 FROM challenges.definition_series_scd2 ds
@@ -547,15 +568,16 @@ class EloRankingService:
         
         return ratings
     
-    async def _get_definitions_with_scores(self) -> List[int]:
-        """Get all definition_ids that have finalized scores."""
-        query = text("""
+    async def _get_definitions_with_scores(self, metric: str = "mase") -> List[int]:
+        """Get all definition_ids that have finalized scores for the given metric."""
+        col = self._metric_column(metric)
+        query = text(f"""
             SELECT DISTINCT cr.definition_id
             FROM forecasts.scores fs
             JOIN challenges.rounds cr ON fs.round_id = cr.id
             WHERE fs.final_evaluation = TRUE
               AND cr.is_cancelled = FALSE
-              AND fs.mase IS NOT NULL
+              AND fs.{col} IS NOT NULL
               AND cr.definition_id IS NOT NULL
             ORDER BY cr.definition_id
         """)
@@ -590,17 +612,18 @@ class EloRankingService:
         
         return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
 
-    async def _get_frequency_horizon_groups(self) -> List[Tuple[str, timedelta, timedelta]]:
+    async def _get_frequency_horizon_groups(self, metric: str = "mase") -> List[Tuple[str, timedelta, timedelta]]:
         """
         Get unique frequency+horizon combinations from challenges.definitions
-        that have finalized scores.
+        that have finalized scores for the given metric.
 
         Returns tuples of (scope_id, frequency_timedelta, horizon_timedelta).
         scope_id uses the PostgreSQL interval text format (e.g. '00:15:00::1 day')
         to match the scope_id stored in round_model_scores.
         frequency/horizon timedeltas are used as bind parameters for interval filters.
         """
-        query = text("""
+        col = self._metric_column(metric)
+        query = text(f"""
             SELECT DISTINCT
                 cd.frequency::text AS freq,
                 cd.horizon::text AS hor,
@@ -610,7 +633,7 @@ class EloRankingService:
             JOIN forecasts.scores fs ON fs.round_id = cr.id
             WHERE fs.final_evaluation = TRUE
               AND cr.is_cancelled = FALSE
-              AND fs.mase IS NOT NULL
+              AND fs.{col} IS NOT NULL
               AND cd.frequency IS NOT NULL
               AND cd.horizon IS NOT NULL
             ORDER BY freq, hor
@@ -626,23 +649,26 @@ class EloRankingService:
         ratings: List[EloRating],
         scope_type: str,
         scope_id: Optional[str],
-        calculation_date: date
+        calculation_date: date,
+        metric: str = "mase"
     ) -> int:
         """
         Store ELO ratings using INSERT ... ON CONFLICT DO UPDATE.
-        Also computes and stores cumulative MASE/RMSE from round_model_scores.
-        
+        Also computes and stores cumulative MASE/RMSE/SQL from round_model_scores.
+        The `metric` column records which score drove this ELO ranking; the cumulative
+        avg_mase/avg_rmse/avg_sql columns are populated on every row regardless.
+
         Returns:
             Number of rows affected
         """
         if not ratings:
             return 0
-        
+
         # Calculate rank positions
         sorted_ratings = sorted(ratings, key=lambda x: x.elo_score, reverse=True)
         rank_map = {r.model_id: idx + 1 for idx, r in enumerate(sorted_ratings)}
-        
-        # Get cumulative MASE/RMSE for all models in this scope up to calculation_date
+
+        # Get cumulative MASE/RMSE/SQL for all models in this scope up to calculation_date
         model_ids = [r.model_id for r in ratings]
         mase_stats = await self._get_cumulative_mase_stats(
             model_ids=model_ids,
@@ -650,19 +676,19 @@ class EloRankingService:
             scope_id=scope_id,
             up_to_date=calculation_date
         )
-        
+
         query = text("""
-            INSERT INTO forecasts.daily_rankings 
-                (calculation_date, model_id, scope_type, scope_id,
+            INSERT INTO forecasts.daily_rankings
+                (calculation_date, model_id, scope_type, scope_id, metric,
                  elo_rating_median, elo_ci_lower, elo_ci_upper,
                  matches_played, rank_position, n_bootstraps, calculation_duration_ms,
-                 avg_mase, mase_std, avg_rmse, evaluated_count, calculated_at)
-            VALUES 
-                (:calculation_date, :model_id, :scope_type, :scope_id,
+                 avg_mase, mase_std, avg_rmse, avg_sql, sql_std, evaluated_count, calculated_at)
+            VALUES
+                (:calculation_date, :model_id, :scope_type, :scope_id, :metric,
                  :elo_rating_median, :elo_ci_lower, :elo_ci_upper,
                  :matches_played, :rank_position, :n_bootstraps, :calculation_duration_ms,
-                 :avg_mase, :mase_std, :avg_rmse, :evaluated_count, NOW())
-            ON CONFLICT (calculation_date, model_id, scope_type, COALESCE(scope_id, ''))
+                 :avg_mase, :mase_std, :avg_rmse, :avg_sql, :sql_std, :evaluated_count, NOW())
+            ON CONFLICT (calculation_date, model_id, scope_type, COALESCE(scope_id, ''), metric)
             DO UPDATE SET
                 elo_rating_median = EXCLUDED.elo_rating_median,
                 elo_ci_lower = EXCLUDED.elo_ci_lower,
@@ -674,10 +700,12 @@ class EloRankingService:
                 avg_mase = EXCLUDED.avg_mase,
                 mase_std = EXCLUDED.mase_std,
                 avg_rmse = EXCLUDED.avg_rmse,
+                avg_sql = EXCLUDED.avg_sql,
+                sql_std = EXCLUDED.sql_std,
                 evaluated_count = EXCLUDED.evaluated_count,
                 calculated_at = NOW()
         """)
-        
+
         for rating in ratings:
             stats = mase_stats.get(rating.model_id, {})
             params = {
@@ -685,6 +713,7 @@ class EloRankingService:
                 "model_id": rating.model_id,
                 "scope_type": scope_type,
                 "scope_id": scope_id,
+                "metric": metric,
                 "elo_rating_median": rating.elo_score,
                 "elo_ci_lower": rating.elo_ci_lower,
                 "elo_ci_upper": rating.elo_ci_upper,
@@ -695,10 +724,12 @@ class EloRankingService:
                 "avg_mase": stats.get("avg_mase"),
                 "mase_std": stats.get("mase_std"),
                 "avg_rmse": stats.get("avg_rmse"),
+                "avg_sql": stats.get("avg_sql"),
+                "sql_std": stats.get("sql_std"),
                 "evaluated_count": stats.get("evaluated_count", 0)
             }
             await self.session.execute(query, params)
-        
+
         await self.session.commit()
         return len(ratings)
     
@@ -710,21 +741,26 @@ class EloRankingService:
         up_to_date: date
     ) -> Dict[int, Dict[str, Any]]:
         """
-        Get cumulative MASE/RMSE stats for models up to a given date.
-        
+        Get cumulative MASE/RMSE/SQL stats for models up to a given date.
+
         Returns:
-            Dict mapping model_id -> {avg_mase, mase_std, avg_rmse, evaluated_count}
+            Dict mapping model_id -> {avg_mase, mase_std, avg_rmse, avg_sql, sql_std,
+            evaluated_count}. SQL is aggregated over its own non-NULL count (num_sql), which
+            can be < num_scores in the rare mae_naive==0 edge case where sql_score is NULL.
         """
         if not model_ids:
             return {}
-        
+
         # Query cumulative sums from round_model_scores
         query = text("""
-            SELECT 
+            SELECT
                 model_id,
                 SUM(sum_mase) as total_mase,
                 SUM(sum_mase_sq) as total_mase_sq,
                 SUM(sum_rmse) as total_rmse,
+                SUM(sum_sql) as total_sql,
+                SUM(sum_sql_sq) as total_sql_sq,
+                SUM(num_sql) as total_sql_count,
                 SUM(num_scores) as total_scores
             FROM forecasts.round_model_scores
             WHERE model_id = ANY(:model_ids)
@@ -733,61 +769,72 @@ class EloRankingService:
               AND round_date <= :up_to_date
             GROUP BY model_id
         """)
-        
+
         result = await self.session.execute(query, {
             "model_ids": model_ids,
             "scope_type": scope_type,
             "scope_id": scope_id,
             "up_to_date": up_to_date
         })
-        
+
+        def _f(v):
+            return float(v) if v is not None else None
+
+        def _avg_std(total, total_sq, count):
+            """Mean and population std from running sums; std None when count <= 1."""
+            if not count or count <= 0:
+                return None, None
+            avg = total / count
+            std = None
+            if count > 1 and total_sq is not None:
+                variance = (total_sq / count) - (avg ** 2)
+                if variance > 0:
+                    std = variance ** 0.5
+            return avg, std
+
         stats = {}
         for row in result.fetchall():
-            model_id, total_mase, total_mase_sq, total_rmse, total_scores = row
-            # Cast Decimal values from DB to float for arithmetic
-            total_mase = float(total_mase) if total_mase is not None else None
-            total_mase_sq = float(total_mase_sq) if total_mase_sq is not None else None
-            total_rmse = float(total_rmse) if total_rmse is not None else None
-            total_scores = float(total_scores) if total_scores is not None else None
-            
-            avg_mase = None
-            mase_std = None
-            avg_rmse = None
-            
-            if total_scores and total_scores > 0:
-                avg_mase = total_mase / total_scores
-                avg_rmse = total_rmse / total_scores
-                
-                if total_scores > 1:
-                    # Standard deviation: sqrt(E[X^2] - E[X]^2)
-                    variance = (total_mase_sq / total_scores) - (avg_mase ** 2)
-                    if variance > 0:
-                        mase_std = variance ** 0.5
-            
+            (model_id, total_mase, total_mase_sq, total_rmse,
+             total_sql, total_sql_sq, total_sql_count, total_scores) = row
+            total_mase = _f(total_mase)
+            total_mase_sq = _f(total_mase_sq)
+            total_rmse = _f(total_rmse)
+            total_sql = _f(total_sql)
+            total_sql_sq = _f(total_sql_sq)
+            total_sql_count = _f(total_sql_count)
+            total_scores = _f(total_scores)
+
+            avg_mase, mase_std = _avg_std(total_mase, total_mase_sq, total_scores)
+            avg_rmse = (total_rmse / total_scores) if (total_scores and total_scores > 0) else None
+            avg_sql, sql_std = _avg_std(total_sql, total_sql_sq, total_sql_count)
+
             stats[model_id] = {
                 "avg_mase": avg_mase,
                 "mase_std": mase_std,
                 "avg_rmse": avg_rmse,
+                "avg_sql": avg_sql,
+                "sql_std": sql_std,
                 "evaluated_count": int(total_scores) if total_scores else 0
             }
-        
+
         return stats
 
     
-    async def has_calculated_today(self) -> bool:
+    async def has_calculated_today(self, metric: str = "mase") -> bool:
         """
-        Check if ELO ratings have already been calculated today.
-        
+        Check if ELO ratings have already been calculated today for the given metric.
+
         Returns:
-            True if global ELO was calculated today, False otherwise
+            True if global ELO for `metric` was calculated today, False otherwise
         """
         query = text("""
             SELECT 1 FROM forecasts.daily_rankings
             WHERE scope_type = 'global'
+              AND metric = :metric
               AND calculation_date = CURRENT_DATE
             LIMIT 1
         """)
-        result = await self.session.execute(query)
+        result = await self.session.execute(query, {"metric": metric})
         return result.fetchone() is not None
     
     async def get_leaderboard(
@@ -795,40 +842,44 @@ class EloRankingService:
         scope_type: str = "global",
         scope_id: Optional[str] = None,
         calculation_date: Optional[date] = None,
-        limit: int = 50
+        limit: int = 50,
+        metric: str = "mase"
     ) -> List[Dict[str, Any]]:
         """
         Get ELO leaderboard from stored daily rankings.
-        
+
         Args:
             scope_type: 'global', 'definition', or 'frequency_horizon'
             scope_id: Identifier for the scope (None for global)
             calculation_date: Date to fetch (default: most recent)
             limit: Maximum number of results
-            
+            metric: 'mase' (default) or 'sql' ranking dimension
+
         Returns:
             List of leaderboard entries with model info
         """
         if calculation_date:
             date_filter = "dr.calculation_date = :calc_date"
-            params = {"calc_date": calculation_date, "scope_type": scope_type, "limit": limit}
+            params = {"calc_date": calculation_date, "scope_type": scope_type, "limit": limit, "metric": metric}
         else:
-            # Get most recent date for this scope
+            # Get most recent date for this scope + metric
             date_filter = """dr.calculation_date = (
-                SELECT MAX(calculation_date) FROM forecasts.daily_rankings 
+                SELECT MAX(calculation_date) FROM forecasts.daily_rankings
                 WHERE scope_type = :scope_type AND COALESCE(scope_id, '') = COALESCE(:scope_id, '')
+                  AND metric = :metric
             )"""
-            params = {"scope_type": scope_type, "scope_id": scope_id, "limit": limit}
-        
+            params = {"scope_type": scope_type, "scope_id": scope_id, "limit": limit, "metric": metric}
+
         if scope_id is None:
             scope_filter = "dr.scope_id IS NULL"
         else:
             scope_filter = "dr.scope_id = :scope_id"
             params["scope_id"] = scope_id
-        
+
         query = text(f"""
             SELECT * FROM forecasts.v_daily_rankings_leaderboard dr
             WHERE dr.scope_type = :scope_type
+              AND dr.metric = :metric
               AND {scope_filter}
               AND {date_filter}
             ORDER BY dr.elo_rating_median DESC
