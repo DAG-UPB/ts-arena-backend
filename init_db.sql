@@ -664,8 +664,6 @@ SELECT
     cs.series_id,
     cs.mase,
     cs.rmse,
-    cs.sql_score,
-    cs.has_quantiles,
     cs.final_evaluation,
     cs.calculated_at,
     -- Round Info
@@ -686,7 +684,11 @@ SELECT
     -- Domain Info
     dc.domain,
     dc.category,
-    dc.subcategory
+    dc.subcategory,
+    -- Probabilistic evaluation (backend #13). Appended at the end so CREATE OR REPLACE VIEW
+    -- can add them on live DBs without dropping dependents (e.g. forecasts.v_model_series_mase).
+    cs.sql_score,
+    cs.has_quantiles
 FROM forecasts.scores cs
 JOIN challenges.rounds cr ON cr.id = cs.round_id
 LEFT JOIN challenges.v_active_definitions cd ON cr.definition_id = cd.id

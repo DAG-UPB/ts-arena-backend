@@ -57,6 +57,31 @@ _SCHEMA_PATCHES = (
     "ALTER TABLE models.model_info ADD COLUMN IF NOT EXISTS website_url TEXT",
     "ALTER TABLE models.model_info ADD COLUMN IF NOT EXISTS description TEXT",
     "ALTER TABLE models.model_info ADD COLUMN IF NOT EXISTS arxiv_id TEXT",
+    # backend #13 — probabilistic evaluation (Scaled Quantile Loss). These keep the app from
+    # crashing after a dev-DB restore-from-prod wipe; the fuller migration
+    # (2026_backend13_sql_score.sql) also rebuilds round_model_scores + the ranking views.
+    "ALTER TABLE forecasts.scores ADD COLUMN IF NOT EXISTS sql_score DOUBLE PRECISION",
+    "ALTER TABLE forecasts.scores ADD COLUMN IF NOT EXISTS sql_per_quantile JSONB",
+    "ALTER TABLE forecasts.scores ADD COLUMN IF NOT EXISTS has_quantiles BOOLEAN",
+    "ALTER TABLE forecasts.scores ADD COLUMN IF NOT EXISTS quantile_levels_count INTEGER",
+    "ALTER TABLE forecasts.scores ADD COLUMN IF NOT EXISTS quantile_crossing_count INTEGER",
+    "ALTER TABLE forecasts.daily_rankings ADD COLUMN IF NOT EXISTS metric TEXT NOT NULL DEFAULT 'mase'",
+    "ALTER TABLE forecasts.daily_rankings ADD COLUMN IF NOT EXISTS avg_sql DOUBLE PRECISION",
+    "ALTER TABLE forecasts.daily_rankings ADD COLUMN IF NOT EXISTS sql_std DOUBLE PRECISION",
+    # Widen the daily_rankings unique index to include `metric` (mase- and sql-ranked
+    # snapshots must coexist). Rebuild only if the current index lacks metric — no per-boot churn.
+    """DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_indexes
+        WHERE schemaname = 'forecasts' AND indexname = 'idx_daily_rankings_unique'
+          AND indexdef LIKE '%metric%'
+      ) THEN
+        DROP INDEX IF EXISTS forecasts.idx_daily_rankings_unique;
+        CREATE UNIQUE INDEX idx_daily_rankings_unique ON forecasts.daily_rankings
+          (calculation_date, model_id, scope_type, COALESCE(scope_id, ''), metric);
+      END IF;
+    END $$""",
 )
 
 
