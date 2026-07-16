@@ -39,6 +39,11 @@ async def get_filtered_rankings(
         description="Filter by calculation date (YYYY-MM-DD). Defaults to today if not provided.",
         example="2025-12-31"
     ),
+    metric: str = Query(
+        "mase",
+        description="Ranking metric: 'mase' (point accuracy, default) or 'sql' (probabilistic / scaled quantile loss).",
+        example="mase"
+    ),
     limit: int = Query(
         100,
         ge=1,
@@ -131,6 +136,13 @@ async def get_filtered_rankings(
     **Headers:**
     - X-API-Key: Valid API key required
     """
+    # Validate the ranking metric
+    if metric not in ("mase", "sql"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid metric. Use 'mase' (point) or 'sql' (probabilistic)."
+        )
+
     # Validate that only one scope filter is provided
     if definition_id is not None and frequency_horizon is not None:
         raise HTTPException(
@@ -167,15 +179,17 @@ async def get_filtered_rankings(
         scope_type=scope_type,
         scope_id=scope_id,
         calculation_date=calc_date,
-        limit=limit
+        limit=limit,
+        metric=metric
     )
-    
+
     return {
         "rankings": rankings,
         "scope": {
             "type": scope_type,
             "id": scope_id
-        }
+        },
+        "metric": metric
     }
 
 

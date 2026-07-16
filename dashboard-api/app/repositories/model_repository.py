@@ -145,11 +145,12 @@ class ModelRepository:
         scope_type: Optional[str] = None,
         scope_id: Optional[str] = None,
         calculation_date = None,
-        limit: int = 100
+        limit: int = 100,
+        metric: str = "mase"
     ) -> List[Dict[str, Any]]:
         """
         Get model rankings from v_monthly_and_latest_rankings view.
-        
+
         Args:
             scope_type: One of 'global', 'definition', or 'frequency_horizon'
             scope_id: The scope identifier:
@@ -158,18 +159,20 @@ class ModelRepository:
                 - Frequency::horizon string for 'frequency_horizon' (e.g., '00:15:00::1 day')
             calculation_date: Date object for specific date, or None for latest rankings
             limit: Max. number of results
-        
+            metric: Ranking metric — 'mase' (point, default) or 'sql' (probabilistic, backend #13)
+
         Returns:
             List of dicts with ranking information from the view
         """
         # Build the base query
         query = """
-            SELECT 
+            SELECT
                 model_id,
                 model_name,
                 architecture,
                 model_size,
                 organization_name,
+                metric,
                 elo_rating_median,
                 elo_ci_lower,
                 elo_ci_upper,
@@ -178,20 +181,26 @@ class ModelRepository:
                 rank_position,
                 avg_mase,
                 mase_std,
+                avg_sql,
+                sql_std,
                 evaluated_count,
                 calculation_date
             FROM forecasts.v_monthly_and_latest_rankings
             WHERE 1=1
         """
         params = []
-        
+
+        # Filter by ranking metric (defaults to 'mase' for backwards compatibility)
+        query += " AND metric = %s"
+        params.append(metric)
+
         # Filter by calculation date or get latest
         if calculation_date is None:
             query += " AND is_latest = TRUE"
         else:
             query += " AND calculation_date = %s"
             params.append(calculation_date)
-        
+
         # Filter by scope type
         query += " AND scope_type = %s"
         params.append(scope_type)
@@ -349,6 +358,7 @@ class ModelRepository:
                 scope_id
             FROM forecasts.v_monthly_and_latest_rankings
             WHERE model_id = %s
+              AND metric = 'mase'
             """
             cur.execute(query, (model_id,))
             rows = [dict(r) for r in cur.fetchall()]

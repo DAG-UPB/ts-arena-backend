@@ -10,6 +10,7 @@ from app.database.challenges.challenge_repository import ChallengeRoundRepositor
 from app.database.models.model_info_repository import ModelInfoRepository
 from app.schemas.forecast import ForecastUploadRequest, ForecastUploadResponse
 from app.database.challenges.challenge import ChallengeSeriesPseudo
+from app.services.forecast_metrics import repair_point_quantiles
 
 logger = logging.getLogger(__name__)
 
@@ -136,15 +137,31 @@ class ForecastService:
                     )
                     continue
 
-            # Prepare forecasts without timestamp validation
+            # Prepare forecasts without timestamp validation.
+            # Repair any quantile crossings (isotonic sort per point) so stored quantiles are
+            # monotone; count repairs to surface as a non-fatal upload warning.
             valid_forecasts = []
+            crossing_repairs = 0
 
             for forecast_point in series_upload.forecasts:
+                pv, repaired = repair_point_quantiles(forecast_point.probabilistic_values)
+                if repaired:
+                    crossing_repairs += 1
                 valid_forecasts.append({
                     "ts": forecast_point.ts,
                     "value": forecast_point.value,
-                    "probabilistic_values": forecast_point.probabilistic_values
+                    "probabilistic_values": pv
                 })
+
+            if crossing_repairs > 0:
+                warning = (
+                    f"Series '{challenge_series_name}': repaired quantile crossings on "
+                    f"{crossing_repairs} forecast point(s) (values sorted ascending by level)"
+                )
+                errors.append(warning)
+                logger.warning(
+                    f"round={round_id} model={model_id} series={series_id}: {warning}"
+                )
             
             # Insert all forecasts
             if valid_forecasts:

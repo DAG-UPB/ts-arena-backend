@@ -14,6 +14,7 @@ from sqlalchemy import select, func
 from app.database.challenges.challenge_repository import ChallengeRoundRepository
 from app.database.data_portal.time_series_repository import TimeSeriesRepository
 from app.database.forecasts.repository import ForecastRepository
+from app.services.forecast_metrics import assemble_quantile_forecasts, sql_score
 
 logger = logging.getLogger(__name__)
 
@@ -408,13 +409,34 @@ class ScoreEvaluationService:
             mase = 0.0
         else:
             mase = float('inf')
-        
+
+        # --- Scaled Quantile Loss (SQL), backend #13 ---------------------------------
+        # Reuse mae_naive as the SQL scale `a` (same denominator as MASE, so SQL and MASE
+        # are directly comparable). NULL when the scale is undefined (mae_naive == 0),
+        # mirroring the MASE edge case.
+        probabilistic_values = [item.get("probabilistic_values") for item in evaluation_data]
+        quantile_forecasts, has_quantiles, levels_count, crossing_count = (
+            assemble_quantile_forecasts(y_pred, probabilistic_values)
+        )
+        sql_scale = mae_naive if mae_naive > 0 else None
+        sql_overall, sql_per_level = sql_score(y_true, quantile_forecasts, sql_scale)
+        # JSONB keys as level strings ("0.1" … "0.9")
+        sql_per_quantile = (
+            {f"{level:.1f}": value for level, value in sql_per_level.items()}
+            if sql_per_level else None
+        )
+
         return {
             "round_id": round_id,
             "model_id": model_id,
             "series_id": series_id,
             "mase": mase,
             "rmse": rmse,
+            "sql_score": sql_overall,
+            "sql_per_quantile": sql_per_quantile,
+            "has_quantiles": has_quantiles,
+            "quantile_levels_count": levels_count,
+            "quantile_crossing_count": crossing_count,
             "forecast_count": forecast_count,
             "actual_count": actual_count,
             "evaluated_count": evaluated_count,
