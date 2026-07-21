@@ -20,3 +20,6 @@ migrations
 database
 .claude
 .claude-flow
+# backend-13: hand-written SQL migrations are prod-deploy artifacts — keep tracked
+!api-portal/app/scripts/migrations/
+!api-portal/app/scripts/migrations/*.sql
