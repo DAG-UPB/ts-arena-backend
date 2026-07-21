@@ -50,16 +50,16 @@ async def wait_for_db(logger, max_retries=10, delay=3.0):
 # Idempotent schema patches applied on startup. Each statement must be
 # safe to run repeatedly (use IF NOT EXISTS / IF EXISTS). This is a
 # pragmatic bridge for the dev DB — init_db.sql remains the source of
-# truth for fresh databases. See backend ticket #43.
+# truth for fresh databases.
 _SCHEMA_PATCHES = (
     "ALTER TABLE models.model_info ADD COLUMN IF NOT EXISTS paper_url TEXT",
     "ALTER TABLE models.model_info ADD COLUMN IF NOT EXISTS repo_url TEXT",
     "ALTER TABLE models.model_info ADD COLUMN IF NOT EXISTS website_url TEXT",
     "ALTER TABLE models.model_info ADD COLUMN IF NOT EXISTS description TEXT",
     "ALTER TABLE models.model_info ADD COLUMN IF NOT EXISTS arxiv_id TEXT",
-    # backend #13 — probabilistic evaluation (Scaled Quantile Loss). These keep the app from
+    # Probabilistic evaluation (Scaled Quantile Loss). These keep the app from
     # crashing after a dev-DB restore-from-prod wipe; the fuller migration
-    # (2026_backend13_sql_score.sql) also rebuilds round_model_scores + the ranking views.
+    # (2026_sql_score.sql) also rebuilds round_model_scores + the ranking views.
     "ALTER TABLE forecasts.scores ADD COLUMN IF NOT EXISTS sql_score DOUBLE PRECISION",
     "ALTER TABLE forecasts.scores ADD COLUMN IF NOT EXISTS sql_per_quantile JSONB",
     "ALTER TABLE forecasts.scores ADD COLUMN IF NOT EXISTS has_quantiles BOOLEAN",
@@ -109,8 +109,8 @@ async def apply_metadata_seed(logger):
        variants, or families we haven't catalogued per-name), fall back to
        matching on ``model_family``.
 
-    See ``app.data.model_metadata_seed`` for the data and ticket #43 for
-    background. ``generate_readable_id`` appends a random suffix, so we
+    See ``app.data.model_metadata_seed`` for the seed data and background.
+    ``generate_readable_id`` appends a random suffix, so we
     cannot key the seed by ``readable_id``.
     """
     try:

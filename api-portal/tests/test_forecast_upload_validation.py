@@ -1,4 +1,4 @@
-"""Upload-path validation + quantile crossing repair tests (backend #13, Task 3)."""
+"""Upload-path validation + quantile crossing repair tests."""
 from datetime import datetime, timezone
 
 import pytest

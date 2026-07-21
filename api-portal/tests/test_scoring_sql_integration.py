@@ -1,8 +1,8 @@
-"""Scoring-integration tests for SQL (backend #13, Task 4).
+"""Scoring-integration tests for SQL.
 
 These exercise the exact derivation `_calculate_score_for_model_series` performs to turn
 aligned evaluation rows + the naive baseline into the stored SQL fields, without requiring a
-database (the DB wiring itself is verified on dev in Task 5). Three model archetypes:
+database (the DB wiring itself is verified separately against dev). Three model archetypes:
 a full-quantile model, a point-only model, and a crossing model.
 """
 import numpy as np

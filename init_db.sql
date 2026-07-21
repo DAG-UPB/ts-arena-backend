@@ -223,7 +223,7 @@ CREATE TABLE models.model_info (
     architecture TEXT,
     pretraining_data TEXT,
     publishing_date DATE,
-    -- Optional discovery / provenance metadata (see ticket #43).
+    -- Optional discovery / provenance metadata.
     -- All nullable; api-portal applies an idempotent ALTER TABLE patch on
     -- startup so existing dev DBs pick these up without an init rerun.
     paper_url TEXT,
@@ -464,7 +464,7 @@ CREATE TABLE forecasts.scores (
     series_id INTEGER REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
     mase DOUBLE PRECISION,
     rmse DOUBLE PRECISION,
-    -- Probabilistic evaluation (Scaled Quantile Loss, backend #13). Scaled by the same
+    -- Probabilistic evaluation (Scaled Quantile Loss). Scaled by the same
     -- flat-naive MAE denominator as MASE, so sql_score and mase are directly comparable.
     sql_score DOUBLE PRECISION,          -- overall SQL (mean over quantile levels); NULL when undefined
     sql_per_quantile JSONB,              -- {"0.1": <scaled loss>, …} per-level breakdown
@@ -685,7 +685,7 @@ SELECT
     dc.domain,
     dc.category,
     dc.subcategory,
-    -- Probabilistic evaluation (backend #13). Appended at the end so CREATE OR REPLACE VIEW
+    -- Probabilistic evaluation. Appended at the end so CREATE OR REPLACE VIEW
     -- can add them on live DBs without dropping dependents (e.g. forecasts.v_model_series_mase).
     cs.sql_score,
     cs.has_quantiles
@@ -901,7 +901,7 @@ CREATE TABLE IF NOT EXISTS forecasts.daily_rankings (
     scope_type TEXT NOT NULL CHECK (scope_type IN ('global', 'definition', 'frequency_horizon')),
     scope_id TEXT,  -- NULL for global, definition_id as string, or "frequency_horizon" key
 
-    -- Which score the ELO ranking is computed from (backend #13).
+    -- Which score the ELO ranking is computed from.
     -- 'mase' = point ranking (default, backwards compatible); 'sql' = probabilistic ranking.
     metric TEXT NOT NULL DEFAULT 'mase' CHECK (metric IN ('mase', 'sql')),
 
@@ -921,7 +921,7 @@ CREATE TABLE IF NOT EXISTS forecasts.daily_rankings (
     avg_mase DOUBLE PRECISION,
     mase_std DOUBLE PRECISION,
     avg_rmse DOUBLE PRECISION,
-    -- Cumulative SQL snapshot (backend #13)
+    -- Cumulative SQL snapshot
     avg_sql DOUBLE PRECISION,
     sql_std DOUBLE PRECISION,
     evaluated_count INTEGER DEFAULT 0
@@ -980,7 +980,7 @@ SELECT
     dr.avg_mase,
     dr.mase_std,
     dr.avg_rmse,
-    -- Pre-computed SQL from snapshot (backend #13)
+    -- Pre-computed SQL from snapshot
     dr.avg_sql,
     dr.sql_std,
     dr.evaluated_count,

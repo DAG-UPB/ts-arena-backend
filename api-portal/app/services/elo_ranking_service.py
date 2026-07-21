@@ -47,7 +47,7 @@ class EloRankingService:
     DEFAULT_N_BOOTSTRAPS = 500
 
     # Metric -> forecasts.scores column driving the ranking. Both are lower-is-better, so the
-    # bootstrap outcome logic is unchanged; only the source column differs (backend #13).
+    # bootstrap outcome logic is unchanged; only the source column differs.
     _METRIC_COLUMN: Dict[str, str] = {"mase": "mase", "sql": "sql_score"}
     SUPPORTED_METRICS: Tuple[str, ...] = ("mase", "sql")
 

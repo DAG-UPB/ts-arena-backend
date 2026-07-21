@@ -11,7 +11,7 @@ class ModelSchema(BaseModel):
     architecture: str | None
     pretraining_data: str | None
     publishing_date: datetime | None
-    # Optional discovery / provenance metadata. See ticket #43.
+    # Optional discovery / provenance metadata.
     paper_url: str | None = None
     repo_url: str | None = None
     website_url: str | None = None

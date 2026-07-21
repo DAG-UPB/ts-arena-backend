@@ -42,7 +42,7 @@ class ModelRepository:
     def list_models(self) -> List[Dict[str, Any]]:
         """List every registered model.
 
-        Thin payload tuned for the frontend's Models tab — see ticket #33.
+        Thin payload tuned for the frontend's Models tab.
         We do *not* include the heavy ``parameters`` JSONB blob here; clients
         who need it call ``GET /models/{id}`` for the full record.
         """
@@ -159,7 +159,7 @@ class ModelRepository:
                 - Frequency::horizon string for 'frequency_horizon' (e.g., '00:15:00::1 day')
             calculation_date: Date object for specific date, or None for latest rankings
             limit: Max. number of results
-            metric: Ranking metric — 'mase' (point, default) or 'sql' (probabilistic, backend #13)
+            metric: Ranking metric — 'mase' (point, default) or 'sql' (probabilistic)
 
         Returns:
             List of dicts with ranking information from the view

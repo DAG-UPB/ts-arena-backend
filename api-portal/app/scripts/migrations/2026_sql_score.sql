@@ -1,8 +1,8 @@
 -- =====================================================================================
--- backend #13 — Probabilistic evaluation (Scaled Quantile Loss) + SQL-metric rankings
+-- Probabilistic evaluation (Scaled Quantile Loss) + SQL-metric rankings
 -- =====================================================================================
 -- Idempotent migration for LIVE databases (there is no migration tool yet; init_db.sql is
--- for fresh installs only — see ts-arena-backend/CLAUDE.md). Apply to DEV first; prod is
+-- for fresh installs only). Apply to DEV first; prod is
 -- human-gated. Safe to re-run.
 --
 -- What it does:

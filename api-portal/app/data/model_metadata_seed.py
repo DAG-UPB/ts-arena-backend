@@ -14,7 +14,7 @@ safe to re-run on every boot.
 
 This bridges the gap between the frontend's curated family content
 (``ts-arena-frontend/src/content/models/families/*.tsx``) and the new
-database columns introduced in ticket #43, so the Resources panel on
+provenance columns, so the Resources panel on
 ``/models/[modelId]`` has data to render without anyone re-registering
 the existing reference models.
 """

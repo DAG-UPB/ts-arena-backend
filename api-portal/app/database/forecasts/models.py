@@ -49,7 +49,7 @@ class ChallengeScore(Base):
     series_id = Column(Integer, ForeignKey("data_portal.time_series.series_id", ondelete="CASCADE"), nullable=False)
     mase = Column(Float)
     rmse = Column(Float)
-    # Probabilistic evaluation (Scaled Quantile Loss, backend #13)
+    # Probabilistic evaluation (Scaled Quantile Loss)
     sql_score = Column(Float)
     sql_per_quantile = Column(JSONB)
     has_quantiles = Column(Boolean)

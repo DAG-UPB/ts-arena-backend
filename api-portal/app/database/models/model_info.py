@@ -23,7 +23,7 @@ class ModelInfo(Base):
     architecture = Column(Text)
     pretraining_data = Column(Text)
     publishing_date = Column(Date)
-    # Optional discovery / provenance metadata. See ticket #43.
+    # Optional discovery / provenance metadata.
     paper_url = Column(Text)
     repo_url = Column(Text)
     website_url = Column(Text)

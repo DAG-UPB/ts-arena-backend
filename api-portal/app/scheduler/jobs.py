@@ -160,7 +160,7 @@ async def periodic_elo_ranking_calculation_job() -> None:
             elo_service = EloRankingService(session)
 
             # Calculate and store ELO ratings for both the point metric (MASE) and the
-            # probabilistic metric (SQL, backend #13). Each is a separate ranking dimension.
+            # probabilistic metric (SQL). Each is a separate ranking dimension.
             for metric in EloRankingService.SUPPORTED_METRICS:
                 results = await elo_service.calculate_and_store_all_ratings(
                     n_bootstraps=500,
@@ -209,7 +209,7 @@ async def startup_elo_check_job() -> None:
         async with SessionLocal() as session:
             elo_service = EloRankingService(session)
 
-            # Compute any metric not yet calculated today (MASE and SQL, backend #13).
+            # Compute any metric not yet calculated today (MASE and SQL).
             pending = [
                 metric for metric in EloRankingService.SUPPORTED_METRICS
                 if not await elo_service.has_calculated_today(metric=metric)

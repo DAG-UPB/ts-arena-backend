@@ -1,4 +1,4 @@
-"""Golden-value and edge-case tests for the pure SQL metric module (backend #13, Task 1)."""
+"""Golden-value and edge-case tests for the pure SQL metric module."""
 import numpy as np
 import pytest
 

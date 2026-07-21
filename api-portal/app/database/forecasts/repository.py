@@ -416,7 +416,7 @@ class ForecastRepository:
         )
         return result.scalars().all()
 
-    # Optional probabilistic-evaluation columns (backend #13). Some score dicts (early-return
+    # Optional probabilistic-evaluation columns. Some score dicts (early-return
     # branches like no_overlap / insufficient_data) don't set these; normalize to NULL so the
     # multi-row INSERT sees a uniform column set.
     _SQL_SCORE_KEYS = (

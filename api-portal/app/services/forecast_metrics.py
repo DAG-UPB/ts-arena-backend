@@ -11,7 +11,7 @@ Implements **Scaled Quantile Loss (SQL)** as defined by fev-bench
 The scale ``a`` is the MAE of the flat last-context-value naive over the evaluated
 timestamps — identical to the arena MASE denominator (``mae_naive``), so SQL and MASE are
 directly comparable on the platform. This is a deliberate deviation from fev's seasonal
-scaling (see backend #13). Consequence: arena SQL values are not numerically comparable to
+scaling. Consequence: arena SQL values are not numerically comparable to
 published fev-bench SQL, but the ranking methodology is.
 
 Key identity (regression anchor): a degenerate distribution where all nine deciles equal the

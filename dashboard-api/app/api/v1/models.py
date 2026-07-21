@@ -241,8 +241,7 @@ async def list_all_models(
     Returns a flat list of every row in ``models.model_info``. The payload
     is intentionally thin — no parameters blob, no aggregate stats — and
     is intended to back the frontend's Models tab so it no longer has to
-    derive `readable_id → model_id` from the rankings endpoint (see
-    ticket #33).
+    derive `readable_id → model_id` from the rankings endpoint.
     """
     repo = ModelRepository(conn)
     return repo.list_models()

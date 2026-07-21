@@ -410,7 +410,7 @@ class ScoreEvaluationService:
         else:
             mase = float('inf')
 
-        # --- Scaled Quantile Loss (SQL), backend #13 ---------------------------------
+        # --- Scaled Quantile Loss (SQL) ---------------------------------------------
         # Reuse mae_naive as the SQL scale `a` (same denominator as MASE, so SQL and MASE
         # are directly comparable). NULL when the scale is undefined (mae_naive == 0),
         # mirroring the MASE edge case.
