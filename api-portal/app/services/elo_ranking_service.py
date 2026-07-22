@@ -46,6 +46,13 @@ class EloRankingService:
     DEFAULT_BASE_RATING = 1000.0
     DEFAULT_N_BOOTSTRAPS = 500
 
+    # Overall-ranking (global scope) full-participation eligibility.
+    # A model is listed in the GLOBAL ranking only if, for EVERY challenge in the universe,
+    # it has (a) seen the challenge (>=1 round since it joined the platform) and
+    # (b) covered at least this fraction of that challenge's rounds available since it joined.
+    # Non-global scopes (definition / frequency_horizon) are unaffected. See issue ts-arena-1.
+    DEFAULT_PARTICIPATION_TAU = 0.5
+
     # Metric -> forecasts.scores column driving the ranking. Both are lower-is-better, so the
     # bootstrap outcome logic is unchanged; only the source column differs.
     _METRIC_COLUMN: Dict[str, str] = {"mase": "mase", "sql": "sql_score"}
@@ -304,7 +311,24 @@ class EloRankingService:
             score_cutoff_date=score_cutoff_date,
             metric=metric
         )
-        
+
+        # GLOBAL scope only: restrict to models that fully participate across all challenges
+        # (see ts-arena-1). Definition / frequency_horizon scopes keep every model, so a model
+        # excluded from the overall ranking still appears in its challenge-specific views.
+        if scope_type == "global" and mase_matrix.size > 0:
+            eligible = await self._get_eligible_global_model_ids(
+                score_cutoff_date=score_cutoff_date, metric=metric
+            )
+            excluded = [m for m in model_ids if m not in eligible]
+            if excluded:
+                keep = [i for i, m in enumerate(model_ids) if m in eligible]
+                mase_matrix = mase_matrix[:, keep]
+                model_ids = [model_ids[i] for i in keep]
+                logger.info(
+                    f"Global eligibility (tau={self.DEFAULT_PARTICIPATION_TAU}): excluded "
+                    f"{len(excluded)} model(s) not fully participating: {sorted(excluded)}"
+                )
+
         if mase_matrix.size == 0 or len(model_ids) < 2:
             logger.debug(f"Not enough data for ELO ({scope_label}): "
                         f"{len(match_ids)} matches, {len(model_ids)} models")
@@ -475,7 +499,107 @@ class EloRankingService:
         return matrix, round_ids, model_ids
 
 
-    
+    async def _get_eligible_global_model_ids(
+        self,
+        score_cutoff_date: Optional[date] = None,
+        metric: str = "mase",
+        tau: Optional[float] = None,
+    ) -> set:
+        """
+        Model ids eligible for the GLOBAL ranking under the full-participation rule
+        (ts-arena-1). A model qualifies iff, for EVERY challenge in the universe, it has
+        seen the challenge since it joined the platform AND covered >= tau of that
+        challenge's rounds available since it joined. See _compute_eligible_global_models.
+
+        Fetches the raw (model_id, definition_id, round_id, registration_start) rows of the
+        valid-score population (same filters as _get_scores_matrix), then computes eligibility
+        in Python so the rule stays unit-testable without a database.
+        """
+        col = self._metric_column(metric)
+        query = f"""
+            SELECT DISTINCT fs.model_id, cr.definition_id, fs.round_id, cr.registration_start
+            FROM forecasts.scores fs
+            JOIN challenges.rounds cr ON fs.round_id = cr.id
+            WHERE fs.final_evaluation = TRUE
+              AND cr.is_cancelled = FALSE
+              AND fs.{col} IS NOT NULL
+              AND fs.{col} != 'NaN'
+              AND fs.{col} != 'Infinity'
+              AND fs.{col} != '-Infinity'
+              AND NOT EXISTS (
+                  SELECT 1 FROM challenges.definition_series_scd2 ds
+                  WHERE ds.definition_id = cr.definition_id
+                    AND ds.series_id = fs.series_id
+                    AND ds.is_excluded = TRUE
+              )
+        """
+        params = {}
+        if score_cutoff_date is not None:
+            query += " AND cr.registration_start::date <= :score_cutoff_date"
+            params["score_cutoff_date"] = score_cutoff_date
+
+        result = await self.session.execute(text(query), params)
+        rows = result.fetchall()
+        return self._compute_eligible_global_models(
+            rows, tau if tau is not None else self.DEFAULT_PARTICIPATION_TAU
+        )
+
+    @staticmethod
+    def _compute_eligible_global_models(rows, tau: float) -> set:
+        """
+        Pure eligibility computation for the global ranking (no DB access, unit-testable).
+
+        Args:
+            rows: iterable of (model_id, definition_id, round_id, registration_start) tuples
+                  from the valid-score population (each such round is, by construction, an
+                  "available" round for its challenge — at least one model was scored in it).
+            tau:  minimum per-challenge coverage fraction (0..1).
+
+        Returns:
+            set of eligible model_ids. Empty if there is no data.
+
+        Rule: universe = all definitions present. A model's join point is its earliest
+        round across ANY challenge. For every challenge in the universe the model must have
+        (a) at least one available round since it joined (seen it) and (b) coverage
+        n_scored / n_available_since_join >= tau. Failing any challenge -> excluded.
+        """
+        # available[def] = {round_id: registration_start}; scored[model][def] = {round_ids}
+        available: Dict[Any, Dict[Any, Any]] = {}
+        scored: Dict[Any, Dict[Any, set]] = {}
+        join_ts: Dict[Any, Any] = {}
+
+        for model_id, definition_id, round_id, reg_start in rows:
+            available.setdefault(definition_id, {})[round_id] = reg_start
+            scored.setdefault(model_id, {}).setdefault(definition_id, set()).add(round_id)
+            prev = join_ts.get(model_id)
+            if prev is None or reg_start < prev:
+                join_ts[model_id] = reg_start
+
+        universe = set(available.keys())
+        if not universe:
+            return set()
+
+        eligible = set()
+        for model_id, joined_at in join_ts.items():
+            model_defs = scored.get(model_id, {})
+            ok = True
+            for def_id in universe:
+                # rounds of this challenge available since the model joined
+                n_available = sum(
+                    1 for reg in available[def_id].values() if reg >= joined_at
+                )
+                if n_available == 0:
+                    ok = False  # challenge not seen since join -> not yet eligible
+                    break
+                n_scored = len(model_defs.get(def_id, ()))
+                if n_scored / n_available < tau:
+                    ok = False
+                    break
+            if ok:
+                eligible.add(model_id)
+        return eligible
+
+
     def _run_all_bootstraps(
         self,
         mase_matrix: np.ndarray,
