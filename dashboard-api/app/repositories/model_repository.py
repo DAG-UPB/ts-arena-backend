@@ -38,6 +38,33 @@ class ModelRepository:
             )
             row = cur.fetchone()
             return dict(row) if row else None
+
+    def list_models(self) -> List[Dict[str, Any]]:
+        """List every registered model.
+
+        Thin payload tuned for the frontend's Models tab.
+        We do *not* include the heavy ``parameters`` JSONB blob here; clients
+        who need it call ``GET /models/{id}`` for the full record.
+        """
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT
+                    mi.id,
+                    mi.readable_id,
+                    mi.name,
+                    mi.model_family,
+                    mi.model_size,
+                    mi.architecture,
+                    mi.paper_url,
+                    mi.repo_url,
+                    mi.website_url,
+                    mi.arxiv_id
+                FROM models.model_info mi
+                ORDER BY mi.model_family NULLS LAST, mi.name
+                """
+            )
+            return [dict(row) for row in cur.fetchall()]
     
     def get_global_rankings(
         self, 
@@ -91,6 +118,8 @@ class ModelRepository:
                     JOIN auth.users u ON u.id = mi.user_id
                     JOIN challenges.rounds c ON c.id = cs.challenge_id
                     WHERE cs.mase IS NOT NULL
+                      AND cs.final_evaluation = TRUE
+                      AND c.is_cancelled = FALSE
                 """
                 params = []
                 if since:
@@ -116,11 +145,12 @@ class ModelRepository:
         scope_type: Optional[str] = None,
         scope_id: Optional[str] = None,
         calculation_date = None,
-        limit: int = 100
+        limit: int = 100,
+        metric: str = "mase"
     ) -> List[Dict[str, Any]]:
         """
         Get model rankings from v_monthly_and_latest_rankings view.
-        
+
         Args:
             scope_type: One of 'global', 'definition', or 'frequency_horizon'
             scope_id: The scope identifier:
@@ -129,18 +159,20 @@ class ModelRepository:
                 - Frequency::horizon string for 'frequency_horizon' (e.g., '00:15:00::1 day')
             calculation_date: Date object for specific date, or None for latest rankings
             limit: Max. number of results
-        
+            metric: Ranking metric — 'mase' (point, default) or 'sql' (probabilistic)
+
         Returns:
             List of dicts with ranking information from the view
         """
         # Build the base query
         query = """
-            SELECT 
+            SELECT
                 model_id,
                 model_name,
                 architecture,
                 model_size,
                 organization_name,
+                metric,
                 elo_rating_median,
                 elo_ci_lower,
                 elo_ci_upper,
@@ -149,20 +181,26 @@ class ModelRepository:
                 rank_position,
                 avg_mase,
                 mase_std,
+                avg_sql,
+                sql_std,
                 evaluated_count,
                 calculation_date
             FROM forecasts.v_monthly_and_latest_rankings
             WHERE 1=1
         """
         params = []
-        
+
+        # Filter by ranking metric (defaults to 'mase' for backwards compatibility)
+        query += " AND metric = %s"
+        params.append(metric)
+
         # Filter by calculation date or get latest
         if calculation_date is None:
             query += " AND is_latest = TRUE"
         else:
             query += " AND calculation_date = %s"
             params.append(calculation_date)
-        
+
         # Filter by scope type
         query += " AND scope_type = %s"
         params.append(scope_type)
@@ -320,6 +358,7 @@ class ModelRepository:
                 scope_id
             FROM forecasts.v_monthly_and_latest_rankings
             WHERE model_id = %s
+              AND metric = 'mase'
             """
             cur.execute(query, (model_id,))
             rows = [dict(r) for r in cur.fetchall()]
@@ -364,6 +403,86 @@ class ModelRepository:
                 'model_name': model_name,
                 'definition_rankings': list(scopes_dict.values())
             } 
+
+    def get_model_active_rounds(self, model_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get rounds the model is registered for that are currently in
+        'registration' or 'active' state (and not cancelled).
+
+        Returns:
+            Dict with model identifiers and a list of rounds, or None if the
+            model does not exist.
+        """
+        with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id, readable_id, name
+                FROM models.model_info
+                WHERE id = %s
+                """,
+                (model_id,),
+            )
+            model_row = cur.fetchone()
+            if not model_row:
+                return None
+
+            cur.execute(
+                """
+                SELECT
+                    r.id              AS round_id,
+                    r.name            AS round_name,
+                    r.description     AS description,
+                    r.definition_id   AS definition_id,
+                    d.name            AS definition_name,
+                    CASE
+                        WHEN r.is_cancelled THEN 'cancelled'
+                        WHEN NOW() >= r.registration_start AND NOW() <= r.registration_end THEN 'registration'
+                        WHEN NOW() >  r.registration_end   AND NOW() <= r.end_time          THEN 'active'
+                        WHEN NOW() >  r.end_time                                            THEN 'completed'
+                        ELSE 'undefined'
+                    END               AS status,
+                    r.registration_start,
+                    r.registration_end,
+                    r.start_time,
+                    r.end_time,
+                    r.frequency,
+                    r.horizon
+                FROM challenges.participants p
+                JOIN challenges.rounds r       ON r.id = p.round_id
+                LEFT JOIN challenges.definitions d ON d.id = r.definition_id
+                WHERE p.model_id = %s
+                  AND r.is_cancelled = FALSE
+                  AND NOW() <= r.end_time
+                  AND NOW() >= r.registration_start
+                ORDER BY r.registration_end ASC, r.id ASC
+                """,
+                (model_id,),
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+
+            rounds: List[Dict[str, Any]] = []
+            for row in rows:
+                rounds.append({
+                    'round_id': row['round_id'],
+                    'round_name': row['round_name'],
+                    'description': row['description'],
+                    'definition_id': row['definition_id'],
+                    'definition_name': row['definition_name'],
+                    'status': row['status'],
+                    'registration_start': row['registration_start'],
+                    'registration_end': row['registration_end'],
+                    'start_time': row['start_time'],
+                    'end_time': row['end_time'],
+                    'frequency': self._interval_to_iso8601(row['frequency']) if row['frequency'] is not None else None,
+                    'horizon': self._interval_to_iso8601(row['horizon']) if row['horizon'] is not None else None,
+                })
+
+            return {
+                'model_id': model_row['id'],
+                'model_readable_id': model_row['readable_id'],
+                'model_name': model_row['name'],
+                'rounds': rounds,
+            }
 
     def get_model_series_by_definition(self, model_id: int) -> Optional[Dict[str, Any]]:
         """

@@ -10,7 +10,13 @@ from app.schemas.common import (
     ModelRankingSchema,
     ModelRankingsResponseSchema
 )
-from app.schemas.model import ModelSchema, ModelDetailSchema, ModelSeriesByDefinitionSchema
+from app.schemas.model import (
+    ModelSchema,
+    ModelDetailSchema,
+    ModelListItemSchema,
+    ModelSeriesByDefinitionSchema,
+    ModelActiveRoundsResponseSchema,
+)
 from app.schemas.forecast import ModelSeriesForecastsAcrossRoundsSchema
 
 router = APIRouter(prefix="/api/v1", tags=["Models"])
@@ -32,6 +38,11 @@ async def get_filtered_rankings(
         None,
         description="Filter by calculation date (YYYY-MM-DD). Defaults to today if not provided.",
         example="2025-12-31"
+    ),
+    metric: str = Query(
+        "mase",
+        description="Ranking metric: 'mase' (point accuracy, default) or 'sql' (probabilistic / scaled quantile loss).",
+        example="mase"
     ),
     limit: int = Query(
         100,
@@ -125,6 +136,13 @@ async def get_filtered_rankings(
     **Headers:**
     - X-API-Key: Valid API key required
     """
+    # Validate the ranking metric
+    if metric not in ("mase", "sql"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid metric. Use 'mase' (point) or 'sql' (probabilistic)."
+        )
+
     # Validate that only one scope filter is provided
     if definition_id is not None and frequency_horizon is not None:
         raise HTTPException(
@@ -161,15 +179,17 @@ async def get_filtered_rankings(
         scope_type=scope_type,
         scope_id=scope_id,
         calculation_date=calc_date,
-        limit=limit
+        limit=limit,
+        metric=metric
     )
-    
+
     return {
         "rankings": rankings,
         "scope": {
             "type": scope_type,
             "id": scope_id
-        }
+        },
+        "metric": metric
     }
 
 
@@ -209,6 +229,22 @@ async def get_ranking_filters(
     filter_options = repo.get_available_filter_options()
     
     return filter_options
+
+
+@router.get("/models", response_model=List[ModelListItemSchema])
+async def list_all_models(
+    api_key: str = Depends(get_api_key),
+    conn = Depends(get_db_connection),
+):
+    """List every registered model with discovery metadata.
+
+    Returns a flat list of every row in ``models.model_info``. The payload
+    is intentionally thin — no parameters blob, no aggregate stats — and
+    is intended to back the frontend's Models tab so it no longer has to
+    derive `readable_id → model_id` from the rankings endpoint.
+    """
+    repo = ModelRepository(conn)
+    return repo.list_models()
 
 
 @router.get("/models/{model_id}", response_model=ModelDetailSchema)
@@ -427,6 +463,72 @@ async def get_model_series_forecasts_across_rounds(
             detail="Model, definition, or series not found"
         )
     
+    return result
+
+
+@router.get(
+    "/models/{model_id}/active-rounds",
+    response_model=ModelActiveRoundsResponseSchema
+)
+async def get_model_active_rounds(
+    model_id: int,
+    api_key: str = Depends(get_api_key),
+    conn = Depends(get_db_connection)
+):
+    """
+    Get all rounds the model is currently registered for whose status is
+    'registration' or 'active' (and which are not cancelled).
+
+    This is the live participation view for the model overview page —
+    "what is this model on right now?". Completed and cancelled rounds are
+    intentionally excluded.
+
+    **Path Parameters:**
+    - model_id: ID of the model
+
+    **Response Structure:**
+    ```json
+    {
+      "model_id": 123,
+      "model_readable_id": "example-model",
+      "model_name": "Example Model",
+      "rounds": [
+        {
+          "round_id": 1001,
+          "round_name": "Day-Ahead Power - 2026-05-12",
+          "description": "...",
+          "definition_id": 1,
+          "definition_name": "Day-Ahead Power Forecast",
+          "status": "registration",
+          "registration_start": "2026-05-11T10:00:00Z",
+          "registration_end": "2026-05-11T22:00:00Z",
+          "start_time": "2026-05-12T00:00:00Z",
+          "end_time": "2026-05-13T00:00:00Z",
+          "frequency": "PT15M",
+          "horizon": "P1D"
+        }
+      ]
+    }
+    ```
+
+    **Headers:**
+    - X-API-Key: Valid API key required
+
+    **Notes:**
+    - Returns 404 if the model does not exist.
+    - Empty `rounds` list is returned if the model has no active or
+      registration-state participations.
+    - Ordered by `registration_end` ascending (closest deadline first).
+    """
+    repo = ModelRepository(conn)
+    result = repo.get_model_active_rounds(model_id)
+
+    if not result:
+        raise HTTPException(
+            status_code=404,
+            detail="Model not found"
+        )
+
     return result
 
 

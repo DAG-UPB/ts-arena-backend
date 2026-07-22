@@ -223,6 +223,14 @@ CREATE TABLE models.model_info (
     architecture TEXT,
     pretraining_data TEXT,
     publishing_date DATE,
+    -- Optional discovery / provenance metadata.
+    -- All nullable; api-portal applies an idempotent ALTER TABLE patch on
+    -- startup so existing dev DBs pick these up without an init rerun.
+    paper_url TEXT,
+    repo_url TEXT,
+    website_url TEXT,
+    description TEXT,
+    arxiv_id TEXT,
     parameters JSONB,
     created_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE (user_id, name)
@@ -456,6 +464,13 @@ CREATE TABLE forecasts.scores (
     series_id INTEGER REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
     mase DOUBLE PRECISION,
     rmse DOUBLE PRECISION,
+    -- Probabilistic evaluation (Scaled Quantile Loss). Scaled by the same
+    -- flat-naive MAE denominator as MASE, so sql_score and mase are directly comparable.
+    sql_score DOUBLE PRECISION,          -- overall SQL (mean over quantile levels); NULL when undefined
+    sql_per_quantile JSONB,              -- {"0.1": <scaled loss>, …} per-level breakdown
+    has_quantiles BOOLEAN,               -- did the model submit real quantiles (vs point-only degenerate)?
+    quantile_levels_count INTEGER,       -- number of distinct quantile levels actually submitted (0 = point-only)
+    quantile_crossing_count INTEGER,     -- timestamps whose quantiles were repaired (isotonic sort) at scoring
     forecast_count INTEGER DEFAULT 0,
     actual_count INTEGER DEFAULT 0,
     evaluated_count INTEGER DEFAULT 0,
@@ -669,7 +684,11 @@ SELECT
     -- Domain Info
     dc.domain,
     dc.category,
-    dc.subcategory
+    dc.subcategory,
+    -- Probabilistic evaluation. Appended at the end so CREATE OR REPLACE VIEW
+    -- can add them on live DBs without dropping dependents (e.g. forecasts.v_model_series_mase).
+    cs.sql_score,
+    cs.has_quantiles
 FROM forecasts.scores cs
 JOIN challenges.rounds cr ON cr.id = cs.round_id
 LEFT JOIN challenges.v_active_definitions cd ON cr.definition_id = cd.id
@@ -881,7 +900,11 @@ CREATE TABLE IF NOT EXISTS forecasts.daily_rankings (
     -- 'frequency_horizon' = grouped by frequency+horizon (scope_id = e.g. '00:15:00_1 day')
     scope_type TEXT NOT NULL CHECK (scope_type IN ('global', 'definition', 'frequency_horizon')),
     scope_id TEXT,  -- NULL for global, definition_id as string, or "frequency_horizon" key
-    
+
+    -- Which score the ELO ranking is computed from.
+    -- 'mase' = point ranking (default, backwards compatible); 'sql' = probabilistic ranking.
+    metric TEXT NOT NULL DEFAULT 'mase' CHECK (metric IN ('mase', 'sql')),
+
     -- ELO Results from Bootstrapping
     elo_rating_median DOUBLE PRECISION NOT NULL,
     elo_ci_lower DOUBLE PRECISION,
@@ -898,16 +921,20 @@ CREATE TABLE IF NOT EXISTS forecasts.daily_rankings (
     avg_mase DOUBLE PRECISION,
     mase_std DOUBLE PRECISION,
     avg_rmse DOUBLE PRECISION,
+    -- Cumulative SQL snapshot
+    avg_sql DOUBLE PRECISION,
+    sql_std DOUBLE PRECISION,
     evaluated_count INTEGER DEFAULT 0
 );
 
--- Unique constraint: one row per model per scope per day
-CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_rankings_unique 
+-- Unique constraint: one row per model per scope per metric per day
+CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_rankings_unique
 ON forecasts.daily_rankings(
-    calculation_date, 
-    model_id, 
-    scope_type, 
-    COALESCE(scope_id, '')
+    calculation_date,
+    model_id,
+    scope_type,
+    COALESCE(scope_id, ''),
+    metric
 );
 
 -- Indexes for fast lookups
@@ -948,13 +975,17 @@ SELECT
     dr.calculated_at,
     dr.scope_type,
     dr.scope_id,
+    dr.metric,
     -- Pre-computed MASE/RMSE from snapshot
     dr.avg_mase,
     dr.mase_std,
     dr.avg_rmse,
+    -- Pre-computed SQL from snapshot
+    dr.avg_sql,
+    dr.sql_std,
     dr.evaluated_count,
-    -- Flag for most recent ranking in this scope
-    (dr.calculation_date = MAX(dr.calculation_date) OVER (PARTITION BY dr.scope_type, dr.scope_id)) AS is_latest,
+    -- Flag for most recent ranking in this scope+metric
+    (dr.calculation_date = MAX(dr.calculation_date) OVER (PARTITION BY dr.scope_type, dr.scope_id, dr.metric)) AS is_latest,
     -- Model info
     mi.id as model_id,
     mi.name as model_name,
@@ -1001,6 +1032,9 @@ SELECT
     SUM(s.mase) as sum_mase,
     SUM(s.mase * s.mase) as sum_mase_sq,
     SUM(s.rmse) as sum_rmse,
+    SUM(s.sql_score) as sum_sql,
+    SUM(s.sql_score * s.sql_score) as sum_sql_sq,
+    COUNT(s.sql_score) as num_sql,
     COUNT(*) as num_scores
 FROM forecasts.scores s
 JOIN challenges.rounds r ON s.round_id = r.id
@@ -1031,6 +1065,9 @@ SELECT
     SUM(s.mase) as sum_mase,
     SUM(s.mase * s.mase) as sum_mase_sq,
     SUM(s.rmse) as sum_rmse,
+    SUM(s.sql_score) as sum_sql,
+    SUM(s.sql_score * s.sql_score) as sum_sql_sq,
+    COUNT(s.sql_score) as num_sql,
     COUNT(*) as num_scores
 FROM forecasts.scores s
 JOIN challenges.rounds r ON s.round_id = r.id
@@ -1060,6 +1097,9 @@ SELECT
     SUM(s.mase) as sum_mase,
     SUM(s.mase * s.mase) as sum_mase_sq,
     SUM(s.rmse) as sum_rmse,
+    SUM(s.sql_score) as sum_sql,
+    SUM(s.sql_score * s.sql_score) as sum_sql_sq,
+    COUNT(s.sql_score) as num_sql,
     COUNT(*) as num_scores
 FROM forecasts.scores s
 JOIN challenges.rounds r ON s.round_id = r.id

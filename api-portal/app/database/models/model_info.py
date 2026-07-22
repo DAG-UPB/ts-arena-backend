@@ -23,6 +23,12 @@ class ModelInfo(Base):
     architecture = Column(Text)
     pretraining_data = Column(Text)
     publishing_date = Column(Date)
+    # Optional discovery / provenance metadata.
+    paper_url = Column(Text)
+    repo_url = Column(Text)
+    website_url = Column(Text)
+    description = Column(Text)
+    arxiv_id = Column(Text)
     parameters = Column(JSONB)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

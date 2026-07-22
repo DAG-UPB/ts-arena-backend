@@ -11,6 +11,27 @@ class ModelSchema(BaseModel):
     architecture: str | None
     pretraining_data: str | None
     publishing_date: datetime | None
+    # Optional discovery / provenance metadata.
+    paper_url: str | None = None
+    repo_url: str | None = None
+    website_url: str | None = None
+    description: str | None = None
+    arxiv_id: str | None = None
+
+
+class ModelListItemSchema(BaseModel):
+    """Single row in the `GET /models` listing — keeps the payload thin."""
+    id: int
+    readable_id: str | None
+    name: str
+    model_family: str | None
+    model_size: int | None
+    architecture: str | None
+    paper_url: str | None = None
+    repo_url: str | None = None
+    website_url: str | None = None
+    arxiv_id: str | None = None
+
 
 class ModelDetailSchema(ModelSchema):
     """Model with aggregated statistics."""
@@ -40,3 +61,27 @@ class ModelSeriesByDefinitionSchema(BaseModel):
     model_readable_id: str
     model_name: str
     definitions: List[DefinitionWithSeriesSchema]
+
+
+class ModelActiveRoundSchema(BaseModel):
+    """A round the model is currently registered for (status in {registration, active})."""
+    round_id: int
+    round_name: str
+    description: Optional[str] = None
+    definition_id: Optional[int] = None
+    definition_name: Optional[str] = None
+    status: str
+    registration_start: Optional[datetime] = None
+    registration_end: Optional[datetime] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    frequency: Optional[str] = None
+    horizon: Optional[str] = None
+
+
+class ModelActiveRoundsResponseSchema(BaseModel):
+    """Response wrapper for the model's active and upcoming rounds."""
+    model_id: int
+    model_readable_id: str
+    model_name: str
+    rounds: List[ModelActiveRoundSchema]

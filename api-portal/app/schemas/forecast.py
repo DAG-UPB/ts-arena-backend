@@ -1,7 +1,12 @@
 """Forecast schemas aligned with forecasts.forecasts table structure."""
-from pydantic import BaseModel, Field, ConfigDict
+import logging
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime
+
+from app.services.forecast_metrics import clean_probabilistic_values
+
+logger = logging.getLogger(__name__)
 
 # ==========================================================================
 # Upload Schemas
@@ -11,9 +16,25 @@ class ForecastDataPoint(BaseModel):
     ts: datetime = Field(..., description="Forecast timestamp")
     value: float = Field(..., description="Predicted value")
     probabilistic_values: Optional[Dict[str, float]] = Field(
-        None, 
-        description="Optional probabilistic forecasts (e.g., quantiles)"
+        None,
+        description="Optional probabilistic forecasts (quantiles q_0.1…q_0.9)"
     )
+
+    @field_validator("probabilistic_values", mode="before")
+    @classmethod
+    def _validate_probabilistic_values(cls, v):
+        """Tolerant validation: keep only q_0.1…q_0.9 keys with finite values.
+
+        Unknown/malformed keys are dropped and logged rather than failing the upload, so
+        legacy or slightly-off submitters are not rejected. Empty/None pass through.
+        """
+        cleaned, dropped = clean_probabilistic_values(v)
+        if dropped:
+            logger.warning(
+                "Dropped %d invalid probabilistic_values key(s): %s",
+                len(dropped), dropped,
+            )
+        return cleaned
 
 
 class ForecastSeriesUpload(BaseModel):

@@ -2311,7 +2311,7 @@ request_groups:
   #
   # One HTTP call per poll (speed_kilometers_per_hour, motorvehicles).
   # Both aggregates (count, average_speed) derive from that single call.
-  # Long-history backfill tracked in issue #26.
+  # Long-history backfill is a pending follow-up.
   # ---------------------------------------------------------------------------
   urban-paderborn-muensterstrasse-31:
     module: src.plugins.data_sources.urban_paderborn_plugin

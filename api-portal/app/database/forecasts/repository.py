@@ -302,6 +302,7 @@ class ForecastRepository:
             select(
                 Forecast.ts,
                 Forecast.predicted_value,
+                Forecast.probabilistic_values,
                 model.value.label("actual_value")
             )
             .join(
@@ -320,14 +321,15 @@ class ForecastRepository:
             )
             .order_by(Forecast.ts)
         )
-        
+
         result = await self.session.execute(stmt)
         return [
             {
-                "ts": row.ts, 
-                "predicted_value": row.predicted_value, 
+                "ts": row.ts,
+                "predicted_value": row.predicted_value,
+                "probabilistic_values": row.probabilistic_values,
                 "actual_value": row.actual_value
-            } 
+            }
             for row in result
         ]
 
@@ -414,19 +416,41 @@ class ForecastRepository:
         )
         return result.scalars().all()
 
+    # Optional probabilistic-evaluation columns. Some score dicts (early-return
+    # branches like no_overlap / insufficient_data) don't set these; normalize to NULL so the
+    # multi-row INSERT sees a uniform column set.
+    _SQL_SCORE_KEYS = (
+        "sql_score",
+        "sql_per_quantile",
+        "has_quantiles",
+        "quantile_levels_count",
+        "quantile_crossing_count",
+    )
+
     async def bulk_insert_scores(self, scores_data: List[Dict[str, Any]]) -> int:
         """
         Bulk insert scores.
         """
         if not scores_data:
             return 0
-        
+
+        # Ensure every row carries the optional SQL columns (default NULL) so the
+        # multi-values INSERT has a consistent set of keys.
+        for row in scores_data:
+            for key in self._SQL_SCORE_KEYS:
+                row.setdefault(key, None)
+
         stmt = insert(ChallengeScore).values(scores_data)
         stmt = stmt.on_conflict_do_update(
             index_elements=["round_id", "model_id", "series_id"],
             set_={
                 "mase": stmt.excluded.mase,
                 "rmse": stmt.excluded.rmse,
+                "sql_score": stmt.excluded.sql_score,
+                "sql_per_quantile": stmt.excluded.sql_per_quantile,
+                "has_quantiles": stmt.excluded.has_quantiles,
+                "quantile_levels_count": stmt.excluded.quantile_levels_count,
+                "quantile_crossing_count": stmt.excluded.quantile_crossing_count,
                 "forecast_count": stmt.excluded.forecast_count,
                 "actual_count": stmt.excluded.actual_count,
                 "evaluated_count": stmt.excluded.evaluated_count,
@@ -437,10 +461,10 @@ class ForecastRepository:
                 "calculated_at": func.now()
             }
         )
-        
+
         result = await self.session.execute(stmt)
         await self.session.commit()
-        
+
         return result.rowcount if result.rowcount else 0
 
     async def check_all_scores_complete(self, round_id: int) -> bool:

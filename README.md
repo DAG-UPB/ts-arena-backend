@@ -42,6 +42,11 @@ The fuel price data used in this platform are obtained from the [Tankerkönig AP
 
 ## Getting Started (Self-Hosting)
 
+> **⚠️ Note on Docker Compose:** The `docker-compose.yml` / `docker-compose.dev.yml` files are provided for **local development only** and are **not actively maintained**.
+> Production runs each backend service as an individual container managed by [Coolify](https://coolify.io/).
+> Service definitions, environment variables, and dependencies in the Compose files may drift from the live production topology.
+> New contributors should treat `docker compose up` as a local-dev convenience, **not** a supported deployment path.
+
 To host the TS-Arena backend yourself, you primarily need Docker and Docker Compose.
 
 ### 1. Configuration

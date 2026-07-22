@@ -158,26 +158,29 @@ async def periodic_elo_ranking_calculation_job() -> None:
     try:
         async with SessionLocal() as session:
             elo_service = EloRankingService(session)
-            
-            # Calculate and store all ELO ratings
-            results = await elo_service.calculate_and_store_all_ratings(
-                n_bootstraps=500
-            )
 
-            
-            duration_seconds = time.time() - start_time
-            
-            # Extract metrics
-            n_global = len(results.get("global", []))
-            n_definitions = len(results.get("per_definition", []))
-            n_freq_horizon = len(results.get("per_frequency_horizon", []))
-            total_duration_ms = results.get("total_duration_ms", 0)
-            
-            # Log success with detailed metrics
+            # Calculate and store ELO ratings for both the point metric (MASE) and the
+            # probabilistic metric (SQL). Each is a separate ranking dimension.
+            for metric in EloRankingService.SUPPORTED_METRICS:
+                results = await elo_service.calculate_and_store_all_ratings(
+                    n_bootstraps=500,
+                    metric=metric
+                )
+
+                n_global = len(results.get("global", []))
+                n_definitions = len(results.get("per_definition", []))
+                n_freq_horizon = len(results.get("per_frequency_horizon", []))
+                total_duration_ms = results.get("total_duration_ms", 0)
+
+                logger.info(
+                    f"✅ ELO [{metric}] calculation done. "
+                    f"Global: {n_global}, Definitions: {n_definitions}, FreqHorizon: {n_freq_horizon}, "
+                    f"Calculation time: {total_duration_ms}ms"
+                )
+
             logger.info(
-                f"✅ ELO calculation SUCCESS in {duration_seconds:.1f}s. "
-                f"Global: {n_global}, Definitions: {n_definitions}, FreqHorizon: {n_freq_horizon}, "
-                f"Total calculation time: {total_duration_ms}ms"
+                f"✅ ELO calculation SUCCESS in {time.time() - start_time:.1f}s "
+                f"(metrics: {', '.join(EloRankingService.SUPPORTED_METRICS)})"
             )
 
     
@@ -205,37 +208,37 @@ async def startup_elo_check_job() -> None:
     try:
         async with SessionLocal() as session:
             elo_service = EloRankingService(session)
-            
-            # Check if already calculated today
-            if await elo_service.has_calculated_today():
-                logger.info("ELO ratings already calculated today. Skipping startup calculation.")
-                return
-            
-            logger.info("No ELO ratings for today. Starting calculation...")
-            
-            # Run the calculation
-            results = await elo_service.calculate_and_store_all_ratings(
-                n_bootstraps=500
-            )
 
-            
-            duration_seconds = time.time() - start_time
-            
-            # Handle case where no data is available
-            if not results:
-                logger.info("Startup ELO calculation: No data available for ranking.")
+            # Compute any metric not yet calculated today (MASE and SQL).
+            pending = [
+                metric for metric in EloRankingService.SUPPORTED_METRICS
+                if not await elo_service.has_calculated_today(metric=metric)
+            ]
+            if not pending:
+                logger.info("ELO ratings already calculated today for all metrics. Skipping startup calculation.")
                 return
-            
-            n_global = len(results.get('global', []))
-            n_definitions = len(results.get('per_definition', []))
-            n_freq_horizon = len(results.get('per_frequency_horizon', []))
-            total_time = results.get('total_duration_ms', 0)
-            
-            logger.info(
-                f"✅ Startup ELO calculation complete in {duration_seconds:.1f}s. "
-                f"Global: {n_global}, Definitions: {n_definitions}, FreqHorizon: {n_freq_horizon}, "
-                f"Calculation time: {total_time}ms"
-            )
+
+            logger.info(f"No ELO ratings for today (metrics: {', '.join(pending)}). Starting calculation...")
+
+            for metric in pending:
+                results = await elo_service.calculate_and_store_all_ratings(
+                    n_bootstraps=500,
+                    metric=metric
+                )
+                if not results:
+                    logger.info(f"Startup ELO [{metric}] calculation: No data available for ranking.")
+                    continue
+                n_global = len(results.get('global', []))
+                n_definitions = len(results.get('per_definition', []))
+                n_freq_horizon = len(results.get('per_frequency_horizon', []))
+                total_time = results.get('total_duration_ms', 0)
+                logger.info(
+                    f"✅ Startup ELO [{metric}] complete. "
+                    f"Global: {n_global}, Definitions: {n_definitions}, FreqHorizon: {n_freq_horizon}, "
+                    f"Calculation time: {total_time}ms"
+                )
+
+            logger.info(f"✅ Startup ELO calculation complete in {time.time() - start_time:.1f}s")
 
     
     except Exception as e:
