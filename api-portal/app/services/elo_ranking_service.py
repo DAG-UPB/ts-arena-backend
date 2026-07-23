@@ -777,7 +777,13 @@ class EloRankingService:
         metric: str = "mase"
     ) -> int:
         """
-        Store ELO ratings using INSERT ... ON CONFLICT DO UPDATE.
+        Store ELO ratings authoritatively: the (calculation_date, scope_type,
+        scope_id, metric) group is deleted and re-inserted in one transaction,
+        so models that dropped out of the result set (e.g. an eligibility rule
+        change between two runs of the same day) cannot survive as stale rows.
+        Delete-then-insert rather than upsert: rank positions swap between
+        runs, and an upsert would transiently violate the per-group
+        rank_position uniqueness index mid-statement-sequence.
         Also computes and stores cumulative MASE/RMSE/SQL from round_model_scores.
         The `metric` column records which score drove this ELO ranking; the cumulative
         avg_mase/avg_rmse/avg_sql columns are populated on every row regardless.
@@ -785,6 +791,9 @@ class EloRankingService:
         Returns:
             Number of rows affected
         """
+        # An empty result set is left untouched rather than wiping the group:
+        # it is indistinguishable from an upstream data outage, and losing a
+        # published day to a transient failure is worse than keeping it.
         if not ratings:
             return 0
 
@@ -801,6 +810,22 @@ class EloRankingService:
             up_to_date=calculation_date
         )
 
+        await self.session.execute(
+            text("""
+                DELETE FROM forecasts.daily_rankings
+                WHERE calculation_date = :calculation_date
+                  AND scope_type = :scope_type
+                  AND COALESCE(scope_id, '') = COALESCE(:scope_id, '')
+                  AND metric = :metric
+            """),
+            {
+                "calculation_date": calculation_date,
+                "scope_type": scope_type,
+                "scope_id": scope_id,
+                "metric": metric,
+            },
+        )
+
         query = text("""
             INSERT INTO forecasts.daily_rankings
                 (calculation_date, model_id, scope_type, scope_id, metric,
@@ -812,22 +837,6 @@ class EloRankingService:
                  :elo_rating_median, :elo_ci_lower, :elo_ci_upper,
                  :matches_played, :rank_position, :n_bootstraps, :calculation_duration_ms,
                  :avg_mase, :mase_std, :avg_rmse, :avg_sql, :sql_std, :evaluated_count, NOW())
-            ON CONFLICT (calculation_date, model_id, scope_type, COALESCE(scope_id, ''), metric)
-            DO UPDATE SET
-                elo_rating_median = EXCLUDED.elo_rating_median,
-                elo_ci_lower = EXCLUDED.elo_ci_lower,
-                elo_ci_upper = EXCLUDED.elo_ci_upper,
-                matches_played = EXCLUDED.matches_played,
-                rank_position = EXCLUDED.rank_position,
-                n_bootstraps = EXCLUDED.n_bootstraps,
-                calculation_duration_ms = EXCLUDED.calculation_duration_ms,
-                avg_mase = EXCLUDED.avg_mase,
-                mase_std = EXCLUDED.mase_std,
-                avg_rmse = EXCLUDED.avg_rmse,
-                avg_sql = EXCLUDED.avg_sql,
-                sql_std = EXCLUDED.sql_std,
-                evaluated_count = EXCLUDED.evaluated_count,
-                calculated_at = NOW()
         """)
 
         for rating in ratings:
