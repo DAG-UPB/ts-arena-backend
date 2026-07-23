@@ -706,22 +706,15 @@ class ForecastRepository:
         if not rows:
             return 0
 
-        from sqlalchemy import update, bindparam
+        from sqlalchemy import update
 
-        stmt = (
-            update(ChallengeScore)
-            .where(ChallengeScore.id == bindparam("row_id"))
-            .values(
-                sql_score=bindparam("sql_score"),
-                sql_per_quantile=bindparam("sql_per_quantile"),
-                has_quantiles=bindparam("has_quantiles"),
-                quantile_levels_count=bindparam("quantile_levels_count"),
-                quantile_crossing_count=bindparam("quantile_crossing_count"),
-            )
-        )
+        # ORM "bulk UPDATE by primary key": a bare update(Entity) executed with a list
+        # of param dicts that each carry the primary key 'id' plus the columns to set.
+        # Only the keys present in the dicts are updated — the 5 SQL columns, nothing else.
+        stmt = update(ChallengeScore)
         params = [
             {
-                "row_id": row["id"],
+                "id": row["id"],
                 "sql_score": row["sql_score"],
                 "sql_per_quantile": row["sql_per_quantile"],
                 "has_quantiles": row["has_quantiles"],
@@ -730,8 +723,10 @@ class ForecastRepository:
             }
             for row in rows
         ]
-        result = await self.session.execute(stmt, params)
-        return result.rowcount if result.rowcount else 0
+        # The ORM bulk-by-PK result does not expose rowcount; each param dict targets
+        # exactly one existing PK (fetched moments earlier in this transaction).
+        await self.session.execute(stmt, params)
+        return len(params)
 
     async def check_all_scores_complete(self, round_id: int) -> bool:
         """
