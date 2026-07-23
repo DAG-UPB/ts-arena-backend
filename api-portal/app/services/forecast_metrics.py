@@ -228,3 +228,51 @@ def assemble_quantile_forecasts(
 
     forecasts, crossing_count = repair_crossing(forecasts)
     return forecasts, True, len(submitted_levels), crossing_count
+
+
+def compute_sql_fields(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    probabilistic_values: List[Optional[Dict[str, object]]],
+    mae_naive: float,
+) -> Dict[str, object]:
+    """Compute the 5 stored SQL columns for one (model, series) evaluation.
+
+    This is the single source of truth for turning aligned evaluation arrays plus the
+    shared MASE/SQL scale (``mae_naive``) into the columns persisted on
+    ``forecasts.scores``: ``sql_score, sql_per_quantile, has_quantiles,
+    quantile_levels_count, quantile_crossing_count``. Both the live scorer
+    (``ScoreEvaluationService._calculate_score_for_model_series``) and the historical
+    backfill script (``app/scripts/backfill_sql_scores.py``) call this function so their
+    results are byte-identical by construction.
+
+    Args:
+        y_true: actual values, shape (T,).
+        y_pred: point forecasts, shape (T,).
+        probabilistic_values: per-timestamp ``probabilistic_values`` dicts (or None),
+            aligned with ``y_true``/``y_pred``.
+        mae_naive: the MAE of the flat last-context-value naive over the evaluated
+            timestamps (same denominator as arena MASE). ``0`` means the SQL scale is
+            undefined -> ``sql_score``/``sql_per_quantile`` come back ``None``.
+
+    Returns:
+        Dict with keys ``sql_score, sql_per_quantile, has_quantiles,
+        quantile_levels_count, quantile_crossing_count``.
+    """
+    quantile_forecasts, has_quantiles, levels_count, crossing_count = (
+        assemble_quantile_forecasts(y_pred, probabilistic_values)
+    )
+    sql_scale = mae_naive if mae_naive > 0 else None
+    sql_overall, sql_per_level = sql_score(y_true, quantile_forecasts, sql_scale)
+    # JSONB keys as level strings ("0.1" … "0.9")
+    sql_per_quantile = (
+        {f"{level:.1f}": value for level, value in sql_per_level.items()}
+        if sql_per_level else None
+    )
+    return {
+        "sql_score": sql_overall,
+        "sql_per_quantile": sql_per_quantile,
+        "has_quantiles": has_quantiles,
+        "quantile_levels_count": levels_count,
+        "quantile_crossing_count": crossing_count,
+    }

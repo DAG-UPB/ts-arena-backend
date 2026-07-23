@@ -467,6 +467,113 @@ class ForecastRepository:
 
         return result.rowcount if result.rowcount else 0
 
+    async def get_round_ids_missing_sql_scores(
+        self,
+        round_id: Optional[int] = None,
+        limit: Optional[int] = None
+    ) -> List[int]:
+        """
+        Get round_ids that have at least one score row eligible for the SQL backfill:
+        actually evaluated (mase IS NOT NULL, mirroring the live scorer's notion of a
+        scoreable row) but not yet SQL-scored (sql_score IS NULL).
+
+        Args:
+            round_id: restrict to a single round (spot-check / resume).
+            limit: cap the number of round_ids returned.
+
+        Returns:
+            List of round_ids, ordered ascending.
+        """
+        from sqlalchemy import text
+
+        query = """
+            SELECT DISTINCT round_id
+            FROM forecasts.scores
+            WHERE sql_score IS NULL AND mase IS NOT NULL
+        """
+        params: Dict[str, Any] = {}
+        if round_id is not None:
+            query += " AND round_id = :round_id"
+            params["round_id"] = round_id
+        query += " ORDER BY round_id"
+        if limit is not None:
+            query += " LIMIT :limit"
+            params["limit"] = limit
+
+        result = await self.session.execute(text(query), params)
+        return [row.round_id for row in result]
+
+    async def get_sql_backfill_candidates(self, round_id: int) -> List[Dict[str, Any]]:
+        """
+        Get score rows in a round eligible for the SQL backfill (see
+        ``get_round_ids_missing_sql_scores`` for the eligibility rule).
+
+        Returns:
+            List of dicts with 'id', 'model_id', 'series_id', 'mase' (the stored MASE,
+            used by the backfill's drift detector).
+        """
+        result = await self.session.execute(
+            select(
+                ChallengeScore.id,
+                ChallengeScore.model_id,
+                ChallengeScore.series_id,
+                ChallengeScore.mase,
+            ).where(
+                and_(
+                    ChallengeScore.round_id == round_id,
+                    ChallengeScore.sql_score.is_(None),
+                    ChallengeScore.mase.isnot(None),
+                )
+            ).order_by(ChallengeScore.model_id, ChallengeScore.series_id)
+        )
+        return [
+            {"id": row.id, "model_id": row.model_id, "series_id": row.series_id, "mase": row.mase}
+            for row in result
+        ]
+
+    async def update_sql_fields_bulk(self, rows: List[Dict[str, Any]]) -> int:
+        """
+        Update ONLY the 5 SQL columns for a batch of existing score rows, matched by
+        primary key ``id``. Does not touch mase, rmse, evaluation_status, or any other
+        column. Caller controls the transaction (commit/rollback).
+
+        Args:
+            rows: list of dicts each with 'id' plus 'sql_score', 'sql_per_quantile',
+                'has_quantiles', 'quantile_levels_count', 'quantile_crossing_count'.
+
+        Returns:
+            Number of rows matched.
+        """
+        if not rows:
+            return 0
+
+        from sqlalchemy import update, bindparam
+
+        stmt = (
+            update(ChallengeScore)
+            .where(ChallengeScore.id == bindparam("row_id"))
+            .values(
+                sql_score=bindparam("sql_score"),
+                sql_per_quantile=bindparam("sql_per_quantile"),
+                has_quantiles=bindparam("has_quantiles"),
+                quantile_levels_count=bindparam("quantile_levels_count"),
+                quantile_crossing_count=bindparam("quantile_crossing_count"),
+            )
+        )
+        params = [
+            {
+                "row_id": row["id"],
+                "sql_score": row["sql_score"],
+                "sql_per_quantile": row["sql_per_quantile"],
+                "has_quantiles": row["has_quantiles"],
+                "quantile_levels_count": row["quantile_levels_count"],
+                "quantile_crossing_count": row["quantile_crossing_count"],
+            }
+            for row in rows
+        ]
+        result = await self.session.execute(stmt, params)
+        return result.rowcount if result.rowcount else 0
+
     async def check_all_scores_complete(self, round_id: int) -> bool:
         """
         Check if all scores for a round have 100% data coverage.
