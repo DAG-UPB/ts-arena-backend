@@ -331,11 +331,19 @@ class ChallengeScheduler:
                 max_running_jobs=1,
                 misfire_grace_time=300,
             )
+            # misfire_grace_time MUST be set on the SCHEDULE, not only the task:
+            # APScheduler derives each queued job's start_deadline from the
+            # schedule's misfire_grace_time, and add_schedule() does not inherit
+            # the value configured on the task above. Without it, start_deadline
+            # is NULL and stale fires queue indefinitely behind a stuck run until
+            # the backlog starves all job acquisition (backend-48). At 300 s a
+            # fire expires well inside the 10-min cadence, bounding the backlog.
             await self.scheduler.add_schedule(
                 func_or_task_id=periodic_challenge_scores_evaluation_job,
                 trigger=CronTrigger(minute="0,10,20,30,40,50"),
                 id="periodic_challenge_scores_evaluation",
                 coalesce=CoalescePolicy.latest,
+                misfire_grace_time=300,
             )
             self.logger.info(
                 "Scheduled periodic challenge scores evaluation job "
@@ -361,11 +369,16 @@ class ChallengeScheduler:
                 max_running_jobs=1,
                 misfire_grace_time=3600,
             )
+            # Set misfire_grace_time on the schedule (not only the task) so queued
+            # fires get a non-NULL start_deadline and expire instead of piling up
+            # behind a stuck run — same unbounded-backlog shape as the eval job,
+            # just at a 6-hour cadence (backend-48). 3600 s stays well inside it.
             await self.scheduler.add_schedule(
                 func_or_task_id=periodic_elo_ranking_calculation_job,
                 trigger=CronTrigger(hour="0,6,12,18", minute="0"),
                 id="periodic_elo_ranking_calculation",
                 coalesce=CoalescePolicy.latest,
+                misfire_grace_time=3600,
             )
             self.logger.info(
                 "Scheduled periodic ELO ranking calculation job "
