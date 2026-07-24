@@ -14,6 +14,11 @@ from app.services.forecast_metrics import repair_point_quantiles
 
 logger = logging.getLogger(__name__)
 
+# How many distinct dropped keys to name in the per-series upload warning before summarising
+# the rest as a count — enough to diagnose a submitter's key format, bounded so a pathological
+# payload cannot blow up the log line.
+MAX_DROPPED_KEY_SAMPLE = 10
+
 
 class ForecastService:
     """
@@ -142,16 +147,38 @@ class ForecastService:
             # monotone; count repairs to surface as a non-fatal upload warning.
             valid_forecasts = []
             crossing_repairs = 0
+            points_with_dropped_keys = 0
+            dropped_key_samples: set[str] = set()
 
             for forecast_point in series_upload.forecasts:
                 pv, repaired = repair_point_quantiles(forecast_point.probabilistic_values)
                 if repaired:
                     crossing_repairs += 1
+                if forecast_point.dropped_probabilistic_keys:
+                    points_with_dropped_keys += 1
+                    dropped_key_samples.update(forecast_point.dropped_probabilistic_keys)
                 valid_forecasts.append({
                     "ts": forecast_point.ts,
                     "value": forecast_point.value,
                     "probabilistic_values": pv
                 })
+
+            # One line per series, not one per data point: the same submitter sends the same
+            # malformed keys on every point, so per-point logging produced thousands of
+            # identical lines per upload (backend-69).
+            if points_with_dropped_keys > 0:
+                sample = sorted(dropped_key_samples)[:MAX_DROPPED_KEY_SAMPLE]
+                more = len(dropped_key_samples) - len(sample)
+                warning = (
+                    f"Series '{challenge_series_name}': dropped unrecognised "
+                    f"probabilistic_values key(s) on {points_with_dropped_keys} forecast "
+                    f"point(s); distinct keys: {sample}"
+                    + (f" (+{more} more)" if more > 0 else "")
+                )
+                errors.append(warning)
+                logger.warning(
+                    f"round={round_id} model={model_id} series={series_id}: {warning}"
+                )
 
             if crossing_repairs > 0:
                 warning = (

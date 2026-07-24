@@ -1,6 +1,6 @@
 """Forecast schemas aligned with forecasts.forecasts table structure."""
 import logging
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
@@ -17,24 +17,33 @@ class ForecastDataPoint(BaseModel):
     value: float = Field(..., description="Predicted value")
     probabilistic_values: Optional[Dict[str, float]] = Field(
         None,
-        description="Optional probabilistic forecasts (quantiles q_0.1…q_0.9)"
+        description="Optional probabilistic forecasts (quantiles q_0.1…q_0.9; bare '0.1'…'0.9' also accepted)"
+    )
+    dropped_probabilistic_keys: List[str] = Field(
+        default_factory=list,
+        exclude=True,
+        description="Keys discarded while cleaning this point — reported per series by the "
+                    "upload service, never persisted.",
     )
 
-    @field_validator("probabilistic_values", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def _validate_probabilistic_values(cls, v):
-        """Tolerant validation: keep only q_0.1…q_0.9 keys with finite values.
+    def _clean_probabilistic_values(cls, data):
+        """Tolerant validation: keep the nine deciles in either key form, canonicalised.
 
-        Unknown/malformed keys are dropped and logged rather than failing the upload, so
-        legacy or slightly-off submitters are not rejected. Empty/None pass through.
+        Unknown/malformed keys are dropped rather than failing the upload, so legacy or
+        slightly-off submitters are not rejected. Empty/None pass through.
+
+        What was dropped is recorded on the point instead of logged here: this runs once
+        per data point, and logging at that granularity floods the logs on every upload —
+        thousands of lines per cycle, which materially slowed incident diagnosis during
+        backend-48. `ForecastService.upload_forecasts` aggregates these into one line per
+        series (backend-69).
         """
-        cleaned, dropped = clean_probabilistic_values(v)
-        if dropped:
-            logger.warning(
-                "Dropped %d invalid probabilistic_values key(s): %s",
-                len(dropped), dropped,
-            )
-        return cleaned
+        if not isinstance(data, dict):
+            return data
+        cleaned, dropped = clean_probabilistic_values(data.get("probabilistic_values"))
+        return {**data, "probabilistic_values": cleaned, "dropped_probabilistic_keys": dropped}
 
 
 class ForecastSeriesUpload(BaseModel):

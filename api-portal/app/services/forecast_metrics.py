@@ -31,8 +31,35 @@ import numpy as np
 # The nine deciles the platform scores on.
 QUANTILE_LEVELS: Tuple[float, ...] = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 
-# Wire-format key for a quantile level, e.g. "q_0.1" … "q_0.9".
+# Canonical wire-format key for a quantile level, e.g. "q_0.1" … "q_0.9".
 _QUANTILE_KEY_RE = re.compile(r"^q_0\.[1-9]$")
+
+# Bare decile key, e.g. "0.1" … "0.9". Several submitters (the statistical baselines
+# AutoETS/AutoARIMA/Prophet/MLForecast, and the platform's own `sql_per_quantile` JSONB)
+# use this form. Accepting it costs nothing and is the difference between scoring a model's
+# real distribution and silently scoring a degenerate one — see backend-69.
+_BARE_QUANTILE_KEY_RE = re.compile(r"^0\.[1-9]$")
+
+
+def canonical_quantile_key(key: object) -> Optional[str]:
+    """Return the canonical ``q_0.x`` form of a quantile key, or ``None`` if it isn't one.
+
+    Accepts both supported forms and normalises to one:
+
+        "q_0.1" -> "q_0.1"      (already canonical)
+        "0.1"   -> "q_0.1"      (bare decile)
+        anything else           -> None
+
+    Both forms are held to the same strictness — only the nine deciles ``0.1``…``0.9``
+    written exactly that way qualify. ``"0.10"``, ``"q_0.15"``, ``"median"`` do not.
+    """
+    if not isinstance(key, str):
+        return None
+    if _QUANTILE_KEY_RE.match(key):
+        return key
+    if _BARE_QUANTILE_KEY_RE.match(key):
+        return f"q_{key}"
+    return None
 
 
 def quantile_loss(y_true: np.ndarray, q_pred: np.ndarray, level: float) -> np.ndarray:
@@ -104,14 +131,30 @@ def sql_score(
 def parse_probabilistic_values(pv: Optional[Dict[str, object]]) -> Dict[float, float]:
     """Parse a stored ``probabilistic_values`` dict into ``{level: value}``.
 
-    Tolerant: keys not matching ``q_0.1``…``q_0.9`` and non-finite values are dropped.
-    Returns ``{}`` for ``None``/empty/point-only forecasts.
+    Tolerant: both key forms (``q_0.1`` and bare ``0.1``) are accepted; keys that are
+    neither, and non-finite values, are dropped. Returns ``{}`` for ``None``/empty/
+    point-only forecasts.
+
+    Reading both forms matters historically: millions of stored rows predate key
+    normalisation on upload and carry the bare form. Dropping them here did not surface as
+    an error — it silently routed those models into the degenerate branch of
+    ``assemble_quantile_forecasts``, scoring them as if they had submitted no distribution
+    at all (backend-69).
+
+    When a dict somehow carries both forms for the same level, the canonical ``q_0.x``
+    entry wins; the bare duplicate is ignored rather than racing on dict order.
     """
     if not pv:
         return {}
     out: Dict[float, float] = {}
     for key, raw in pv.items():
-        if not isinstance(key, str) or not _QUANTILE_KEY_RE.match(key):
+        canonical = canonical_quantile_key(key)
+        if canonical is None:
+            continue
+        level = float(canonical[2:])
+        # Canonical key already recorded for this level -> never let a bare duplicate
+        # overwrite it (dict iteration order is otherwise the only tiebreak).
+        if level in out and key != canonical:
             continue
         try:
             val = float(raw)  # type: ignore[arg-type]
@@ -119,18 +162,25 @@ def parse_probabilistic_values(pv: Optional[Dict[str, object]]) -> Dict[float, f
             continue
         if not np.isfinite(val):
             continue
-        out[float(key[2:])] = val
+        out[level] = val
     return out
 
 
 def clean_probabilistic_values(
     pv: Optional[Dict[str, object]]
 ) -> Tuple[Optional[Dict[str, float]], List[str]]:
-    """Validate/filter a single point's ``probabilistic_values`` for upload.
+    """Validate/normalise a single point's ``probabilistic_values`` for upload.
 
-    Keeps only keys matching ``q_0.1``…``q_0.9`` with finite float values; returns the
-    cleaned dict (string keys preserved for storage) and the list of dropped keys. ``None``
-    or ``{}`` pass through unchanged (point-only forecasts).
+    Keeps the nine deciles in **either** accepted key form and stores them under the
+    canonical ``q_0.x`` key, so everything written from here on is one format regardless of
+    what the submitter sent. Keys that are not deciles, and non-finite values, are dropped.
+    Returns the cleaned dict and the list of dropped keys (as submitted). ``None`` or ``{}``
+    pass through unchanged (point-only forecasts).
+
+    Normalising rather than rejecting is deliberate: the bare form was previously dropped
+    here, which destroyed the quantiles of every submitter using it at write time
+    (backend-69). Where both forms carry the same level, the canonical one wins and the
+    bare duplicate is reported as dropped.
     """
     if pv is None:
         return None, []
@@ -139,7 +189,11 @@ def clean_probabilistic_values(
     cleaned: Dict[str, float] = {}
     dropped: List[str] = []
     for key, raw in pv.items():
-        ok = isinstance(key, str) and bool(_QUANTILE_KEY_RE.match(key))
+        canonical = canonical_quantile_key(key)
+        ok = canonical is not None
+        if ok and canonical in cleaned and key != canonical:
+            # Canonical entry already present for this level — keep it, drop the duplicate.
+            ok = False
         if ok:
             try:
                 val = float(raw)  # type: ignore[arg-type]
@@ -148,7 +202,7 @@ def clean_probabilistic_values(
             else:
                 ok = bool(np.isfinite(val))
         if ok:
-            cleaned[key] = val
+            cleaned[canonical] = val  # type: ignore[index]
         else:
             dropped.append(str(key))
     return cleaned, dropped
