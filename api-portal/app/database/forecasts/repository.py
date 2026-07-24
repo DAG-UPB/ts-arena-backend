@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Dict, Any, Optional, Type
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -12,6 +13,7 @@ from app.database.data_portal.time_series import (
     TimeSeriesData1hModel,
     TimeSeriesData1dModel
 )
+from app.database.data_portal.time_series_repository import RESOLUTION_TO_BUCKET_INTERVAL
 
 # Maps resolution strings to the appropriate Continuous Aggregate Model for evaluation
 EVALUATION_RESOLUTION_MAP: Dict[str, Type] = {
@@ -333,6 +335,154 @@ class ForecastRepository:
             for row in result
         ]
 
+    async def get_round_forecasts(
+        self,
+        round_id: int,
+        ts_lo: datetime,
+        ts_hi: datetime,
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch ALL forecast rows for a round in ONE ts-bounded query — the batched
+        counterpart to `get_evaluation_data_by_resolution`, used by the backfill script
+        instead of querying per (model, series).
+
+        `forecasts.forecasts` is a 196M-row TimescaleDB hypertable: a query without a
+        `ts` predicate touches every chunk (measured ~1.5s per call — unusable at
+        ~2.2M candidate rows); with a `ts` range the planner prunes to a handful of
+        chunks (ms). Callers group the result by (model_id, series_id) in Python.
+
+        Args:
+            round_id: Round ID
+            ts_lo: lower ts bound (inclusive) — a generous margin around the round's
+                [start_time, end_time], since forecasts can extend past end_time.
+            ts_hi: upper ts bound (inclusive)
+
+        Returns:
+            List of dicts with 'model_id', 'series_id', 'ts', 'predicted_value',
+            'probabilistic_values', ordered by (model_id, series_id, ts). Plain ORM
+            select on `Forecast` — `probabilistic_values` (JSONB) deserializes to a
+            dict automatically, no manual typing needed.
+        """
+        result = await self.session.execute(
+            select(
+                Forecast.model_id,
+                Forecast.series_id,
+                Forecast.ts,
+                Forecast.predicted_value,
+                Forecast.probabilistic_values,
+            )
+            .where(
+                and_(
+                    Forecast.round_id == round_id,
+                    Forecast.ts >= ts_lo,
+                    Forecast.ts <= ts_hi,
+                )
+            )
+            .order_by(Forecast.model_id, Forecast.series_id, Forecast.ts)
+        )
+        return [
+            {
+                "model_id": row.model_id,
+                "series_id": row.series_id,
+                "ts": row.ts,
+                "predicted_value": row.predicted_value,
+                "probabilistic_values": row.probabilistic_values,
+            }
+            for row in result
+        ]
+
+    async def get_series_actuals_aggregate(
+        self,
+        series_id: int,
+        resolution: str,
+        ts_lo: datetime,
+        ts_hi: datetime,
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch a series' actuals from the continuous aggregate in ONE ts-bounded query —
+        the batched counterpart to `get_evaluation_data_by_resolution`'s per-row join.
+        Callers join this against a (model, series)'s forecast rows in Python (see
+        `align_evaluation_data` in the backfill script), reproducing the SQL join's
+        `date_trunc('minute', ...)` equality exactly.
+
+        Args:
+            series_id: Time series ID
+            resolution: Target resolution ("15min", "1h", "1d", "raw")
+            ts_lo: lower ts bound (inclusive)
+            ts_hi: upper ts bound (inclusive)
+
+        Returns:
+            List of dicts with 'ts', 'value', ordered by ts.
+        """
+        model = EVALUATION_RESOLUTION_MAP.get(resolution, TimeSeriesData1hModel)
+        result = await self.session.execute(
+            select(model.ts, model.value)
+            .where(
+                and_(
+                    model.series_id == series_id,
+                    model.ts >= ts_lo,
+                    model.ts <= ts_hi,
+                )
+            )
+            .order_by(model.ts)
+        )
+        return [{"ts": row.ts, "value": row.value} for row in result]
+
+    async def get_series_actuals_raw_bucketed(
+        self,
+        series_id: int,
+        resolution: str,
+        ts_lo: datetime,
+        ts_hi: datetime,
+    ) -> List[Dict[str, Any]]:
+        """
+        Raw-bucketed fallback for `get_series_actuals_aggregate`, computed directly from
+        `data_portal.time_series_data` with the same `time_bucket(...)` semantics as the
+        continuous aggregate — for series/time ranges the aggregate has no (or
+        incomplete) data for, e.g. a dev restore that only covers recent weeks. Never
+        used by the live scoring path — backfill-only, and does not touch the
+        continuous aggregates.
+
+        Bind params use `CAST(:x AS ...)` with a Python `timedelta` for `:interval`
+        (same style as `TimeSeriesRepository.get_raw_bucketed_value_at`) — bare
+        `:interval::interval` and string interval literals don't survive
+        SQLAlchemy's `text()` + asyncpg.
+
+        Args:
+            series_id: Time series ID
+            resolution: Target resolution ("15min", "1h", "1d")
+            ts_lo: lower ts bound (inclusive, before bucket-width padding)
+            ts_hi: upper ts bound (inclusive, before bucket-width padding)
+
+        Returns:
+            List of dicts with 'ts', 'value', ordered by ts.
+        """
+        interval = RESOLUTION_TO_BUCKET_INTERVAL.get(resolution)
+        if not interval:
+            raise ValueError(
+                f"Unknown resolution for raw bucketing: {resolution}. "
+                f"Valid: {list(RESOLUTION_TO_BUCKET_INTERVAL.keys())}"
+            )
+
+        from sqlalchemy import text
+
+        query = text("""
+            SELECT
+                time_bucket(CAST(:interval AS interval), ts) AS ts,
+                AVG(value) AS value
+            FROM data_portal.time_series_data
+            WHERE series_id = :series_id
+              AND ts >= CAST(:ts_lo AS timestamptz) - CAST(:interval AS interval)
+              AND ts <= CAST(:ts_hi AS timestamptz) + CAST(:interval AS interval)
+            GROUP BY 1
+            ORDER BY 1
+        """)
+        result = await self.session.execute(
+            query,
+            {"series_id": series_id, "interval": interval, "ts_lo": ts_lo, "ts_hi": ts_hi},
+        )
+        return [{"ts": row.ts, "value": row.value} for row in result]
+
     async def delete_forecasts(
         self,
         round_id: int,
@@ -466,6 +616,117 @@ class ForecastRepository:
         await self.session.commit()
 
         return result.rowcount if result.rowcount else 0
+
+    async def get_round_ids_missing_sql_scores(
+        self,
+        round_id: Optional[int] = None,
+        limit: Optional[int] = None
+    ) -> List[int]:
+        """
+        Get round_ids that have at least one score row eligible for the SQL backfill:
+        actually evaluated (mase IS NOT NULL, mirroring the live scorer's notion of a
+        scoreable row) but not yet SQL-scored (sql_score IS NULL).
+
+        Args:
+            round_id: restrict to a single round (spot-check / resume).
+            limit: cap the number of round_ids returned.
+
+        Returns:
+            List of round_ids, ordered ascending.
+        """
+        from sqlalchemy import text
+
+        query = """
+            SELECT DISTINCT round_id
+            FROM forecasts.scores
+            WHERE sql_score IS NULL AND mase IS NOT NULL
+        """
+        params: Dict[str, Any] = {}
+        if round_id is not None:
+            query += " AND round_id = :round_id"
+            params["round_id"] = round_id
+        query += " ORDER BY round_id"
+        if limit is not None:
+            query += " LIMIT :limit"
+            params["limit"] = limit
+
+        result = await self.session.execute(text(query), params)
+        return [row.round_id for row in result]
+
+    async def get_sql_backfill_candidates(self, round_id: int) -> List[Dict[str, Any]]:
+        """
+        Get score rows in a round eligible for the SQL backfill (see
+        ``get_round_ids_missing_sql_scores`` for the eligibility rule).
+
+        Returns:
+            List of dicts with 'id', 'model_id', 'series_id', 'mase' (the stored MASE,
+            used by the backfill's drift detector), and 'evaluated_count' (the stored
+            timestamp count, used by the backfill's per-row source-faithfulness guard —
+            may be NULL on older rows written before that column was populated).
+        """
+        result = await self.session.execute(
+            select(
+                ChallengeScore.id,
+                ChallengeScore.model_id,
+                ChallengeScore.series_id,
+                ChallengeScore.mase,
+                ChallengeScore.evaluated_count,
+            ).where(
+                and_(
+                    ChallengeScore.round_id == round_id,
+                    ChallengeScore.sql_score.is_(None),
+                    ChallengeScore.mase.isnot(None),
+                )
+            ).order_by(ChallengeScore.model_id, ChallengeScore.series_id)
+        )
+        return [
+            {
+                "id": row.id,
+                "model_id": row.model_id,
+                "series_id": row.series_id,
+                "mase": row.mase,
+                "evaluated_count": row.evaluated_count,
+            }
+            for row in result
+        ]
+
+    async def update_sql_fields_bulk(self, rows: List[Dict[str, Any]]) -> int:
+        """
+        Update ONLY the 5 SQL columns for a batch of existing score rows, matched by
+        primary key ``id``. Does not touch mase, rmse, evaluation_status, or any other
+        column. Caller controls the transaction (commit/rollback).
+
+        Args:
+            rows: list of dicts each with 'id' plus 'sql_score', 'sql_per_quantile',
+                'has_quantiles', 'quantile_levels_count', 'quantile_crossing_count'.
+
+        Returns:
+            Number of rows matched.
+        """
+        if not rows:
+            return 0
+
+        from sqlalchemy import update
+
+        # ORM "bulk UPDATE by primary key": a bare update(Entity) executed with a list
+        # of param dicts that each carry the primary key 'id' plus the columns to set.
+        # Only the keys present in the dicts are updated — the 5 SQL columns, nothing else.
+        stmt = update(ChallengeScore)
+        params = [
+            {
+                "id": row["id"],
+                "sql_score": row["sql_score"],
+                "sql_per_quantile": row["sql_per_quantile"],
+                "has_quantiles": row["has_quantiles"],
+                "quantile_levels_count": row["quantile_levels_count"],
+                "quantile_crossing_count": row["quantile_crossing_count"],
+            }
+            for row in rows
+        ]
+        # The ORM bulk-by-PK result does not expose rowcount; each param dict targets
+        # exactly one existing PK (fetched moments earlier in this transaction).
+        await self.session.execute(stmt, params)
+        return len(params)
 
     async def check_all_scores_complete(self, round_id: int) -> bool:
         """

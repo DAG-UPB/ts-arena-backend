@@ -1,13 +1,48 @@
 from __future__ import annotations
+import asyncio
 import logging
 import functools
 import time
 from typing import Any, Dict, Callable, Awaitable
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.connection import SessionLocal
 from app.services.challenge_service import ChallengeService
 from app.services.score_evaluation_service import ScoreEvaluationService
 from app.services.elo_ranking_service import EloRankingService
 from app.scheduler.dependencies import get_scheduler
+
+
+# --- Eval-job hang guards (backend-48) -------------------------------------
+# A single run of the periodic scores-evaluation job must never outlive its own
+# fire cadence: it runs with max_running_jobs=1, so a run that hangs holds the
+# only slot forever and every later fire queues up behind it until the backlog
+# starves all job acquisition (the 2026-07 incident).
+#
+# EVAL_JOB_HARD_TIMEOUT_SECONDS is the outer backstop: comfortably above normal
+# runtime (seconds to a couple of minutes, even with a batch of rounds) but well
+# under the 30-minute (1800 s) fire cadence, so a hung run is cancelled and the
+# single running slot is freed before the next fire.
+EVAL_JOB_HARD_TIMEOUT_SECONDS = 480  # 8 minutes
+
+# Postgres-side guards applied to every session the eval job opens, so a query
+# or lock that hangs is killed by the database (a clean, logged error) before
+# the asyncio backstop above ever trips. Both sit below the hard timeout.
+EVAL_STATEMENT_TIMEOUT_MS = 240_000  # 4 minutes
+EVAL_LOCK_TIMEOUT_MS = 30_000        # 30 seconds
+
+
+async def _apply_eval_session_timeouts(session: AsyncSession) -> None:
+    """Bound how long any statement/lock in this eval session may block.
+
+    Applied per session the eval job uses. The values are session-scoped GUCs;
+    the eval sessions are short-lived and, on the hang path, the connection is
+    invalidated on cancellation, so nothing lingers. Both bounds only ever kill
+    a genuinely runaway statement/lock — normal eval, round-creation and ELO
+    queries all complete far below them.
+    """
+    await session.execute(text(f"SET statement_timeout = {EVAL_STATEMENT_TIMEOUT_MS}"))
+    await session.execute(text(f"SET lock_timeout = {EVAL_LOCK_TIMEOUT_MS}"))
 
 
 def job_error_handler(func: Callable[..., Awaitable[None]]) -> Callable[..., Awaitable[None]]:
@@ -87,7 +122,7 @@ async def periodic_challenge_scores_evaluation_job() -> None:
     """
     Periodic job that evaluates challenge scores for all active and completed challenges.
     
-    This job runs every 10 minutes and:
+    This job runs every 30 minutes and:
     1. Finds all challenges with status 'active' or 'completed' that have final_evaluation=False
     2. Calculates MASE and RMSE scores for all participants
     3. Updates scores in the database
@@ -95,44 +130,60 @@ async def periodic_challenge_scores_evaluation_job() -> None:
     """
     logger = logging.getLogger("challenge-scheduler")
     logger.info("Starting periodic challenge scores evaluation job")
-    
+
     try:
-        # Step 1: Retrieve list of Rounds to evaluate (Short-lived Session)
-        round_ids = []
-        async with SessionLocal() as session:
-            score_service = ScoreEvaluationService(session)
-            round_ids = await score_service.get_ids_needing_evaluation()
-        
-        if not round_ids:
-            logger.info("No rounds need evaluation at this time.")
-            return
+        # Hard timeout so a hung run can never hold the max_running_jobs=1 slot
+        # past the fire cadence. On timeout the coroutine is cancelled and
+        # returns, freeing the slot for the next fire (backend-48).
+        async with asyncio.timeout(EVAL_JOB_HARD_TIMEOUT_SECONDS):
+            # Step 1: Retrieve list of Rounds to evaluate (Short-lived Session)
+            round_ids = []
+            async with SessionLocal() as session:
+                await _apply_eval_session_timeouts(session)
+                score_service = ScoreEvaluationService(session)
+                round_ids = await score_service.get_ids_needing_evaluation()
 
-        logger.info(f"Found {len(round_ids)} round(s) needing evaluation")
+            if not round_ids:
+                logger.info("No rounds need evaluation at this time.")
+                return
 
-        # Step 2: Process each round in a separate session
-        # This prevents one long transaction from holding a DB connection for the entire batch.
-        evaluated_count = 0
-        finalized_count = 0
+            logger.info(f"Found {len(round_ids)} round(s) needing evaluation")
 
-        for round_id in round_ids:
-            try:
-                async with SessionLocal() as session:
-                    score_service = ScoreEvaluationService(session)
-                    finalized = await score_service.evaluate_challenge_scores(round_id)
-                    
-                    evaluated_count += 1
-                    if finalized:
-                        finalized_count += 1
-            except Exception as e:
-                logger.error(f"Error evaluating round {round_id} in periodic job: {e}")
-                # Continue with next round instead of failing the whole job
+            # Step 2: Process each round in a separate session
+            # This prevents one long transaction from holding a DB connection for the entire batch.
+            evaluated_count = 0
+            finalized_count = 0
 
-        logger.info(
-            f"Periodic evaluation complete: "
-            f"{evaluated_count} rounds evaluated, "
-            f"{finalized_count} finalized"
+            for round_id in round_ids:
+                try:
+                    async with SessionLocal() as session:
+                        await _apply_eval_session_timeouts(session)
+                        score_service = ScoreEvaluationService(session)
+                        finalized = await score_service.evaluate_challenge_scores(round_id)
+
+                        evaluated_count += 1
+                        if finalized:
+                            finalized_count += 1
+                except Exception as e:
+                    logger.error(f"Error evaluating round {round_id} in periodic job: {e}")
+                    # Continue with next round instead of failing the whole job
+
+            logger.info(
+                f"Periodic evaluation complete: "
+                f"{evaluated_count} rounds evaluated, "
+                f"{finalized_count} finalized"
+            )
+
+    except TimeoutError:
+        # Loud, unmissable — the opposite of the silent stall this replaces.
+        logger.critical(
+            "periodic_challenge_scores_evaluation_job exceeded its %ss hard timeout and was "
+            "cancelled to free the max_running_jobs=1 slot for the next fire. A run this slow "
+            "means a hung DB session or lock — investigate; the slot is now free.",
+            EVAL_JOB_HARD_TIMEOUT_SECONDS,
+            exc_info=True,
         )
-    
+        raise  # Re-raise to let decorator handle it
     except Exception as e:
         logger.exception(f"Failed to run periodic challenge scores evaluation: {e}")
         raise  # Re-raise to let decorator handle it

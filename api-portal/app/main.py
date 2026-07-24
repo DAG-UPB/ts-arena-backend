@@ -82,6 +82,24 @@ _SCHEMA_PATCHES = (
           (calculation_date, model_id, scope_type, COALESCE(scope_id, ''), metric);
       END IF;
     END $$""",
+    # Rank positions must be unique within a (date, scope, metric) leaderboard —
+    # a duplicate means a recompute left stale rows behind. Guarded: while such
+    # duplicates still exist the index cannot be built, and failing here would
+    # roll back the whole patch batch, so warn instead and retry next boot.
+    """DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_indexes
+        WHERE schemaname = 'forecasts' AND indexname = 'idx_daily_rankings_rank_unique'
+      ) THEN
+        BEGIN
+          CREATE UNIQUE INDEX idx_daily_rankings_rank_unique ON forecasts.daily_rankings
+            (calculation_date, scope_type, COALESCE(scope_id, ''), metric, rank_position);
+        EXCEPTION WHEN unique_violation THEN
+          RAISE WARNING 'idx_daily_rankings_rank_unique not created: duplicate rank_position rows exist in forecasts.daily_rankings — clean them up, index will be created on next startup';
+        END;
+      END IF;
+    END $$""",
 )
 
 

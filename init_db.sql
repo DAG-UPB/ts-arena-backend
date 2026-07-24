@@ -937,6 +937,17 @@ ON forecasts.daily_rankings(
     metric
 );
 
+-- Rank positions are unique within one leaderboard (date, scope, metric);
+-- a duplicate means a recompute left stale rows behind
+CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_rankings_rank_unique
+ON forecasts.daily_rankings(
+    calculation_date,
+    scope_type,
+    COALESCE(scope_id, ''),
+    metric,
+    rank_position
+);
+
 -- Indexes for fast lookups
 CREATE INDEX IF NOT EXISTS idx_daily_rankings_date ON forecasts.daily_rankings(calculation_date);
 CREATE INDEX IF NOT EXISTS idx_daily_rankings_model ON forecasts.daily_rankings(model_id);

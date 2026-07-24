@@ -34,6 +34,23 @@ RESOLUTION_MODEL_MAP: Dict[str, Type] = {
     "raw": TimeSeriesDataModel,  # For Admin/Debug only
 }
 
+# Maps resolution strings to the SQL interval literal used by TimescaleDB's time_bucket(),
+# mirroring the continuous aggregate definitions in init_db.sql (~line 782): each aggregate
+# is `time_bucket(<interval>, ts)` grouped AVG(value) over data_portal.time_series_data.
+# Used by the raw-bucketed fallback (`get_raw_bucketed_value_at`) when a continuous
+# aggregate has no/incomplete data for the requested time range (e.g. a dev restore that
+# only covers recent weeks) — never by the live aggregate-reading path above.
+# timedelta values (not strings): asyncpg encodes them as typed `interval` params,
+# which the CAST(:interval AS interval) in the raw-bucketing queries requires.
+RESOLUTION_TO_BUCKET_INTERVAL: Dict[str, timedelta] = {
+    "15min": timedelta(minutes=15),
+    "15 minutes": timedelta(minutes=15),
+    "1h": timedelta(hours=1),
+    "1 hour": timedelta(hours=1),
+    "1d": timedelta(days=1),
+    "1 day": timedelta(days=1),
+}
+
 # Maps resolution strings to timedelta for validation
 RESOLUTION_INTERVALS: Dict[str, timedelta] = {
     "15min": timedelta(minutes=15),
@@ -868,6 +885,56 @@ class TimeSeriesRepository:
         except Exception as e:
             logger.error(f"Error querying time series data for series_id {series_id} with resolution {resolution}: {e}")
             raise
+
+    async def get_raw_bucketed_value_at(
+        self,
+        series_id: int,
+        resolution: str,
+        target_ts: datetime
+    ) -> Optional[float]:
+        """
+        Fallback for the single-bucket lookup in `get_data_by_time_range_by_resolution`
+        (used for the naive/context value) when the continuous aggregate has no data for
+        this series/time — e.g. a dev restore that only covers recent weeks. Reproduces
+        the aggregate's bucketing directly from `data_portal.time_series_data`:
+        AVG(value) over the bucket that contains `target_ts`, using TimescaleDB's
+        `time_bucket()` so boundaries are identical to the continuous aggregate's.
+
+        Does NOT read from or modify the continuous aggregates, and is never used by the
+        live scoring path.
+
+        Args:
+            series_id: ID of the time series
+            resolution: Target resolution ("15min", "1h", "1d")
+            target_ts: timestamp whose containing bucket should be averaged
+
+        Returns:
+            The bucket's average value, or None if there is no raw data in that bucket.
+        """
+        interval = RESOLUTION_TO_BUCKET_INTERVAL.get(resolution)
+        if not interval:
+            raise ValueError(
+                f"Unknown resolution for raw bucketing: {resolution}. "
+                f"Valid: {list(RESOLUTION_TO_BUCKET_INTERVAL.keys())}"
+            )
+
+        # The ts range bound makes the scan sargable on the (series_id, ts) index; the
+        # time_bucket equality then picks the exact bucket within that window.
+        query = text("""
+            SELECT AVG(value) AS value
+            FROM data_portal.time_series_data
+            WHERE series_id = :series_id
+              AND ts >= CAST(:target_ts AS timestamptz) - CAST(:interval AS interval)
+              AND ts <  CAST(:target_ts AS timestamptz) + CAST(:interval AS interval)
+              AND time_bucket(CAST(:interval AS interval), ts) = time_bucket(CAST(:interval AS interval), CAST(:target_ts AS timestamptz))
+        """)
+        result = await self.session.execute(
+            query, {"series_id": series_id, "interval": interval, "target_ts": target_ts}
+        )
+        row = result.first()
+        if row is None or row.value is None:
+            return None
+        return float(row.value)
 
     async def validate_series_for_resolution(
         self,

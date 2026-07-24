@@ -1,6 +1,6 @@
 """
 Service for periodic evaluation of challenge scores.
-This service runs independently every 10 minutes to calculate and update scores
+This service runs independently every 30 minutes to calculate and update scores
 for active and completed challenge rounds.
 """
 import logging
@@ -14,7 +14,7 @@ from sqlalchemy import select, func
 from app.database.challenges.challenge_repository import ChallengeRoundRepository
 from app.database.data_portal.time_series_repository import TimeSeriesRepository
 from app.database.forecasts.repository import ForecastRepository
-from app.services.forecast_metrics import assemble_quantile_forecasts, sql_score
+from app.services.forecast_metrics import compute_sql_fields
 
 logger = logging.getLogger(__name__)
 
@@ -413,18 +413,11 @@ class ScoreEvaluationService:
         # --- Scaled Quantile Loss (SQL) ---------------------------------------------
         # Reuse mae_naive as the SQL scale `a` (same denominator as MASE, so SQL and MASE
         # are directly comparable). NULL when the scale is undefined (mae_naive == 0),
-        # mirroring the MASE edge case.
+        # mirroring the MASE edge case. `compute_sql_fields` is the single source of truth
+        # for this block, shared with the historical backfill script so both produce
+        # byte-identical results for the same inputs.
         probabilistic_values = [item.get("probabilistic_values") for item in evaluation_data]
-        quantile_forecasts, has_quantiles, levels_count, crossing_count = (
-            assemble_quantile_forecasts(y_pred, probabilistic_values)
-        )
-        sql_scale = mae_naive if mae_naive > 0 else None
-        sql_overall, sql_per_level = sql_score(y_true, quantile_forecasts, sql_scale)
-        # JSONB keys as level strings ("0.1" … "0.9")
-        sql_per_quantile = (
-            {f"{level:.1f}": value for level, value in sql_per_level.items()}
-            if sql_per_level else None
-        )
+        sql_fields = compute_sql_fields(y_true, y_pred, probabilistic_values, mae_naive)
 
         return {
             "round_id": round_id,
@@ -432,11 +425,7 @@ class ScoreEvaluationService:
             "series_id": series_id,
             "mase": mase,
             "rmse": rmse,
-            "sql_score": sql_overall,
-            "sql_per_quantile": sql_per_quantile,
-            "has_quantiles": has_quantiles,
-            "quantile_levels_count": levels_count,
-            "quantile_crossing_count": crossing_count,
+            **sql_fields,
             "forecast_count": forecast_count,
             "actual_count": actual_count,
             "evaluated_count": evaluated_count,
