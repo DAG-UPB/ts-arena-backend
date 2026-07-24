@@ -14,6 +14,7 @@ from sqlalchemy import select, func
 from app.database.challenges.challenge_repository import ChallengeRoundRepository
 from app.database.data_portal.time_series_repository import TimeSeriesRepository
 from app.database.forecasts.repository import ForecastRepository
+from app.services.evaluation_alignment import align_evaluation_data, group_actuals_by_minute
 from app.services.forecast_metrics import compute_sql_fields
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,101 @@ def timedelta_to_resolution(frequency: Optional[timedelta]) -> str:
         logger.warning(f"Unknown frequency {frequency}, defaulting to '1h' resolution")
         return "1h"
     return resolution
+
+
+# A forecast and an actual join when their minute-truncated timestamps are equal, so any
+# actual that can possibly match lies strictly within one minute of some forecast. Padding
+# the actuals fetch by exactly that much makes the ts-bounded batch query provably lossless
+# against the unbounded per-pair join it replaces.
+_ACTUALS_TS_MARGIN = timedelta(minutes=1)
+
+
+class _SeriesNaiveCache:
+    """Per-series naive baseline value for one round.
+
+    The baseline is the context point at `ChallengeSeriesPseudo.max_ts` — a property of
+    (round, series), identical for every model that forecast that series. Resolving it once
+    per series instead of once per (model, series) removes two queries per participant.
+    """
+
+    def __init__(
+        self,
+        round_repo: ChallengeRoundRepository,
+        time_series_repo: TimeSeriesRepository,
+        round_id: int,
+        resolution: str,
+    ):
+        self._round_repo = round_repo
+        self._time_series_repo = time_series_repo
+        self._round_id = round_id
+        self._resolution = resolution
+        self._values: Dict[int, Optional[float]] = {}
+
+    async def value(self, series_id: int) -> Optional[float]:
+        if series_id not in self._values:
+            self._values[series_id] = await self._resolve(series_id)
+        return self._values[series_id]
+
+    async def _resolve(self, series_id: int) -> Optional[float]:
+        # Try ChallengeSeriesPseudo first (most accurate definition of context end).
+        pseudo_info = await self._round_repo.get_series_pseudo(self._round_id, series_id)
+        if not pseudo_info or not pseudo_info.max_ts:
+            return None
+        context_points = await self._time_series_repo.get_data_by_time_range_by_resolution(
+            series_id=series_id,
+            start_time=pseudo_info.max_ts,
+            end_time=pseudo_info.max_ts,
+            resolution=self._resolution,
+        )
+        if not context_points:
+            return None
+        return context_points[0]['value']
+
+
+class _SeriesActualsCache:
+    """Per-series actuals for one round, keyed by minute-truncated ts.
+
+    Every model forecasting a series is scored against the same actuals, so this is one
+    query per series rather than one per (model, series). The ts window is derived from the
+    forecasts actually present for that series (see `_ACTUALS_TS_MARGIN`), which both prunes
+    hypertable chunks and keeps the result identical to the unbounded SQL join.
+
+    Series with no forecasts never trigger a query at all.
+    """
+
+    def __init__(
+        self,
+        forecast_repo: ForecastRepository,
+        resolution: str,
+        stats_by_pair: Dict[tuple, Dict[str, Any]],
+    ):
+        self._forecast_repo = forecast_repo
+        self._resolution = resolution
+        self._stats_by_pair = stats_by_pair
+        self._by_minute: Dict[int, Dict[datetime, List[float]]] = {}
+
+    def _ts_bounds(self, series_id: int) -> Optional[tuple]:
+        """Widest [min_ts, max_ts] over every model that forecast this series, padded."""
+        stats = [s for (_, sid), s in self._stats_by_pair.items() if sid == series_id]
+        bounds = [(s["min_ts"], s["max_ts"]) for s in stats if s["min_ts"] and s["max_ts"]]
+        if not bounds:
+            return None
+        return (
+            min(lo for lo, _ in bounds) - _ACTUALS_TS_MARGIN,
+            max(hi for _, hi in bounds) + _ACTUALS_TS_MARGIN,
+        )
+
+    async def by_minute(self, series_id: int) -> Dict[datetime, List[float]]:
+        if series_id not in self._by_minute:
+            bounds = self._ts_bounds(series_id)
+            if bounds is None:
+                self._by_minute[series_id] = {}
+            else:
+                rows = await self._forecast_repo.get_series_actuals_aggregate(
+                    series_id, self._resolution, bounds[0], bounds[1]
+                )
+                self._by_minute[series_id] = group_actuals_by_minute(rows)
+        return self._by_minute[series_id]
 
 
 class ScoreEvaluationService:
@@ -143,27 +239,49 @@ class ScoreEvaluationService:
                 logger.warning(f"Round {round_id} not found")
                 return False
             
-            # Get all participants (models that submitted forecasts)
-            participant_model_ids = await self.forecast_repo.get_round_participants(round_id)
+            # Per-(model, series) forecast stats for the whole round in one query. This
+            # also yields the participant and series sets — both were previously separate
+            # `SELECT DISTINCT`s over the same rows, so deriving them here is equivalent.
+            round_stats = await self.forecast_repo.get_round_forecast_stats(round_id)
+            stats_by_pair = {
+                (s["model_id"], s["series_id"]): s for s in round_stats
+            }
+
+            participant_model_ids = sorted({s["model_id"] for s in round_stats})
             if not participant_model_ids:
                 logger.info(f"No participants found for round {round_id}")
                 return False
-            
-            # Get all series for this round
-            series_ids = await self.forecast_repo.get_round_series_ids(round_id)
+
+            series_ids = sorted({s["series_id"] for s in round_stats})
             if not series_ids:
                 logger.info(f"No series found for round {round_id}")
                 return False
-            
+
             logger.info(f"Round {round_id}: {len(participant_model_ids)} participants, {len(series_ids)} series")
-            
+
             # Determine resolution from frequency
             resolution = timedelta_to_resolution(round_info.frequency)
             logger.info(f"Round {round_id}: using resolution '{resolution}' (frequency: {round_info.frequency})")
-            
+
+            # --- Batched fetch (backend-68) ------------------------------------------
+            # Everything this round needs is read here, per round and per series, instead
+            # of per (model, series). Only the source of the data changes; the scoring,
+            # coverage and finalization rules below are untouched.
+            forecast_rows = await self.forecast_repo.get_round_forecasts(round_id)
+            forecasts_by_pair: Dict[tuple, List[Dict[str, Any]]] = {}
+            for row in forecast_rows:
+                forecasts_by_pair.setdefault((row["model_id"], row["series_id"]), []).append(row)
+
+            actuals_cache = _SeriesActualsCache(
+                self.forecast_repo, resolution, stats_by_pair
+            )
+            naive_cache = _SeriesNaiveCache(
+                self.round_repo, self.time_series_repo, round_id, resolution
+            )
+
             # Calculate scores for each model/series combination
             all_scores = []
-            
+
             for model_id in participant_model_ids:
                 for series_id in series_ids:
                     try:
@@ -171,22 +289,25 @@ class ScoreEvaluationService:
                             round_id=round_id,
                             model_id=model_id,
                             series_id=series_id,
-                            resolution=resolution,
+                            forecast_stats=stats_by_pair.get((model_id, series_id)),
+                            forecast_rows=forecasts_by_pair.get((model_id, series_id), []),
+                            actuals_cache=actuals_cache,
+                            naive_cache=naive_cache,
                             round_end_time=round_info.end_time
                         )
-                        
+
                         if score_data:
                             # Skip "no_forecasts" status
                             if score_data.get("evaluation_status") == "no_forecasts":
                                 continue
                             all_scores.append(score_data)
-                            
+
                     except Exception as e:
                         logger.exception(
                             f"Error calculating score for round {round_id}, "
                             f"model {model_id}, series {series_id}: {e}"
                         )
-                        
+
                         # Check if timeout has passed
                         now = datetime.now(timezone.utc)
                         end_time = round_info.end_time
@@ -194,9 +315,9 @@ class ScoreEvaluationService:
                             end_time = end_time.replace(tzinfo=timezone.utc)
                         else:
                             end_time = end_time.astimezone(timezone.utc)
-                        
+
                         timeout_passed = now > end_time + EVALUATION_TIMEOUT
-                        
+
                         # Add an error entry
                         # If timeout has passed, we mark it as final evaluation even on error
                         all_scores.append({
@@ -213,7 +334,7 @@ class ScoreEvaluationService:
                             "evaluation_status": "error",
                             "error_message": str(e)[:500],
                         })
-            
+
             # Bulk insert/update scores
             if all_scores:
                 rows_affected = await self.forecast_repo.bulk_insert_scores(all_scores)
@@ -235,26 +356,31 @@ class ScoreEvaluationService:
         round_id: int,
         model_id: int,
         series_id: int,
-        resolution: str = "1h",
+        forecast_stats: Optional[Dict[str, Any]],
+        forecast_rows: List[Dict[str, Any]],
+        actuals_cache: "_SeriesActualsCache",
+        naive_cache: "_SeriesNaiveCache",
         round_end_time: Optional[datetime] = None
     ) -> Dict[str, Any] | None:
         """
-        Calculate MASE and RMSE for a specific model/series combination.
-        
+        Calculate MASE, RMSE and SQL for a specific model/series combination.
+
+        Takes its inputs pre-fetched by the caller (backend-68) rather than issuing four
+        queries of its own per pair. The scoring, coverage and finalization rules are
+        unchanged — the caches below return exactly what the per-pair queries returned,
+        which is what makes this a pure fetch-strategy change.
+
         Args:
             round_id: Challenge round ID
             model_id: Model ID
-            series_id: Time series ID  
-            resolution: Data resolution for actuals lookup
+            series_id: Time series ID
+            forecast_stats: this pair's row from `get_round_forecast_stats`, or None when
+                the pair submitted nothing (equivalent to `get_forecast_stats` -> None)
+            forecast_rows: this pair's forecast rows from the round-wide fetch
+            actuals_cache: per-series actuals, joined in Python
+            naive_cache: per-series naive baseline value
             round_end_time: Round end time for timeout calculation
         """
-        # Get forecast stats (min_ts, max_ts, count)
-        forecast_stats = await self.forecast_repo.get_forecast_stats(
-            round_id=round_id,
-            model_id=model_id,
-            series_id=series_id
-        )
-        
         if not forecast_stats or forecast_stats['count'] == 0:
             logger.debug(f"No forecasts for model {model_id}, series {series_id}")
             return {
@@ -273,22 +399,11 @@ class ScoreEvaluationService:
             }
         
         forecast_count = forecast_stats['count']
-        
-        # Get last context point for naive forecast baseline
-        # Try to use ChallengeSeriesPseudo first (most accurate definition of context end)
-        pseudo_info = await self.round_repo.get_series_pseudo(round_id, series_id)
-        naive_forecast_value = None
-        
-        if pseudo_info and pseudo_info.max_ts:
-            context_points = await self.time_series_repo.get_data_by_time_range_by_resolution(
-                series_id=series_id,
-                start_time=pseudo_info.max_ts,
-                end_time=pseudo_info.max_ts,
-                resolution=resolution
-            )
-            if context_points:
-                naive_forecast_value = context_points[0]['value']
-        
+
+        # Last context point for the naive forecast baseline. Depends on (round, series)
+        # only — the cache resolves it once per series instead of once per participant.
+        naive_forecast_value = await naive_cache.value(series_id)
+
         if naive_forecast_value is None:
             logger.warning(f"No context point for series {series_id}")
             return {
@@ -306,15 +421,13 @@ class ScoreEvaluationService:
                 "error_message": "No context point available for naive forecast baseline",
             }
         
-        # Get aligned evaluation data directly from DB (INNER JOIN)
-        # Uses the appropriate continuous aggregate view based on resolution
-        evaluation_data = await self.forecast_repo.get_evaluation_data_by_resolution(
-            round_id=round_id,
-            model_id=model_id,
-            series_id=series_id,
-            resolution=resolution
+        # Aligned evaluation data. Same inner join as before — on series_id and
+        # minute-truncated ts — but performed in Python against the series' actuals
+        # (fetched once for the whole round) instead of one SQL join per pair.
+        evaluation_data = align_evaluation_data(
+            forecast_rows, await actuals_cache.by_minute(series_id)
         )
-        
+
         evaluated_count = len(evaluation_data)
         actual_count = evaluated_count
         

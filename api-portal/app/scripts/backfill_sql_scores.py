@@ -78,6 +78,7 @@ from app.database.challenges.challenge_repository import ChallengeRoundRepositor
 from app.database.data_portal.time_series_repository import TimeSeriesRepository
 from app.database.connection import SessionLocal
 from app.database.forecasts.repository import ForecastRepository
+from app.services.evaluation_alignment import align_evaluation_data, group_actuals_by_minute
 from app.services.forecast_metrics import compute_sql_fields
 from app.services.score_evaluation_service import timedelta_to_resolution
 
@@ -187,69 +188,6 @@ def decide_sql_source(
     if _source_sufficient(evaluated_count, raw_naive, raw_count):
         return "raw", evaluated_count is None
     return None, False
-
-
-def _truncate_to_minute(ts: datetime) -> datetime:
-    """Python-side equivalent of SQL `date_trunc('minute', ts)` (both sides are UTC,
-    tz-aware, straight from the DB — no tz handling needed beyond dropping seconds)."""
-    return ts.replace(second=0, microsecond=0)
-
-
-def group_actuals_by_minute(actual_rows: List[Dict[str, Any]]) -> Dict[datetime, List[float]]:
-    """Group a series' actuals ({'ts', 'value'} rows) by minute-truncated ts.
-
-    A list per key (not a single value) so `align_evaluation_data` can faithfully
-    reproduce what a SQL inner join would do if more than one actual row truncates to
-    the same minute (shouldn't happen for bucketed data, but a join would emit one
-    output row per match, not silently keep only the first).
-    """
-    grouped: Dict[datetime, List[float]] = {}
-    for row in actual_rows:
-        key = _truncate_to_minute(row["ts"])
-        grouped.setdefault(key, []).append(row["value"])
-    return grouped
-
-
-def align_evaluation_data(
-    forecast_rows: List[Dict[str, Any]],
-    actuals_by_minute: Dict[datetime, List[float]],
-) -> List[Dict[str, Any]]:
-    """Python-side reproduction of the live path's SQL inner join, EXACTLY.
-
-    The live join (`get_evaluation_data_by_resolution`) is:
-        JOIN <actuals> ON forecast.series_id = actual.series_id
-                       AND date_trunc('minute', forecast.ts) = date_trunc('minute', actual.ts)
-    This replicates the `date_trunc('minute', ...)` equality: forecast rows are matched
-    against `actuals_by_minute` (built by `group_actuals_by_minute`) via minute-truncated
-    ts. If more than one actual maps to the same truncated minute, a true SQL join would
-    emit one output row per (forecast, actual) pair — this does too (does NOT just keep
-    the first).
-
-    Args:
-        forecast_rows: forecast rows for ONE (model, series), each with 'ts',
-            'predicted_value', and optionally 'probabilistic_values' — ordered by ts
-            (as `get_round_forecasts` returns them).
-        actuals_by_minute: minute-truncated ts -> list of actual values, from
-            `group_actuals_by_minute`.
-
-    Returns:
-        List of dicts (ts, predicted_value, probabilistic_values, actual_value) — the
-        same shape `get_evaluation_data_by_resolution` returns — ordered by forecast ts
-        (ties from a duplicate-actual match ordered by match order within that minute).
-    """
-    aligned: List[Dict[str, Any]] = []
-    for row in forecast_rows:
-        matches = actuals_by_minute.get(_truncate_to_minute(row["ts"]))
-        if not matches:
-            continue
-        for actual_value in matches:
-            aligned.append({
-                "ts": row["ts"],
-                "predicted_value": row["predicted_value"],
-                "probabilistic_values": row.get("probabilistic_values"),
-                "actual_value": actual_value,
-            })
-    return aligned
 
 
 # --------------------------------------------------------------------------------------
