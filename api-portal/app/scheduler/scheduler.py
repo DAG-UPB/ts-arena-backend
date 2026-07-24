@@ -3,7 +3,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
-from apscheduler import AsyncScheduler, CoalescePolicy
+from apscheduler import AsyncScheduler, CoalescePolicy, ConflictPolicy
 from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.cron import CronTrigger
@@ -338,12 +338,17 @@ class ChallengeScheduler:
             # is NULL and stale fires queue indefinitely behind a stuck run until
             # the backlog starves all job acquisition (backend-48). At 300 s a
             # fire expires well inside the 10-min cadence, bounding the backlog.
+            # conflict_policy=replace: the schedule persists in the SQLAlchemy data
+            # store across restarts, and add_schedule defaults to do_nothing — so an
+            # existing row (created before this fix, with a NULL misfire_grace_time)
+            # would otherwise never pick up the value above. replace rewrites it.
             await self.scheduler.add_schedule(
                 func_or_task_id=periodic_challenge_scores_evaluation_job,
                 trigger=CronTrigger(minute="0,10,20,30,40,50"),
                 id="periodic_challenge_scores_evaluation",
                 coalesce=CoalescePolicy.latest,
                 misfire_grace_time=300,
+                conflict_policy=ConflictPolicy.replace,
             )
             self.logger.info(
                 "Scheduled periodic challenge scores evaluation job "
@@ -373,12 +378,15 @@ class ChallengeScheduler:
             # fires get a non-NULL start_deadline and expire instead of piling up
             # behind a stuck run — same unbounded-backlog shape as the eval job,
             # just at a 6-hour cadence (backend-48). 3600 s stays well inside it.
+            # replace: same persistent-store reason as the eval schedule — overwrite
+            # the pre-existing NULL-misfire_grace_time row so the deadline takes hold.
             await self.scheduler.add_schedule(
                 func_or_task_id=periodic_elo_ranking_calculation_job,
                 trigger=CronTrigger(hour="0,6,12,18", minute="0"),
                 id="periodic_elo_ranking_calculation",
                 coalesce=CoalescePolicy.latest,
                 misfire_grace_time=3600,
+                conflict_policy=ConflictPolicy.replace,
             )
             self.logger.info(
                 "Scheduled periodic ELO ranking calculation job "
