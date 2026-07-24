@@ -21,7 +21,7 @@ from app.scheduler.dependencies import get_scheduler
 #
 # EVAL_JOB_HARD_TIMEOUT_SECONDS is the outer backstop: comfortably above normal
 # runtime (seconds to a couple of minutes, even with a batch of rounds) but well
-# under the 10-minute (600 s) fire cadence, so a hung run is cancelled and the
+# under the 30-minute (1800 s) fire cadence, so a hung run is cancelled and the
 # single running slot is freed before the next fire.
 EVAL_JOB_HARD_TIMEOUT_SECONDS = 480  # 8 minutes
 
@@ -122,7 +122,7 @@ async def periodic_challenge_scores_evaluation_job() -> None:
     """
     Periodic job that evaluates challenge scores for all active and completed challenges.
     
-    This job runs every 10 minutes and:
+    This job runs every 30 minutes and:
     1. Finds all challenges with status 'active' or 'completed' that have final_evaluation=False
     2. Calculates MASE and RMSE scores for all participants
     3. Updates scores in the database

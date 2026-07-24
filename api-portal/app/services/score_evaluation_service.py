@@ -1,6 +1,6 @@
 """
 Service for periodic evaluation of challenge scores.
-This service runs independently every 10 minutes to calculate and update scores
+This service runs independently every 30 minutes to calculate and update scores
 for active and completed challenge rounds.
 """
 import logging

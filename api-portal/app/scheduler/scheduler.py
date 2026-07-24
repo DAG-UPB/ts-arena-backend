@@ -73,7 +73,7 @@ class ChallengeScheduler:
                 self._started = True
                 self.logger.info("Scheduler started in background.")
 
-                # Schedule the periodic challenge scores evaluation job (every 10 minutes)
+                # Schedule the periodic challenge scores evaluation job (every 30 minutes)
                 # Called after _started is set to True to avoid recursion
                 await self.schedule_periodic_scores_evaluation()
 
@@ -313,18 +313,18 @@ class ChallengeScheduler:
     async def schedule_periodic_scores_evaluation(self) -> None:
         """
         Schedules the periodic challenge scores evaluation job.
-        Runs at fixed times every 10 minutes (e.g., 12:00, 12:10, 12:20, 12:30, etc.)
+        Runs at fixed times every 30 minutes (e.g., 12:00, 12:30, 13:00, etc.)
         to evaluate scores for active/completed challenges.
-        
-        Uses fixed minute intervals (0, 10, 20, 30, 40, 50) so the job always runs
+
+        Uses fixed minute intervals (0, 30) so the job always runs
         at the same times regardless of when the service starts.
         """
         # Note: _ensure_started() is not called here to avoid recursion
         # This method is only called from start() after the scheduler is already started
-        
+
         try:
-            # Run at fixed minute marks: :00, :10, :20, :30, :40, :50
-            # This ensures consistent execution times (e.g., 12:00, 12:10, 12:20)
+            # Run at fixed minute marks: :00, :30
+            # This ensures consistent execution times (e.g., 12:00, 12:30, 13:00)
             # regardless of service restart time
             await self.scheduler.configure_task(
                 periodic_challenge_scores_evaluation_job,
@@ -337,14 +337,14 @@ class ChallengeScheduler:
             # the value configured on the task above. Without it, start_deadline
             # is NULL and stale fires queue indefinitely behind a stuck run until
             # the backlog starves all job acquisition (backend-48). At 300 s a
-            # fire expires well inside the 10-min cadence, bounding the backlog.
+            # fire expires well inside the 30-min cadence, bounding the backlog.
             # conflict_policy=replace: the schedule persists in the SQLAlchemy data
             # store across restarts, and add_schedule defaults to do_nothing — so an
             # existing row (created before this fix, with a NULL misfire_grace_time)
             # would otherwise never pick up the value above. replace rewrites it.
             await self.scheduler.add_schedule(
                 func_or_task_id=periodic_challenge_scores_evaluation_job,
-                trigger=CronTrigger(minute="0,10,20,30,40,50"),
+                trigger=CronTrigger(minute="0,30"),
                 id="periodic_challenge_scores_evaluation",
                 coalesce=CoalescePolicy.latest,
                 misfire_grace_time=300,
@@ -352,7 +352,7 @@ class ChallengeScheduler:
             )
             self.logger.info(
                 "Scheduled periodic challenge scores evaluation job "
-                "(runs at :00, :10, :20, :30, :40, :50 of every hour)"
+                "(runs at :00, :30 of every hour)"
             )
         except Exception as e:
             self.logger.exception(f"Failed to schedule periodic scores evaluation job: {e}")
