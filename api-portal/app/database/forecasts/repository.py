@@ -182,6 +182,44 @@ class ForecastRepository:
             }
         return None
 
+    async def get_round_forecast_stats(self, round_id: int) -> List[Dict[str, Any]]:
+        """
+        Per-(model, series) forecast stats for a WHOLE round in ONE query — the batched
+        counterpart to `get_forecast_stats`.
+
+        Same aggregate and the same absence of a `ts` predicate as the per-pair version, so
+        `count` is identical to what the per-pair call returns; only the number of queries
+        changes (1 instead of models × series). Grouping also yields the round's participant
+        and series sets, so callers do not need `get_round_participants` /
+        `get_round_series_ids` separately.
+
+        Returns:
+            List of dicts with 'model_id', 'series_id', 'min_ts', 'max_ts', 'count' —
+            one per (model, series) pair that has at least one forecast in the round.
+        """
+        result = await self.session.execute(
+            select(
+                Forecast.model_id,
+                Forecast.series_id,
+                func.min(Forecast.ts).label("min_ts"),
+                func.max(Forecast.ts).label("max_ts"),
+                func.count(Forecast.id).label("count"),
+            )
+            .where(Forecast.round_id == round_id)
+            .group_by(Forecast.model_id, Forecast.series_id)
+            .order_by(Forecast.model_id, Forecast.series_id)
+        )
+        return [
+            {
+                "model_id": row.model_id,
+                "series_id": row.series_id,
+                "min_ts": row.min_ts,
+                "max_ts": row.max_ts,
+                "count": row.count,
+            }
+            for row in result
+        ]
+
     async def check_existing_forecasts(
         self,
         round_id: int,
@@ -338,24 +376,29 @@ class ForecastRepository:
     async def get_round_forecasts(
         self,
         round_id: int,
-        ts_lo: datetime,
-        ts_hi: datetime,
+        ts_lo: Optional[datetime] = None,
+        ts_hi: Optional[datetime] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Fetch ALL forecast rows for a round in ONE ts-bounded query — the batched
-        counterpart to `get_evaluation_data_by_resolution`, used by the backfill script
-        instead of querying per (model, series).
+        Fetch ALL forecast rows for a round in ONE query — the batched counterpart to
+        `get_evaluation_data_by_resolution`, used by the live scorer and the backfill
+        script instead of querying per (model, series).
 
-        `forecasts.forecasts` is a 196M-row TimescaleDB hypertable: a query without a
-        `ts` predicate touches every chunk (measured ~1.5s per call — unusable at
-        ~2.2M candidate rows); with a `ts` range the planner prunes to a handful of
-        chunks (ms). Callers group the result by (model_id, series_id) in Python.
+        `forecasts.forecasts` is a ~200M-row TimescaleDB hypertable, and the per-pair
+        query's cost is planning, not execution (measured on dev: 180 ms planning vs 12 ms
+        execution). Batching removes that cost by paying it once per round instead of once
+        per pair: the same round fetched whole measures ~101 ms planning + 33 ms execution
+        for 57k rows. Callers group the result by (model_id, series_id) in Python.
+
+        `ts` bounds are optional and only narrow the scan further — pass them when the
+        caller knows the relevant window (the backfill does, from the round's
+        [start_time, end_time] plus a margin); omit them to fetch the round exactly as the
+        unbounded per-pair query would have seen it.
 
         Args:
             round_id: Round ID
-            ts_lo: lower ts bound (inclusive) — a generous margin around the round's
-                [start_time, end_time], since forecasts can extend past end_time.
-            ts_hi: upper ts bound (inclusive)
+            ts_lo: optional lower ts bound (inclusive)
+            ts_hi: optional upper ts bound (inclusive)
 
         Returns:
             List of dicts with 'model_id', 'series_id', 'ts', 'predicted_value',
@@ -363,6 +406,12 @@ class ForecastRepository:
             select on `Forecast` — `probabilistic_values` (JSONB) deserializes to a
             dict automatically, no manual typing needed.
         """
+        conditions = [Forecast.round_id == round_id]
+        if ts_lo is not None:
+            conditions.append(Forecast.ts >= ts_lo)
+        if ts_hi is not None:
+            conditions.append(Forecast.ts <= ts_hi)
+
         result = await self.session.execute(
             select(
                 Forecast.model_id,
@@ -371,13 +420,7 @@ class ForecastRepository:
                 Forecast.predicted_value,
                 Forecast.probabilistic_values,
             )
-            .where(
-                and_(
-                    Forecast.round_id == round_id,
-                    Forecast.ts >= ts_lo,
-                    Forecast.ts <= ts_hi,
-                )
-            )
+            .where(and_(*conditions))
             .order_by(Forecast.model_id, Forecast.series_id, Forecast.ts)
         )
         return [

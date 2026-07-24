@@ -128,6 +128,31 @@ def test_repair_crossing_counts_and_sorts():
 
 # --- assemble_quantile_forecasts ---------------------------------------------
 
+def test_assemble_bare_key_forecasts_are_not_degenerate():
+    """backend-69: stored '0.1'…'0.9' keys must reach the scorer as a real distribution.
+
+    Before the fix these parsed to {} and fell into the degenerate branch below, so the
+    four statistical baselines were scored as if they had submitted no quantiles at all.
+    """
+    y_pred = np.array([10.0, 20.0])
+    bare = [
+        {f"0.{i}": float(10 + i) for i in range(1, 10)},
+        {f"0.{i}": float(20 + i) for i in range(1, 10)},
+    ]
+    canonical = [
+        {f"q_0.{i}": float(10 + i) for i in range(1, 10)},
+        {f"q_0.{i}": float(20 + i) for i in range(1, 10)},
+    ]
+    qf_bare, has_q, levels_count, crossing = assemble_quantile_forecasts(y_pred, bare)
+    assert has_q is True and levels_count == 9 and crossing == 0
+
+    # Byte-identical to the same forecast expressed in the canonical form.
+    qf_canonical, *_ = assemble_quantile_forecasts(y_pred, canonical)
+    assert set(qf_bare) == set(qf_canonical)
+    for level in qf_bare:
+        assert np.allclose(qf_bare[level], qf_canonical[level])
+
+
 def test_assemble_point_only_is_degenerate():
     y_pred = np.array([1.0, 2.0, 3.0])
     qf, has_q, levels_count, crossing = assemble_quantile_forecasts(y_pred, [None, {}, None])
