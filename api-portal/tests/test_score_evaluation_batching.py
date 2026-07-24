@@ -227,6 +227,83 @@ async def test_missing_context_point_is_an_error_row():
     assert "naive forecast baseline" in score["error_message"]
 
 
+# --- terminal state for rounds that can never finalize (backend-68) ----------
+#
+# Both branches below used to return final_evaluation=False unconditionally. The candidate
+# query selects any round holding a score row with final_evaluation=FALSE, so a single such
+# pair kept an otherwise fully-scored round re-evaluating every cycle, forever.
+
+@pytest.mark.asyncio
+async def test_no_overlap_stays_open_before_the_grace_period():
+    forecasts = [(1, 10, h, 10.0, None) for h in (1, 2, 3)]
+    repo = _FakeForecastRepo(forecasts, {10: [(20, 10.0)]})
+    round_repo = _FakeRoundRepo(
+        end_time=datetime.now(UTC) - timedelta(hours=2), series_max_ts={10: _ts(0)}
+    )
+    svc = _service(repo, round_repo, _FakeTimeSeriesRepo({10: 5.0}))
+
+    await svc.evaluate_challenge_scores(round_id=99)
+
+    # Ground truth may still arrive within the grace period — keep re-evaluating.
+    assert _by_pair(repo.inserted)[(1, 10)]["final_evaluation"] is False
+
+
+@pytest.mark.asyncio
+async def test_no_overlap_becomes_terminal_after_the_grace_period():
+    forecasts = [(1, 10, h, 10.0, None) for h in (1, 2, 3)]
+    repo = _FakeForecastRepo(forecasts, {10: [(20, 10.0)]})
+    round_repo = _FakeRoundRepo(
+        end_time=datetime.now(UTC) - timedelta(days=3), series_max_ts={10: _ts(0)}
+    )
+    svc = _service(repo, round_repo, _FakeTimeSeriesRepo({10: 5.0}))
+
+    await svc.evaluate_challenge_scores(round_id=99)
+
+    score = _by_pair(repo.inserted)[(1, 10)]
+    assert score["final_evaluation"] is True
+    assert score["evaluation_status"] == "no_overlap"
+    # Still excluded from the leaderboard: v_ranking_base filters on mase IS NOT NULL.
+    assert score["mase"] is None
+
+
+@pytest.mark.asyncio
+async def test_missing_context_becomes_terminal_after_the_grace_period():
+    forecasts = [(1, 10, h, 10.0, None) for h in (1, 2, 3)]
+    repo = _FakeForecastRepo(forecasts, {10: [(1, 10.0)]})
+    round_repo = _FakeRoundRepo(
+        end_time=datetime.now(UTC) - timedelta(days=3), series_max_ts={10: _ts(0)}
+    )
+    svc = _service(repo, round_repo, _FakeTimeSeriesRepo({}))
+
+    await svc.evaluate_challenge_scores(round_id=99)
+
+    score = _by_pair(repo.inserted)[(1, 10)]
+    assert score["final_evaluation"] is True
+    assert score["evaluation_status"] == "error"
+    assert score["mase"] is None
+
+
+@pytest.mark.asyncio
+async def test_scored_pairs_are_unaffected_by_a_dead_pair_in_the_same_round():
+    """The zombie case: one series has ground truth, the other never will. The scored
+    pair keeps its own status, and the dead one no longer holds the round open."""
+    forecasts = [(1, 10, 1, 10.0, None), (1, 11, 1, 10.0, None)]
+    repo = _FakeForecastRepo(forecasts, {10: [(1, 10.0)], 11: []})
+    round_repo = _FakeRoundRepo(
+        end_time=datetime.now(UTC) - timedelta(days=3),
+        series_max_ts={10: _ts(0), 11: _ts(0)},
+    )
+    svc = _service(repo, round_repo, _FakeTimeSeriesRepo({10: 5.0, 11: 5.0}))
+
+    await svc.evaluate_challenge_scores(round_id=99)
+
+    scores = _by_pair(repo.inserted)
+    assert scores[(1, 10)]["evaluation_status"] == "complete"
+    assert scores[(1, 11)]["evaluation_status"] == "no_overlap"
+    # Neither leaves the round in the candidate set.
+    assert all(s["final_evaluation"] is True for s in scores.values())
+
+
 @pytest.mark.asyncio
 async def test_pairs_without_forecasts_are_not_stored():
     """Model 1 forecast both series, model 2 only series 10 — the (2, 11) cross-product
