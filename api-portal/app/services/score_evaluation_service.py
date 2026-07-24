@@ -54,6 +54,22 @@ def timedelta_to_resolution(frequency: Optional[timedelta]) -> str:
     return resolution
 
 
+def evaluation_timeout_passed(round_end_time: Optional[datetime]) -> bool:
+    """Has the post-round grace period for ground truth to arrive elapsed?
+
+    A round without an end time never times out (nothing to measure the grace period
+    from), which is the pre-existing behaviour.
+    """
+    if round_end_time is None:
+        return False
+    end_time = round_end_time
+    if end_time.tzinfo is None:
+        end_time = end_time.replace(tzinfo=timezone.utc)
+    else:
+        end_time = end_time.astimezone(timezone.utc)
+    return datetime.now(timezone.utc) > end_time + EVALUATION_TIMEOUT
+
+
 # A forecast and an actual join when their minute-truncated timestamps are equal, so any
 # actual that can possibly match lies strictly within one minute of some forecast. Padding
 # the actuals fetch by exactly that much makes the ts-bounded batch query provably lossless
@@ -416,7 +432,11 @@ class ScoreEvaluationService:
                 "actual_count": 0,
                 "evaluated_count": 0,
                 "data_coverage": 0.0,
-                "final_evaluation": False,
+                # Terminal once the grace period is over (backend-68): without a context
+                # point there is no naive baseline and never will be, so re-checking every
+                # cycle forever gains nothing. See the `no_overlap` branch below for why
+                # this is invisible to the leaderboard.
+                "final_evaluation": evaluation_timeout_passed(round_end_time),
                 "evaluation_status": "error",
                 "error_message": "No context point available for naive forecast baseline",
             }
@@ -443,7 +463,19 @@ class ScoreEvaluationService:
                 "actual_count": actual_count,
                 "evaluated_count": 0,
                 "data_coverage": 0.0,
-                "final_evaluation": False,
+                # Terminal once the grace period is over (backend-68). This branch used to
+                # return False unconditionally, which is what kept months-old rounds in the
+                # evaluation candidate set forever: the candidate query selects any round
+                # holding a score row with final_evaluation = FALSE, so a handful of pairs
+                # with no ground truth kept whole rounds — otherwise fully scored — being
+                # re-evaluated every cycle.
+                #
+                # Flipping this changes nothing downstream: `mase` is NULL here and
+                # `forecasts.v_ranking_base` filters on `mase IS NOT NULL`, so these rows
+                # are already absent from the leaderboard and Elo either way. Ground truth
+                # that arrives after the grace period is not picked back up — a deliberate
+                # call (2026-07-24) to keep the mechanism simple.
+                "final_evaluation": evaluation_timeout_passed(round_end_time),
                 "evaluation_status": "no_overlap",
                 "error_message": "No overlapping timestamps between forecasts and actuals",
             }
@@ -460,16 +492,8 @@ class ScoreEvaluationService:
             evaluation_status = "pending"
         
         # Check if evaluation timeout has passed
-        now = datetime.now(timezone.utc)
-        timeout_passed = False
-        if round_end_time is not None:
-            end_time = round_end_time
-            if end_time.tzinfo is None:
-                end_time = end_time.replace(tzinfo=timezone.utc)
-            else:
-                end_time = end_time.astimezone(timezone.utc)
-            timeout_passed = now > end_time + EVALUATION_TIMEOUT
-        
+        timeout_passed = evaluation_timeout_passed(round_end_time)
+
         # Determine if final evaluation
         # Complete = 100% coverage -> final
         # Timeout passed with >= 95% coverage -> final (valid score)
