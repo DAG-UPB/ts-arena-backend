@@ -8,6 +8,7 @@ from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.cron import CronTrigger
 
+from app.scheduler.schedule_validation import describe_overlaps, find_overlaps
 from app.scheduler.jobs import (
     create_round_from_definition_job,
     prepare_round_context_data_job,
@@ -232,6 +233,17 @@ class ChallengeScheduler:
 
         schedules = data.get("schedules", [])
         self.logger.info(f"Found {len(schedules)} recurring schedules in {config_path}")
+
+        # Overlapping registration windows starve whichever challenge the model
+        # uploader reaches second. Report loudly, but keep loading — a bad config
+        # should not leave the platform with no rounds at all. The shipped config is
+        # kept overlap-free by test_schedule_validation.py.
+        try:
+            overlaps = find_overlaps(schedules)
+            for message in describe_overlaps(overlaps):
+                self.logger.error(f"Overlapping registration windows: {message}")
+        except Exception as e:
+            self.logger.exception(f"Could not validate registration windows: {e}")
 
         # Import here to avoid circular imports
         from app.database.connection import SessionLocal
