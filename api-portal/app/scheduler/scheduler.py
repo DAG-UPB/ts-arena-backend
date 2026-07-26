@@ -269,7 +269,10 @@ class ChallengeScheduler:
                     self.logger.error(f"Failed to sync definition for {schedule_id}")
                     continue
                 
-                # Upsert cron job
+                # conflict_policy=replace: the schedule persists in the SQLAlchemy data
+                # store across restarts and add_schedule() defaults to do_nothing, so
+                # without this an existing row keeps its original trigger forever — the
+                # cron in the YAML would be silently ignored on every redeploy.
                 await self.scheduler.add_schedule(
                     func_or_task_id=create_round_from_definition_job,
                     trigger=CronTrigger.from_crontab(cron_expression, timezone=timezone.utc),
@@ -277,6 +280,7 @@ class ChallengeScheduler:
                     args=[definition_id],
                     coalesce=CoalescePolicy.latest,
                     misfire_grace_time=600,
+                    conflict_policy=ConflictPolicy.replace,
                 )
                 self.logger.info(f"Upserted cron schedule '{schedule_id}' with cron '{cron_expression}'")
 
