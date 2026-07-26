@@ -15,6 +15,7 @@ from app.database.challenges.challenge_repository import (
 )
 from app.database.data_portal.time_series_repository import TimeSeriesRepository
 from app.database.forecasts.repository import ForecastRepository
+from app.scheduler.schedule_validation import parse_duration
 
 logger = logging.getLogger(__name__)
 
@@ -66,20 +67,9 @@ class ChallengeService:
         Also syncs the series assignments using unique_id from YAML.
         """
         params = schedule_config.get("params", {})
-        
-        def parse_duration(duration_str: str) -> timedelta:
-            parts = duration_str.split()
-            value = int(parts[0])
-            unit = parts[1].lower()
-            if "minute" in unit:
-                return timedelta(minutes=value)
-            if "hour" in unit:
-                return timedelta(hours=value)
-            if "day" in unit:
-                return timedelta(days=value)
-            raise ValueError(f"Unsupported duration unit: {unit}")
-        
+
         # Parse all duration fields
+        # (shared with the registration-window validator so the two cannot drift)
         frequency = parse_duration(params["frequency"])
         horizon = parse_duration(params["forecast_horizon"])
         # announce_lead removed
