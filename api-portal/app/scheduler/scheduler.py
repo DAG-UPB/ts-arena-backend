@@ -8,6 +8,7 @@ from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.cron import CronTrigger
 
+from app.scheduler.schedule_validation import describe_overlaps, find_overlaps
 from app.scheduler.jobs import (
     create_round_from_definition_job,
     prepare_round_context_data_job,
@@ -233,6 +234,17 @@ class ChallengeScheduler:
         schedules = data.get("schedules", [])
         self.logger.info(f"Found {len(schedules)} recurring schedules in {config_path}")
 
+        # Overlapping registration windows starve whichever challenge the model
+        # uploader reaches second. Report loudly, but keep loading — a bad config
+        # should not leave the platform with no rounds at all. The shipped config is
+        # kept overlap-free by test_schedule_validation.py.
+        try:
+            overlaps = find_overlaps(schedules)
+            for message in describe_overlaps(overlaps):
+                self.logger.error(f"Overlapping registration windows: {message}")
+        except Exception as e:
+            self.logger.exception(f"Could not validate registration windows: {e}")
+
         # Import here to avoid circular imports
         from app.database.connection import SessionLocal
         from app.services.challenge_service import ChallengeService
@@ -257,7 +269,10 @@ class ChallengeScheduler:
                     self.logger.error(f"Failed to sync definition for {schedule_id}")
                     continue
                 
-                # Upsert cron job
+                # conflict_policy=replace: the schedule persists in the SQLAlchemy data
+                # store across restarts and add_schedule() defaults to do_nothing, so
+                # without this an existing row keeps its original trigger forever — the
+                # cron in the YAML would be silently ignored on every redeploy.
                 await self.scheduler.add_schedule(
                     func_or_task_id=create_round_from_definition_job,
                     trigger=CronTrigger.from_crontab(cron_expression, timezone=timezone.utc),
@@ -265,6 +280,7 @@ class ChallengeScheduler:
                     args=[definition_id],
                     coalesce=CoalescePolicy.latest,
                     misfire_grace_time=600,
+                    conflict_policy=ConflictPolicy.replace,
                 )
                 self.logger.info(f"Upserted cron schedule '{schedule_id}' with cron '{cron_expression}'")
 

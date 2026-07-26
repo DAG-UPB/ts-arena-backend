@@ -167,7 +167,7 @@ schedules:
     registration_duration: 1 hour
     evaluation_delay: 0 hours
 - id: smard_generation_challenge_72h_1h
-  cron: 0 21 * * *
+  cron: 15 22 * * *
   run_on_startup: false
   params:
     description: 'SMARD Generation Challenge: All generation types, 72h horizon, 1h frequency'
@@ -209,7 +209,7 @@ schedules:
     registration_duration: 1 hour
     evaluation_delay: 0 hours
 - id: gridstatus_hub_zone_challenge_24h_15min
-  cron: 0 16 * * *
+  cron: 30 16 * * *
   run_on_startup: false
   params:
     description: 'Gridstatus Hub Zone Market Price Challenge: 24h horizon, 15-min frequency'
@@ -245,7 +245,7 @@ schedules:
     registration_duration: 15 minutes
     evaluation_delay: 0 hours
 - id: gridstatus_load_challenge_24h_15min
-  cron: 30 9 * * *
+  cron: 30 8 * * *
   run_on_startup: false
   params:
     description: 'Gridstatus Load Challenge: 24h horizon, 15-min frequency'
@@ -275,7 +275,7 @@ schedules:
     registration_duration: 15 minutes
     evaluation_delay: 0 hours
 - id: gridstatus_generation_challenge_24h_15min
-  cron: 0 20 * * *
+  cron: 30 20 * * *
   run_on_startup: false
   params:
     description: 'Gridstatus Generation Challenge: All generation types ISO, 24h horizon, 15-min
@@ -347,7 +347,7 @@ schedules:
     registration_duration: 1 hour
     evaluation_delay: 0 hours
 - id: gridstatus_load_challenge_72h_1h
-  cron: 0 10 * * *
+  cron: 15 10 * * *
   run_on_startup: false
   params:
     description: 'Gridstatus Load Challenge: 72h horizon, 1h frequency'
@@ -414,7 +414,7 @@ schedules:
     evaluation_delay: 0 hours
 
 - id: tankerkoenig_fuel_challenge_24h_15min
-  cron: 30 10 * * *
+  cron: 30 11 * * *
   run_on_startup: false
   params:
     description: 'Tankerkoenig Fuel Price Challenge: 24h horizon, 15-min frequency'
@@ -443,7 +443,7 @@ schedules:
     evaluation_delay: 0 hours
 
 - id: tankerkoenig_fuel_challenge_24h_1h
-  cron: 45 10 * * *
+  cron: 0 12 * * *
   run_on_startup: false
   params:
     description: 'Tankerkoenig Fuel Price Challenge: 24h horizon, 1h frequency'
