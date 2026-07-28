@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     # data-portal. The default 8 x 4 workers = 32 leaves ample headroom.
     DB_POOL_MIN: int = 1
     DB_POOL_MAX: int = 8
+    # How long a request waits for a free pooled connection before giving up.
+    DB_POOL_WAIT_SECONDS: float = 20.0
     
     class Config:
         env_file = ".env"

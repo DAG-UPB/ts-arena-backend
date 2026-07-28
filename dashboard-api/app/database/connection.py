@@ -21,6 +21,12 @@ class DatabaseConnection:
         self.database_url = self._normalize_psycopg2_url(settings.DATABASE_URL)
         self._pool = None
         self._lock = threading.Lock()
+        # psycopg2's pool raises "connection pool exhausted" rather than
+        # waiting for a free connection. Requests hold a connection across more
+        # than one threadpool task, so capping the threadpool does not bound the
+        # number of holders. This semaphore does, and makes surplus requests
+        # queue instead of failing.
+        self._slots = threading.BoundedSemaphore(settings.DB_POOL_MAX)
 
     def _get_pool(self):
         """Build the pool on first use.
@@ -59,6 +65,11 @@ class DatabaseConnection:
     def get_connection(self):
         """Context manager yielding a pooled DB connection."""
         pool = self._get_pool()
+        if not self._slots.acquire(timeout=settings.DB_POOL_WAIT_SECONDS):
+            raise TimeoutError(
+                f"No database connection available within "
+                f"{settings.DB_POOL_WAIT_SECONDS}s (pool size {settings.DB_POOL_MAX})"
+            )
         conn = None
         try:
             conn = pool.getconn()
@@ -73,11 +84,22 @@ class DatabaseConnection:
                 conn = None
             raise
         finally:
-            if conn is not None:
-                # Readers only, but an aborted transaction would otherwise be
-                # inherited by whoever gets this connection next.
-                conn.rollback()
-                pool.putconn(conn)
+            # The slot must be released even if returning the connection fails,
+            # otherwise the pool bleeds capacity and eventually deadlocks.
+            try:
+                if conn is not None:
+                    try:
+                        # Readers only, but an aborted transaction would
+                        # otherwise be inherited by the next user of this
+                        # connection.
+                        conn.rollback()
+                    except Exception:
+                        # Unusable connection — discard rather than reuse.
+                        pool.putconn(conn, close=True)
+                    else:
+                        pool.putconn(conn)
+            finally:
+                self._slots.release()
 
     def close(self):
         """Close every pooled connection (called on app shutdown)."""
