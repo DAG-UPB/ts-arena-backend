@@ -11,7 +11,7 @@ from app.schemas.challenge import ChallengeDefinitionSchema
 router = APIRouter(prefix="/api/v1/definitions", tags=["Definitions"])
 
 @router.get("", response_model=List[ChallengeDefinitionSchema])
-async def list_definitions(
+def list_definitions(
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
 ):
@@ -25,7 +25,7 @@ async def list_definitions(
     return repo.list_definitions()
 
 @router.get("/{definition_id}", response_model=ChallengeDefinitionSchema)
-async def get_definition(
+def get_definition(
     definition_id: int,
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
@@ -45,7 +45,7 @@ async def get_definition(
     return definition
 
 @router.get("/{definition_id}/rounds")
-async def list_definition_rounds(
+def list_definition_rounds(
     definition_id: int,
     status: Optional[str] = Query(
         None,
@@ -117,7 +117,7 @@ async def list_definition_rounds(
 
 
 @router.get("/{definition_id}/series", response_model=List)
-async def list_definition_series(
+def list_definition_series(
     definition_id: int,
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)

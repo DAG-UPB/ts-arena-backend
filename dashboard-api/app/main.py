@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.database.connection import db_connection
 from app.api.v1 import models, health, definitions, rounds
 
 app = FastAPI(
@@ -34,6 +35,7 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    db_connection.close()
     print(f"👋 {settings.API_TITLE} shutting down")
 
 

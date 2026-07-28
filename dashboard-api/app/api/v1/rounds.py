@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api/v1/rounds", tags=["Rounds"])
 
 
 @router.get("/metadata", response_model=ChallengeMetadataSchema)
-async def get_rounds_metadata(
+def get_rounds_metadata(
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
 ):
@@ -37,7 +37,7 @@ async def get_rounds_metadata(
 
 
 @router.get("", response_model=PaginatedResponse[ChallengeRoundSchema])
-async def list_rounds(
+def list_rounds(
     # Existing filters
     status: Optional[str] = Query(
         None, 
@@ -132,7 +132,7 @@ async def list_rounds(
 
 
 @router.get("/{round_id}", response_model=RoundMetaSchema)
-async def get_round_meta(
+def get_round_meta(
     round_id: int,
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
@@ -150,7 +150,7 @@ async def get_round_meta(
 
 
 @router.get("/{round_id}/series", response_model=List[ChallengeSeriesSchema])
-async def get_round_series(
+def get_round_series(
     round_id: int,
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
@@ -172,7 +172,7 @@ async def get_round_series(
 
 
 @router.get("/{round_id}/leaderboard", response_model=List)
-async def get_round_leaderboard(
+def get_round_leaderboard(
     round_id: int,
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
@@ -193,7 +193,7 @@ async def get_round_leaderboard(
 
 
 @router.get("/{round_id}/models/{model_id}", response_model=dict)
-async def get_model_round_performance(
+def get_model_round_performance(
     round_id: int,
     model_id: int,
     api_key: str = Depends(get_api_key),
@@ -212,7 +212,7 @@ async def get_model_round_performance(
 
 
 @router.get("/{round_id}/series/{series_id}/data", response_model=TimeSeriesDataSchema)
-async def get_series_data(
+def get_series_data(
     round_id: int,
     series_id: int,
     start_time: datetime = Query(..., description="Start timestamp"),
@@ -237,7 +237,7 @@ async def get_series_data(
     return {"data": data}
 
 @router.get("/{round_id}/models", response_model=List[RoundModelListSchema])
-async def list_models_for_round(
+def list_models_for_round(
     round_id: int,
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
@@ -254,7 +254,7 @@ async def list_models_for_round(
 
 
 @router.get("/{round_id}/series/{series_id}/forecasts", response_model=ForecastsResponseSchema)
-async def get_series_forecasts(
+def get_series_forecasts(
     round_id: int,
     series_id: int,
     api_key: str = Depends(get_api_key),
