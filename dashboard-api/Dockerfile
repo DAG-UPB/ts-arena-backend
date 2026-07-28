@@ -13,4 +13,7 @@ COPY app/ app/
 EXPOSE 8000
 
 # Run
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --workers: a single worker serialized all traffic behind whichever request
+# held the event loop. Each worker keeps its own DB pool, so total connections
+# are workers * DB_POOL_MAX.
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]

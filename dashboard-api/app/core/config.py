@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     API_TITLE: str = "TS-Arena Dashboard API"
     API_VERSION: str = "1.0.0"
+
+    # Database connection pool, per uvicorn worker.
+    # Budget: DB_POOL_MAX * UVICORN_WORKERS connections against the server's
+    # max_connections (100 in prod), which is shared with api-portal and
+    # data-portal. The default 8 x 4 workers = 32 leaves ample headroom.
+    DB_POOL_MIN: int = 1
+    DB_POOL_MAX: int = 8
     
     class Config:
         env_file = ".env"
