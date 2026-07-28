@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/v1", tags=["Models"])
 
 
 @router.get("/models/rankings")
-async def get_filtered_rankings(
+def get_filtered_rankings(
     definition_id: Optional[int] = Query(
         None,
         description="Filter by challenge definition ID (scope_type='definition')",
@@ -33,6 +33,17 @@ async def get_filtered_rankings(
         None,
         description="Filter by frequency::horizon combination (scope_type='frequency_horizon'), e.g., '00:15:00::1 day'",
         example="00:15:00::1 day"
+    ),
+    scope_type: Optional[str] = Query(
+        None,
+        description=(
+            "Return every scope of this type in one response: 'definition' or "
+            "'frequency_horizon'. Use instead of issuing one request per scope. "
+            "`limit` then applies per scope. Each row carries scope_id / definition_id "
+            "so results can be grouped. Cannot be combined with definition_id or "
+            "frequency_horizon."
+        ),
+        example="definition"
     ),
     calculation_date: Optional[str] = Query(
         None,
@@ -149,9 +160,24 @@ async def get_filtered_rankings(
             status_code=400,
             detail="Only one scope filter can be applied at a time. Provide either 'definition_id' OR 'frequency_horizon', not both."
         )
-    
+
+    if scope_type is not None and (definition_id is not None or frequency_horizon is not None):
+        raise HTTPException(
+            status_code=400,
+            detail="'scope_type' returns all scopes of a type and cannot be combined with 'definition_id' or 'frequency_horizon'."
+        )
+
+    if scope_type is not None and scope_type not in ("definition", "frequency_horizon"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid scope_type. Use 'definition' or 'frequency_horizon'."
+        )
+
     # Determine scope_type and scope_id
-    if definition_id is not None:
+    if scope_type is not None:
+        # Bulk mode: every scope of this type, limit applied per scope.
+        scope_id = None
+    elif definition_id is not None:
         scope_type = "definition"
         scope_id = str(definition_id)
     elif frequency_horizon is not None:
@@ -160,7 +186,7 @@ async def get_filtered_rankings(
     else:
         scope_type = "global"
         scope_id = None
-    
+
     # Parse calculation_date or use None for latest
     calc_date = None
     if calculation_date:
@@ -194,7 +220,7 @@ async def get_filtered_rankings(
 
 
 @router.get("/models/ranking-filters")
-async def get_ranking_filters(
+def get_ranking_filters(
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
 ):
@@ -232,7 +258,7 @@ async def get_ranking_filters(
 
 
 @router.get("/models", response_model=List[ModelListItemSchema])
-async def list_all_models(
+def list_all_models(
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection),
 ):
@@ -248,7 +274,7 @@ async def list_all_models(
 
 
 @router.get("/models/{model_id}", response_model=ModelDetailSchema)
-async def get_model_details(
+def get_model_details(
     model_id: int,
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
@@ -266,7 +292,7 @@ async def get_model_details(
 
 
 @router.get("/models/{model_id}/rankings")
-async def get_model_rankings(
+def get_model_rankings(
     model_id: int,
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
@@ -337,7 +363,7 @@ async def get_model_rankings(
     "/models/{model_id}/definitions/{definition_id}/series/{series_id}/forecasts",
     response_model=ModelSeriesForecastsAcrossRoundsSchema
 )
-async def get_model_series_forecasts_across_rounds(
+def get_model_series_forecasts_across_rounds(
     model_id: int,
     definition_id: int,
     series_id: int,
@@ -470,7 +496,7 @@ async def get_model_series_forecasts_across_rounds(
     "/models/{model_id}/active-rounds",
     response_model=ModelActiveRoundsResponseSchema
 )
-async def get_model_active_rounds(
+def get_model_active_rounds(
     model_id: int,
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
@@ -536,7 +562,7 @@ async def get_model_active_rounds(
     "/models/{model_id}/series-by-definition",
     response_model=ModelSeriesByDefinitionSchema
 )
-async def get_model_series_by_definition(
+def get_model_series_by_definition(
     model_id: int,
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)

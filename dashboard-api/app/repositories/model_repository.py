@@ -164,6 +164,12 @@ class ModelRepository:
         Returns:
             List of dicts with ranking information from the view
         """
+        # Bulk mode: a scope_type with no scope_id returns every scope of that
+        # type in one round trip. The limit then has to apply per scope rather
+        # than to the whole result, so the rows are ranked per scope and cut
+        # afterwards.
+        bulk = scope_type not in (None, "global") and not scope_id
+
         # Build the base query
         query = """
             SELECT
@@ -184,7 +190,9 @@ class ModelRepository:
                 avg_sql,
                 sql_std,
                 evaluated_count,
-                calculation_date
+                calculation_date,
+                scope_id,
+                definition_id
             FROM forecasts.v_monthly_and_latest_rankings
             WHERE 1=1
         """
@@ -215,24 +223,41 @@ class ModelRepository:
         # For 'global', no additional scope_id filter needed
         
         # Order by rank position (and scope for multi-scope results)
-        if scope_type is not None:
-            query += " ORDER BY rank_position"
+        if bulk:
+            # Rank within each scope so `limit` means "per scope", not "in
+            # total" — otherwise adding a challenge would silently truncate the
+            # rankings of the ones after it.
+            query = f"""
+                SELECT * FROM (
+                    SELECT sub.*, ROW_NUMBER() OVER (
+                        PARTITION BY sub.scope_id ORDER BY sub.rank_position
+                    ) AS _rn
+                    FROM ({query}) AS sub
+                ) AS ranked
+                WHERE _rn <= %s
+                ORDER BY scope_id, rank_position;
+            """
+            params.append(limit)
         else:
-            query += " ORDER BY scope_type, scope_id, rank_position"
-        
-        # Apply limit
-        query += " LIMIT %s;"
-        params.append(limit)
-        
+            if scope_type is not None:
+                query += " ORDER BY rank_position"
+            else:
+                query += " ORDER BY scope_type, scope_id, rank_position"
+
+            # Apply limit
+            query += " LIMIT %s;"
+            params.append(limit)
+
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(query, tuple(params))
             rows = [dict(r) for r in cur.fetchall()]
-            
+
             # Clean up float values for JSON compatibility
             for row in rows:
+                row.pop("_rn", None)  # internal per-scope counter, not part of the response
                 for key, value in row.items():
                     row[key] = sanitize_float(value)
-            
+
             return rows
     
     def _interval_to_iso8601(self, interval_value) -> str:

@@ -8,7 +8,7 @@ router = APIRouter(tags=["Health"])
 
 
 @router.get("/health", response_model=HealthSchema)
-async def health_check():
+def health_check():
     """Health Check Endpoint (no API-Key required)."""
     return {
         "status": "healthy",
@@ -18,7 +18,7 @@ async def health_check():
 
 
 @router.get("/api/v1/info", response_model=APIInfoSchema)
-async def api_info():
+def api_info():
     """API Information (no API-Key required)."""
     return {
         "title": settings.API_TITLE,
