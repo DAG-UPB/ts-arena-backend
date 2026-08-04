@@ -5,6 +5,9 @@ import psycopg2
 import psycopg2.extras
 import psycopg2.pool
 from contextlib import contextmanager
+# Starlette's base class, not `fastapi.HTTPException`: the latter subclasses it, so
+# catching the base covers handlers raising either one.
+from starlette.exceptions import HTTPException
 from app.core.config import settings
 
 
@@ -74,6 +77,14 @@ class DatabaseConnection:
         try:
             conn = pool.getconn()
             yield conn
+        except HTTPException:
+            # Not a database fault. A handler raising 404/401 is ordinary control
+            # flow and leaves the connection clean, so it must not be logged as a
+            # connection failure nor closed — `finally` rolls it back and returns
+            # it to the pool like any other request. Closing here meant every 404
+            # cost a fresh TCP handshake plus auth on the next request, which is
+            # exactly the churn the pool exists to avoid.
+            raise
         except Exception as e:
             print(f"ERROR: Database connection failed: {e}", file=sys.stderr)
             # A connection that errored may be left mid-transaction; drop it
