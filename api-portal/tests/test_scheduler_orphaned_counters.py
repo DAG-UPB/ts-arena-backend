@@ -29,6 +29,11 @@ from app.scheduler.scheduler import (
 DB_URL = "postgresql+asyncpg://test:test@localhost:5432/test"
 
 
+async def _no_sleep(_seconds):
+    """Skip the startup check's settle delay so the tests run instantly."""
+    return None
+
+
 @pytest.fixture
 def sched() -> ChallengeScheduler:
     """A scheduler wired to a URL that is never connected to."""
@@ -137,6 +142,66 @@ def test_failed_clear_is_retried_from_scratch(sched, repair_calls):
 
     _check(sched)
     assert repair_calls["cleared"] == [("elo_job", 1), ("elo_job", 1)]
+
+
+def test_elo_task_id_matches_what_apscheduler_stores():
+    """The startup-check guard looks the ELO task up by id, so the id must be exact.
+
+    APScheduler's ``callable_to_ref`` stores ``f"{__module__}:{__qualname__}"``, and
+    ``job_error_handler`` uses ``functools.wraps``, so the decorator does not change it.
+    This literal is the value observed in ``public.tasks`` on prod; if the job is renamed
+    or moved, the guard silently stops matching and two ELO runs can overlap again.
+    """
+    from app.scheduler.jobs import periodic_elo_ranking_calculation_job as job
+
+    assert (
+        f"{job.__module__}:{job.__qualname__}"
+        == "app.scheduler.jobs:periodic_elo_ranking_calculation_job"
+    )
+
+
+def test_startup_elo_check_skips_when_scheduler_has_the_job(sched, monkeypatch):
+    """The startup check must stand down when a scheduled ELO fire is queued or running.
+
+    It calls the ELO service directly, so ``max_running_jobs`` does not serialise it
+    against the scheduled job: without this guard both run at once, on one event loop,
+    writing the same rows.
+    """
+    ran = []
+
+    async def fake_job():
+        ran.append(True)
+
+    async def fake_has_job(database_url, task_id, logger=None):
+        assert task_id == "app.scheduler.jobs:periodic_elo_ranking_calculation_job"
+        return True
+
+    monkeypatch.setattr(scheduler_module, "startup_elo_check_job", fake_job)
+    monkeypatch.setattr(scheduler_module, "has_job_for_task", fake_has_job)
+    monkeypatch.setattr(scheduler_module.asyncio, "sleep", _no_sleep)
+
+    asyncio.run(sched._delayed_startup_elo_check())
+
+    assert ran == []
+
+
+def test_startup_elo_check_runs_when_scheduler_has_nothing(sched, monkeypatch):
+    """With no scheduled fire pending, the startup check still does its job."""
+    ran = []
+
+    async def fake_job():
+        ran.append(True)
+
+    async def fake_has_job(database_url, task_id, logger=None):
+        return False
+
+    monkeypatch.setattr(scheduler_module, "startup_elo_check_job", fake_job)
+    monkeypatch.setattr(scheduler_module, "has_job_for_task", fake_has_job)
+    monkeypatch.setattr(scheduler_module.asyncio, "sleep", _no_sleep)
+
+    asyncio.run(sched._delayed_startup_elo_check())
+
+    assert ran == [True]
 
 
 def test_healthy_scheduler_never_writes(sched, repair_calls):

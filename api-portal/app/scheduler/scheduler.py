@@ -12,6 +12,7 @@ from app.scheduler.schedule_validation import describe_overlaps, find_overlaps
 from app.scheduler.running_jobs_repair import (
     clear_orphaned_counter,
     find_orphaned_counters,
+    has_job_for_task,
     reconcile_running_job_counters,
 )
 from app.scheduler.jobs import (
@@ -174,6 +175,21 @@ class ChallengeScheduler:
         try:
             # Small delay to let the application fully start
             await asyncio.sleep(5)
+
+            # This check runs the ELO service directly, not as a scheduler task, so
+            # max_running_jobs does not serialise it against the scheduled ELO job. If a
+            # fire is already queued or running, starting here would put two full ~2 h
+            # runs on the same event loop, writing the same rows (backend-75). Let the
+            # scheduler have it: the schedule's misfire_grace_time already covers the
+            # catch-up case this check exists for.
+            elo_task_id = f"{periodic_elo_ranking_calculation_job.__module__}:{periodic_elo_ranking_calculation_job.__qualname__}"
+            if await has_job_for_task(self._database_url, elo_task_id, self.logger):
+                self.logger.info(
+                    "Skipping startup ELO check: the scheduled ELO job already has a "
+                    "queued or running fire, which will produce today's rankings."
+                )
+                return
+
             self.logger.info("Starting background ELO check...")
             await startup_elo_check_job()
         except Exception as e:

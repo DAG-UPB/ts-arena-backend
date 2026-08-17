@@ -75,6 +75,10 @@ _RECONCILE = text(
     """
 )
 
+_HAS_JOB_FOR_TASK = text(
+    "SELECT EXISTS (SELECT 1 FROM jobs WHERE task_id = :task_id)"
+)
+
 _FIND_ORPHANED = text(
     """
     SELECT t.id, t.running_jobs
@@ -153,6 +157,31 @@ async def reconcile_running_job_counters(
     if not corrections:
         log.debug("running_jobs counters consistent; no reconciliation needed.")
     return corrections
+
+
+async def has_job_for_task(
+    database_url: str,
+    task_id: str,
+    logger: Optional[logging.Logger] = None,
+) -> bool:
+    """True if ``task_id`` has any job row: queued, or acquired and running.
+
+    Used to keep the startup ELO check from starting a second, parallel run of work the
+    scheduler is already about to do. Returns True on failure, so an unreadable database
+    means "assume the scheduler has it" rather than launching a duplicate heavy run.
+    """
+    log = logger or logging.getLogger("challenge-scheduler")
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.begin() as conn:
+            if not await _tables_present(conn):
+                return False
+            return bool((await conn.execute(_HAS_JOB_FOR_TASK, {"task_id": task_id})).scalar())
+    except Exception as exc:
+        log.warning(f"Could not check for pending jobs of '{task_id}': {exc}")
+        return True
+    finally:
+        await engine.dispose()
 
 
 async def find_orphaned_counters(
