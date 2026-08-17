@@ -67,11 +67,14 @@ class FingridMultiApiClient:
                 "sortOrder": "asc"
             }
             
-            logger.info(
+            # Per-page bookkeeping, on a job that runs every 180s. The line an operator
+            # reads is the total after the loop; this is DEBUG detail for when a page
+            # actually misbehaves (ts-arena-15).
+            logger.debug(
                 f"Fingrid Multi: Fetching page {page} for {len(dataset_ids)} datasets "
                 f"({datasets_param[:50]}{'...' if len(datasets_param) > 50 else ''})"
             )
-            logger.info(
+            logger.debug(
                 f"Fingrid Multi: API params - startTime={params['startTime']}, "
                 f"endTime={params['endTime']}, pageSize={params['pageSize']}"
             )
@@ -107,13 +110,16 @@ class FingridMultiApiClient:
             
             # Check pagination
             pagination = data_json.get("pagination", {})
-            logger.info(
+            logger.debug(
                 f"Fingrid Multi: Page {page} pagination info - "
                 f"total={pagination.get('total')}, lastPage={pagination.get('lastPage')}, "
                 f"nextPage={pagination.get('nextPage')}, currentPage={pagination.get('currentPage')}"
             )
             if pagination.get("nextPage") is None:
-                logger.warning(f"Fingrid Multi: Stopping pagination at page {page} - no nextPage")
+                # No nextPage is how a complete fetch *ends*. Logging the successful
+                # termination of a 180s job at WARNING trained the eye to ignore the one
+                # level that should never be routine (ts-arena-15).
+                logger.debug(f"Fingrid Multi: Stopping pagination at page {page} - no nextPage")
                 break
             page += 1
 

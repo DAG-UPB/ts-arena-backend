@@ -45,6 +45,7 @@ request_groups:
 
 import asyncio
 import logging
+import os
 from typing import Dict, Any, List, Optional
 import pandas as pd
 import gridstatus
@@ -66,8 +67,55 @@ def _https_urlopen(url, *args, **kwargs):
 urllib.request.urlopen = _https_urlopen
 
 from src.plugins.base_plugin import MultiSeriesPlugin, TimeSeriesDefinition
+from src.logging_setup import resolve_level
 
 logger = logging.getLogger(__name__)
+
+# How many empty series to name in the per-run summary line before summarising the rest
+# as a count -- enough to diagnose a broken extract_filter, bounded so a wholly failed
+# fetch of a 50-series group cannot blow up the line.
+MAX_EMPTY_SERIES_SAMPLE = 5
+
+
+def _requested_gridstatus_level() -> int:
+    """The level `LOG_LEVELS` asks for on the `gridstatus` logger, else WARNING.
+
+    `configure_logging` applies `LOG_LEVELS` at process start, but importing `gridstatus`
+    happens later and the library overwrites its own logger's level with DEBUG on the way
+    in -- so by the time this module runs, whatever the operator asked for is already
+    gone. Re-reading the env var here is what makes `LOG_LEVELS=gridstatus=INFO` mean
+    INFO rather than the library's DEBUG.
+    """
+    for pair in os.getenv("LOG_LEVELS", "").split(","):
+        name, sep, level = pair.strip().partition("=")
+        if sep and name.strip() == "gridstatus":
+            return resolve_level(level, logging.WARNING)
+    return logging.WARNING
+
+
+def _quiet_gridstatus_library() -> None:
+    """Stop the `gridstatus` package logging its own HTTP traffic on our stream.
+
+    On import the library puts a DEBUG StreamHandler on its own `gridstatus` logger *and*
+    leaves propagation on, so every `Fetching URL: ...` and `Parsing file: ...` was
+    written twice -- once bare through the library's handler, once again through our root
+    handler. Together that was ~5% of data-portal's whole log volume, half of it in a
+    second format that broke the single timestamped stream backend-76 established
+    (ts-arena-15).
+
+    Dropping the library's handler removes the duplicate and the format break; WARNING
+    keeps anything it has to say about a failing ISO. `LOG_LEVELS=gridstatus=INFO`
+    restores the traffic log, on our stream and once, when that is what you are actually
+    debugging.
+    """
+    library_logger = logging.getLogger("gridstatus")
+    for handler in library_logger.handlers[:]:
+        library_logger.removeHandler(handler)
+    library_logger.propagate = True
+    library_logger.setLevel(_requested_gridstatus_level())
+
+
+_quiet_gridstatus_library()
 
 
 class GridStatusApiClient:
@@ -329,7 +377,12 @@ class GridStatusMultiSeriesPlugin(MultiSeriesPlugin):
             except Exception as e:
                 logger.warning(f"Failed to detect timezone for {self._group_id}: {e}")
             
-            # Extract data for each series based on extract_filter
+            # Extract data for each series based on extract_filter.
+            # Counters feed the single summary line emitted after the loop -- see below.
+            extracted_series = 0
+            total_points = 0
+            empty_series: List[str] = []
+
             for series_def in self._series_definitions:
                 value_column = series_def.extract_filter.get("value_column")
                 filter_column = series_def.extract_filter.get("filter_column")
@@ -377,10 +430,34 @@ class GridStatusMultiSeriesPlugin(MultiSeriesPlugin):
                         })
                 
                 result[series_def.unique_id] = data_points
-                logger.info(
+                extracted_series += 1
+                total_points += len(data_points)
+                if not data_points:
+                    empty_series.append(series_def.unique_id)
+                logger.debug(
                     f"Extracted {len(data_points)} points for {series_def.unique_id}"
                 )
-            
+
+            # One counted line per group run, not one per series. This loop runs over 50
+            # series every 180s for gridstatus-nyiso-zone-prices alone, which made it ~9%
+            # of the whole container's log volume while saying nothing an operator reads
+            # per series (ts-arena-15). Same aggregation shape as the per-upload warning
+            # in backend-69: a count, plus a bounded sample of the interesting subset.
+            # The `extracted/total` ratio is what surfaces series skipped by the error
+            # branches above, and the per-series detail survives at DEBUG.
+            empty_note = ""
+            if empty_series:
+                sample = empty_series[:MAX_EMPTY_SERIES_SAMPLE]
+                more = len(empty_series) - len(sample)
+                empty_note = (
+                    f"; {len(empty_series)} returned no points: {sample}"
+                    + (f" (+{more} more)" if more > 0 else "")
+                )
+            logger.info(
+                f"[{self._group_id}] Extracted {total_points} points across "
+                f"{extracted_series}/{len(self._series_definitions)} series{empty_note}"
+            )
+
             return result
             
         except Exception as e:

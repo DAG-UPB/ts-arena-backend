@@ -11,6 +11,18 @@ logger = logging.getLogger(__name__)
 QUALITY_ORIGINAL = 0  # Original data from source
 QUALITY_IMPUTED = 1   # Imputed/interpolated value
 
+# Configurations already announced by this process.
+#
+# The scheduler builds a fresh ImputationService inside every job body, so announcing the
+# config from __init__ produced 156 byte-identical INFO lines per full scheduler cycle --
+# roughly 8% of the container's entire log volume, all of it repeating a process-wide
+# constant (ts-arena-15). The config is still worth exactly one line, so keep it: report
+# each *distinct* configuration once instead of every construction. Keyed rather than a
+# plain flag so that a genuinely different config (explicit constructor args) is not
+# silently swallowed by an earlier default one; the key space is the handful of
+# (enabled, max_gap_factor, method) triples the service is ever built with.
+_announced_configs: set = set()
+
 
 class ImputationService:
     """
@@ -42,11 +54,19 @@ class ImputationService:
         self.enabled = enabled if enabled is not None else Config.ENABLE_IMPUTATION
         self.max_gap_factor = max_gap_factor if max_gap_factor is not None else Config.MAX_GAP_FACTOR
         self.method = method
-        
-        logger.info(
-            f"ImputationService initialized: enabled={self.enabled}, "
-            f"max_gap_factor={self.max_gap_factor}, method={self.method}"
-        )
+
+        config_key = (self.enabled, self.max_gap_factor, self.method)
+        if config_key not in _announced_configs:
+            _announced_configs.add(config_key)
+            logger.info(
+                f"ImputationService initialized: enabled={self.enabled}, "
+                f"max_gap_factor={self.max_gap_factor}, method={self.method}"
+            )
+        else:
+            logger.debug(
+                f"ImputationService initialized: enabled={self.enabled}, "
+                f"max_gap_factor={self.max_gap_factor}, method={self.method}"
+            )
     
     def impute_gaps(
         self,
