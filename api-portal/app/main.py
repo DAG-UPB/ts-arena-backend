@@ -5,6 +5,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.openapi.docs import get_swagger_ui_html
 from app.api.v1 import challenges
 from app.core.config import Config
+from app.core.logging_setup import configure_logging, install_access_log_filter
 from app.api.v1 import models as models_router
 from app.api.v1 import users
 from app.api.v1 import organizations
@@ -22,14 +23,11 @@ from sqlalchemy import text
 from app.database.connection import engine
 import asyncio
 
+# Configure the root logger before anything else logs. This used to configure only the
+# logger named "api-portal", which left every other logger -- including the one the
+# scheduler jobs use -- with no handler and a WARNING threshold. See logging_setup.
+configure_logging("api-portal")
 logger = logging.getLogger("api-portal")
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter(
-        "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-    ))
-    logger.addHandler(handler)
-logger.propagate = False
 
 async def wait_for_db(logger, max_retries=10, delay=3.0):
     for attempt in range(1, max_retries + 1):
@@ -231,7 +229,6 @@ async def apply_metadata_seed(logger):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.setLevel(getattr(logging, Config.LOG_LEVEL, logging.INFO))
     app.state.logger = logger
     
     # Wait for database to be ready before starting other components
@@ -383,3 +380,7 @@ app.include_router(challenges.router, prefix="/api/v1", dependencies=[Depends(re
 app.include_router(models_router.router, prefix="/api/v1", dependencies=[Depends(require_auth)])
 
 app.include_router(forecasts.router, prefix="/api/v1")
+
+# Must come after every include_router above: the filter reads the served surface off
+# app.routes so it cannot go stale when a router is added.
+install_access_log_filter(app)

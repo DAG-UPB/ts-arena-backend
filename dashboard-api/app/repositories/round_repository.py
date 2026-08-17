@@ -1,8 +1,10 @@
-import sys
+import logging
 import math
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import psycopg2.extras
+
+logger = logging.getLogger(__name__)
 
 
 class RoundRepository:
@@ -175,7 +177,7 @@ class RoundRepository:
         """
         table_name = self.RESOLUTION_TABLE_MAP.get(resolution)
         if not table_name:
-            print(f"WARNING: Unknown resolution '{resolution}' in {context}, defaulting to raw.", file=sys.stderr)
+            logger.warning("Unknown resolution %r in %s, defaulting to raw.", resolution, context)
             table_name = self.RESOLUTION_TABLE_MAP["raw"]
         return table_name
 
@@ -333,7 +335,11 @@ class RoundRepository:
             if has_final_evaluation:
                 return self._get_leaderboard_from_scores(round_id)
             else:
-                print(f"Round not yet completely evaluated: {round_id}. Calculating mase for leaderboard on-the-fly from forecasts.")
+                logger.info(
+                    "Round not yet completely evaluated: %s. Calculating mase for leaderboard "
+                    "on-the-fly from forecasts.",
+                    round_id,
+                )
                 return self._calculate_leaderboard_on_the_fly(round_id)
 
     def _get_leaderboard_from_scores(self, round_id: int) -> List[Dict[str, Any]]:
@@ -499,7 +505,11 @@ class RoundRepository:
                 )
                 
                 if not valid_mase_exists:
-                    print(f"WARNING: Series {series_id} has no valid MASE values (all None or Infinity). Skipping series in leaderboard.", file=sys.stderr)
+                    logger.warning(
+                        "Series %s has no valid MASE values (all None or Infinity). "
+                        "Skipping series in leaderboard.",
+                        series_id,
+                    )
                     continue
                 
                 # Add rank per series
