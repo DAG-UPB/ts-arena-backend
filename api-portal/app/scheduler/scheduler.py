@@ -9,6 +9,12 @@ from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.cron import CronTrigger
 
 from app.scheduler.schedule_validation import describe_overlaps, find_overlaps
+from app.scheduler.running_jobs_repair import (
+    clear_orphaned_counter,
+    find_orphaned_counters,
+    has_job_for_task,
+    reconcile_running_job_counters,
+)
 from app.scheduler.jobs import (
     create_round_from_definition_job,
     prepare_round_context_data_job,
@@ -18,6 +24,15 @@ from app.scheduler.jobs import (
 )
 import yaml
 from pathlib import Path
+
+# How often the monitor re-checks for an orphaned running_jobs counter, and how many
+# consecutive checks must agree before it is cleared. An orphaned counter is a permanent
+# condition, so there is no need to check often; requiring two agreeing observations
+# keeps a momentary read against a busy scheduler from ever triggering a repair.
+# Worst case a mid-life leak is repaired ~2 intervals after it happens (backend-75).
+ORPHANED_COUNTER_CHECK_INTERVAL_SECONDS = 300.0
+ORPHANED_COUNTER_CONFIRMATIONS = 2
+
 
 class ChallengeScheduler:
     """Wraps APScheduler v4 AsyncScheduler and challenge job scheduling with auto-recovery.
@@ -47,6 +62,9 @@ class ChallengeScheduler:
         self._restart_delay = restart_delay
         self._restart_count = 0
         self._config_path: Optional[str] = None
+        # {task_id: (observed_running_jobs, consecutive_observations)} — see
+        # _check_for_orphaned_counters.
+        self._orphan_watch: dict[str, tuple[int, int]] = {}
 
     def _create_scheduler(self) -> AsyncScheduler:
         """Create a new AsyncScheduler instance with the configured data store."""
@@ -59,6 +77,13 @@ class ChallengeScheduler:
             try:
                 self._ready_event.clear()
                 self._shutdown_event.clear()
+
+                # Repair any running_jobs counter left orphaned by a previous run that
+                # died between acquiring and releasing a job. Must happen before the
+                # runner starts acquiring, so the recompute cannot race an acquisition.
+                # A counter left standing here permanently starves its task of execution
+                # slots and survives restarts untouched (backend-75).
+                await reconcile_running_job_counters(self._database_url, self.logger)
 
                 # Spawn the runner task. It owns the scheduler's async context
                 # for its full lifetime; nobody else may enter/exit it.
@@ -150,6 +175,21 @@ class ChallengeScheduler:
         try:
             # Small delay to let the application fully start
             await asyncio.sleep(5)
+
+            # This check runs the ELO service directly, not as a scheduler task, so
+            # max_running_jobs does not serialise it against the scheduled ELO job. If a
+            # fire is already queued or running, starting here would put two full ~2 h
+            # runs on the same event loop, writing the same rows (backend-75). Let the
+            # scheduler have it: the schedule's misfire_grace_time already covers the
+            # catch-up case this check exists for.
+            elo_task_id = f"{periodic_elo_ranking_calculation_job.__module__}:{periodic_elo_ranking_calculation_job.__qualname__}"
+            if await has_job_for_task(self._database_url, elo_task_id, self.logger):
+                self.logger.info(
+                    "Skipping startup ELO check: the scheduled ELO job already has a "
+                    "queued or running fire, which will produce today's rankings."
+                )
+                return
+
             self.logger.info("Starting background ELO check...")
             await startup_elo_check_job()
         except Exception as e:
@@ -425,15 +465,28 @@ class ChallengeScheduler:
         completed unexpectedly, rather than just checking scheduler.state.
         """
         self.logger.info("Scheduler monitoring started.")
-        
+
+        loop = asyncio.get_running_loop()
+        next_orphan_check = loop.time() + ORPHANED_COUNTER_CHECK_INTERVAL_SECONDS
+
         while not self._shutdown_event.is_set():
             try:
                 # Wait a bit before checking
                 await asyncio.sleep(10)
-                
+
                 if self._shutdown_event.is_set():
                     break
-                
+
+                # A slot counter can also be orphaned mid-life, with the process staying
+                # up — that is how the ELO job stayed dead for ten days before anyone
+                # noticed. Waiting for the next restart to repair it is not good enough
+                # (backend-75).
+                if self._started and loop.time() >= next_orphan_check:
+                    next_orphan_check = (
+                        loop.time() + ORPHANED_COUNTER_CHECK_INTERVAL_SECONDS
+                    )
+                    await self._check_for_orphaned_counters()
+
                 # Check if scheduler task has crashed (completed unexpectedly)
                 if self._started and self._scheduler_task:
                     if self._scheduler_task.done():
@@ -465,7 +518,43 @@ class ChallengeScheduler:
                 await asyncio.sleep(5)
         
         self.logger.info("Scheduler monitoring stopped.")
-    
+
+    async def _check_for_orphaned_counters(self) -> None:
+        """Clear a ``running_jobs`` counter that is standing with no acquired job.
+
+        Acquisition writes ``jobs.acquired_by`` and increments ``tasks.running_jobs`` in
+        one transaction, so a reader can never legitimately see the counter without the
+        job row. The anomaly is nevertheless required on
+        ``ORPHANED_COUNTER_CONFIRMATIONS`` consecutive checks, at the same counter value,
+        before anything is written — and the write itself is a compare-and-swap, so a
+        concurrent acquisition turns it into a no-op instead of a lost update.
+        """
+        orphaned = await find_orphaned_counters(self._database_url, self.logger)
+
+        # Drop watch entries whose anomaly has gone away or changed value.
+        self._orphan_watch = {
+            task_id: (value, count)
+            for task_id, (value, count) in self._orphan_watch.items()
+            if orphaned.get(task_id) == value
+        }
+
+        for task_id, value in orphaned.items():
+            _, seen = self._orphan_watch.get(task_id, (value, 0))
+            seen += 1
+            if seen < ORPHANED_COUNTER_CONFIRMATIONS:
+                self._orphan_watch[task_id] = (value, seen)
+                self.logger.warning(
+                    f"Task '{task_id}' reports running_jobs={value} with no acquired "
+                    f"job ({seen}/{ORPHANED_COUNTER_CONFIRMATIONS} observations). "
+                    "Its fires cannot be executed while this holds."
+                )
+                continue
+
+            self._orphan_watch.pop(task_id, None)
+            await clear_orphaned_counter(
+                self._database_url, task_id, value, self.logger
+            )
+
     async def _attempt_restart(self) -> None:
         """Attempts to restart the scheduler after a crash.
 
@@ -496,6 +585,11 @@ class ChallengeScheduler:
 
             # Wait before restarting
             await asyncio.sleep(self._restart_delay)
+
+            # Same reason as in start(): the crash may have discarded a scheduler
+            # instance mid-job, leaking that task's slot counter. The dead runner is
+            # already stopped, so nothing is acquiring and the recompute is safe.
+            await reconcile_running_job_counters(self._database_url, self.logger)
 
             # Create a NEW scheduler instance (required after crash in v4 alpha)
             self.scheduler = self._create_scheduler()
