@@ -10,17 +10,18 @@ Pure data collection worker - scheduler loop only.
 import asyncio
 import logging
 import signal
-import sys
 from typing import Optional
 
 from src.config import Config
+from src.logging_setup import configure_logging
 from src.scheduler.scheduler import DataPortalScheduler
 
-logging.basicConfig(
-    level=getattr(logging, Config.LOG_LEVEL),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
+# One format across every backend service, and timestamps in UTC rather than local
+# container time -- the scheduler runs on Config.SCHEDULER_TIMEZONE, so an unmarked
+# local timestamp could not be lined up against a job's own schedule. This also
+# replaces `getattr(logging, Config.LOG_LEVEL)`, which had no default and so raised
+# AttributeError on any typo in the env var.
+configure_logging("data-portal", level=Config.LOG_LEVEL)
 
 logger = logging.getLogger(__name__)
 

@@ -49,7 +49,7 @@ def db(monkeypatch):
     return conn, pool
 
 
-def test_httpexception_returns_connection_to_pool(db, capsys):
+def test_httpexception_returns_connection_to_pool(db, caplog):
     """A 404 must not close the connection and must not log a DB error."""
     conn, pool = db
 
@@ -60,10 +60,10 @@ def test_httpexception_returns_connection_to_pool(db, capsys):
     assert len(pool.returned) == 1
     _, closed = pool.returned[0]
     assert closed is False, "a 404 left the connection clean; it must be reused"
-    assert "Database connection failed" not in capsys.readouterr().err
+    assert "Database connection failed" not in caplog.text
 
 
-def test_starlette_httpexception_also_passes_through(db, capsys):
+def test_starlette_httpexception_also_passes_through(db, caplog):
     """FastAPI's HTTPException subclasses Starlette's; both must be treated alike."""
     conn, pool = db
 
@@ -72,19 +72,20 @@ def test_starlette_httpexception_also_passes_through(db, capsys):
             raise StarletteHTTPException(status_code=401, detail="API Key missing")
 
     assert pool.returned[0][1] is False
-    assert "Database connection failed" not in capsys.readouterr().err
+    assert "Database connection failed" not in caplog.text
 
 
-def test_real_db_error_still_discards_and_logs(db, capsys):
+def test_real_db_error_still_discards_and_logs(db, caplog):
     """A genuine psycopg2 fault may leave a transaction open — keep discarding it."""
     conn, pool = db
 
-    with pytest.raises(psycopg2.OperationalError):
-        with conn.get_connection():
-            raise psycopg2.OperationalError("server closed the connection unexpectedly")
+    with caplog.at_level("ERROR", logger="app.database.connection"):
+        with pytest.raises(psycopg2.OperationalError):
+            with conn.get_connection():
+                raise psycopg2.OperationalError("server closed the connection unexpectedly")
 
     assert any(closed for _, closed in pool.returned), "broken connection must be closed"
-    assert "Database connection failed" in capsys.readouterr().err
+    assert "Database connection failed" in caplog.text
 
 
 def test_httpexception_rolls_back_before_reuse(db):
