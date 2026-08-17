@@ -66,6 +66,32 @@ def _https_urlopen(url, *args, **kwargs):
 
 urllib.request.urlopen = _https_urlopen
 
+# Monkey-patch to silence gridstatus's multi-day progress bars.
+# `support_date_range` wraps every multi-day fetch in `tqdm.tqdm(disable=total <= 1, ...)`.
+# Because it passes `disable` explicitly, tqdm's TQDM_DISABLE env var is ignored for this
+# call site -- and with no TTY each bar refresh lands in the container log as its own
+# line, ~40 unreadable lines per 16-minute window (ts-arena-15). Replacing the module
+# reference is narrower than patching tqdm globally: only gridstatus's own bars go away.
+import gridstatus.decorators
+
+
+class _SilencedTqdmModule:
+    """Stands in for the `tqdm` module inside gridstatus.decorators, forcing disable."""
+
+    def __init__(self, real_module):
+        self._real = real_module
+
+    def __getattr__(self, name):
+        # Anything other than the progress bar itself passes straight through.
+        return getattr(self._real, name)
+
+    def tqdm(self, *args, **kwargs):
+        kwargs["disable"] = True
+        return self._real.tqdm(*args, **kwargs)
+
+
+gridstatus.decorators.tqdm = _SilencedTqdmModule(gridstatus.decorators.tqdm)
+
 from src.plugins.base_plugin import MultiSeriesPlugin, TimeSeriesDefinition
 from src.logging_setup import resolve_level
 
