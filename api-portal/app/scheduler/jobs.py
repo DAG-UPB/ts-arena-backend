@@ -272,6 +272,16 @@ async def startup_elo_check_job() -> None:
             logger.info(f"No ELO ratings for today (metrics: {', '.join(pending)}). Starting calculation...")
 
             for metric in pending:
+                # Re-check immediately before computing rather than trusting the snapshot
+                # above: each metric takes the better part of an hour, and the scheduled
+                # ELO job may have produced this one in the meantime (backend-75).
+                if await elo_service.has_calculated_today(metric=metric):
+                    logger.info(
+                        f"Startup ELO [{metric}]: calculated by another run while this "
+                        "check was working. Skipping."
+                    )
+                    continue
+
                 results = await elo_service.calculate_and_store_all_ratings(
                     n_bootstraps=500,
                     metric=metric
