@@ -1,17 +1,20 @@
 import logging
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-from app.core.config import settings
 from app.core.logging_setup import configure_logging, install_access_log_filter
-from app.database.connection import db_connection
-from app.api.v1 import models, health, definitions, rounds
 
-# This service had no logging configuration at all: every line was a print() and nothing
-# in the container log carried a timestamp, so a log window could not even be dated.
+# Deliberately before the imports below. This service had no logging configuration at
+# all -- every line was a print() and nothing carried a timestamp -- and importing the
+# routers emits a block of pydantic protected-namespace warnings straight to stderr.
+# Configuring logging first is what puts those on the timestamped stream instead.
 configure_logging("dashboard-api")
 logger = logging.getLogger("dashboard-api")
+
+from fastapi import FastAPI  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+
+from app.core.config import settings  # noqa: E402
+from app.database.connection import db_connection  # noqa: E402
+from app.api.v1 import models, health, definitions, rounds  # noqa: E402
 
 app = FastAPI(
     title=settings.API_TITLE,

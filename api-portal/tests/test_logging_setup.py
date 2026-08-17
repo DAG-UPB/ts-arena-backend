@@ -9,6 +9,7 @@ import io
 import logging
 import re
 import time
+import warnings
 
 import pytest
 
@@ -273,3 +274,32 @@ class TestSummaryWindow:
 
         reported = float(re.search(r" in ([\d.]+)s ", message).group(1))
         assert 0.3 <= reported < 0.9, f"window should be ~0.4s, not the 1.4s since start: {message}"
+
+
+class TestWarningsCapture:
+    """`warnings.warn` writes untimestamped straight to stderr unless captured.
+
+    Asserted in two halves rather than by calling `warnings.warn`: pytest's own
+    warnings plugin wraps every test in `catch_warnings(record=True)` and intercepts
+    the warning before `showwarning` is ever consulted, so an end-to-end assertion
+    here passes or fails on plugin state rather than on our code. The end-to-end
+    behaviour was verified against the real dashboard-api import instead.
+    """
+
+    def test_capture_is_enabled(self):
+        configure_logging("api-portal", level="INFO", stream=io.StringIO())
+        # captureWarnings(True) swaps in logging's own showwarning implementation.
+        assert warnings.showwarning.__module__ == "logging"
+
+    def test_the_py_warnings_logger_reaches_the_stream(self):
+        stream = io.StringIO()
+        configure_logging("api-portal", level="INFO", stream=stream)
+
+        logging.getLogger("py.warnings").warning(
+            'UserWarning: Field "model_family" has conflict with protected namespace'
+        )
+
+        out = stream.getvalue()
+        assert "py.warnings" in out
+        assert "protected namespace" in out
+        assert out.startswith("20")  # timestamped, not a bare stderr dump

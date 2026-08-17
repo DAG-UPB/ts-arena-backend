@@ -307,6 +307,18 @@ def configure_logging(service_name=None, level=None, stream=None):
 
     _apply_logger_levels(resolved)
 
+    # `warnings.warn` writes straight to stderr, several untimestamped lines per
+    # warning. On dashboard-api that was 60 of the first 82 lines in a fresh
+    # container -- pydantic protected-namespace warnings, one block per model field.
+    # Routing them through the `py.warnings` logger puts them on the same stream as
+    # everything else, one timestamped line each.
+    # Disarm first: captureWarnings(True) is a no-op once armed (it only swaps
+    # showwarning while its saved original is None), so anything that restores
+    # showwarning afterwards -- pytest's warnings plugin does exactly this -- would
+    # leave capture permanently off. Re-arming keeps configure_logging idempotent.
+    logging.captureWarnings(False)
+    logging.captureWarnings(True)
+
     if service_name:
         # Keep the old service-named logger working for modules that fetch it by name;
         # it now just inherits root instead of owning a handler.
