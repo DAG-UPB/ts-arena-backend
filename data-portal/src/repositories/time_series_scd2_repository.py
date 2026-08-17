@@ -132,7 +132,9 @@ SELECT
 
             await self.session.commit()
 
-            logger.info(
+            # DEBUG, not INFO: one line per series per job run, and the same counts are
+            # already carried by the scheduler's per-job summary line (ts-arena-15).
+            logger.debug(
                 f"SCD2 upsert for series_id={series_id}: "
                 f"{stats['inserted']} inserted, {stats['updated']} updated, "
                 f"{stats['unchanged']} unchanged."

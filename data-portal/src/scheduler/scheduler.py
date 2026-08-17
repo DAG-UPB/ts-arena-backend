@@ -223,19 +223,22 @@ class DataPortalScheduler:
         metadata = plugin.get_metadata()
         job_start = datetime.now()
 
-        logger.info(f"[{unique_id}] Starting data fetch job...")
+        logger.debug(f"[{unique_id}] Starting data fetch job...")
 
         semaphore_wait_start = datetime.now()
         async with self.job_semaphore:
             wait_seconds = (datetime.now() - semaphore_wait_start).total_seconds()
             active_jobs = self.max_concurrent_jobs - self.job_semaphore._value
+            # Only the anomalous branch is worth a default-level line. The else branch
+            # logged the *normal* acquisition at INFO, once per job run -- 132 lines per
+            # 7-minute cycle to say nothing happened (ts-arena-15).
             if wait_seconds > 5:
                 logger.warning(
                     f"[{unique_id}] Semaphore wait: {wait_seconds:.1f}s "
                     f"(active jobs: {active_jobs}/{self.max_concurrent_jobs})"
                 )
             else:
-                logger.info(f"[{unique_id}] Acquired job semaphore (active jobs: {active_jobs}/{self.max_concurrent_jobs})")
+                logger.debug(f"[{unique_id}] Acquired job semaphore (active jobs: {active_jobs}/{self.max_concurrent_jobs})")
             
             # Log pool status periodically (every 10th job)
             if active_jobs % 10 == 0:
@@ -267,7 +270,7 @@ class DataPortalScheduler:
                         repo, unique_id, interval_seconds
                     )
                     
-                    logger.info(f"[{unique_id}] Fetching data from {start_date} to latest available")
+                    logger.debug(f"[{unique_id}] Fetching data from {start_date} to latest available")
                     
                     # Fetch data from plugin with retry logic (no end_date)
                     data = await self._fetch_with_retry(plugin, start_date, unique_id)
@@ -326,7 +329,10 @@ class DataPortalScheduler:
                     detected_timezone = plugin.get_detected_timezone()
                     if detected_timezone:
                         await repo.update_series_timezone(series_id, detected_timezone)
-                        logger.info(f"[{unique_id}] Updated timezone to {detected_timezone}")
+                        # Re-detected and rewritten identically on every run, so at INFO this
+                        # was one line per job saying the timezone had not changed
+                        # (ts-arena-15). The multi-series path never logged it at all.
+                        logger.debug(f"[{unique_id}] Updated timezone to {detected_timezone}")
                 
             except Exception as e:
                 duration = (datetime.now() - job_start).total_seconds()
@@ -348,7 +354,7 @@ class DataPortalScheduler:
         job_start = datetime.now()
         series_definitions = plugin.get_series_definitions()
         
-        logger.info(f"[{group_id}] Starting multi-series data fetch for {len(series_definitions)} series...")
+        logger.debug(f"[{group_id}] Starting multi-series data fetch for {len(series_definitions)} series...")
 
         semaphore_wait_start = datetime.now()
         async with self.job_semaphore:
@@ -360,7 +366,7 @@ class DataPortalScheduler:
                     f"(active jobs: {active_jobs}/{self.max_concurrent_jobs})"
                 )
             else:
-                logger.info(f"[{group_id}] Acquired job semaphore (active jobs: {active_jobs}/{self.max_concurrent_jobs})")
+                logger.debug(f"[{group_id}] Acquired job semaphore (active jobs: {active_jobs}/{self.max_concurrent_jobs})")
             
             try:
                 # Get database session using async context manager
@@ -380,7 +386,7 @@ class DataPortalScheduler:
                         repo, series_definitions, min_interval, group_id
                     )
                     
-                    logger.info(f"[{group_id}] Fetching data from {start_date} to latest available")
+                    logger.debug(f"[{group_id}] Fetching data from {start_date} to latest available")
                     
                     # Fetch data from plugin with retry logic (ONE API call)
                     data = await self._fetch_multi_with_retry(plugin, start_date, group_id)

@@ -257,7 +257,9 @@ class TimeSeriesDataRepository:
         try:
             await self.session.execute(stmt, {'data': json.dumps(values)})
             await self.session.commit()
-            logger.info(f"Bulk upserted {len(values)} data points for series_id={series_id}")
+            # DEBUG, not INFO: one line per series per job run, and the count is already
+            # carried by the scheduler's per-job summary line (ts-arena-15).
+            logger.debug(f"Bulk upserted {len(values)} data points for series_id={series_id}")
             return len(values)
             
         except Exception as e:
