@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Any
 
 from app.core.utils import serialize_timedelta_to_iso8601
+from app.schemas.common import ModelFieldsSchema
 
 
 
@@ -29,10 +30,8 @@ class ChallengeDefinitionSchema(BaseModel):
         return serialize_timedelta_to_iso8601(value)
 
 
-class ChallengeRoundSchema(BaseModel):
+class ChallengeRoundSchema(ModelFieldsSchema):
     """Schema for Challenge Rounds (instantiations)."""
-    model_config = {"protected_namespaces": ()}
-    
     id: int  # Round ID
     definition_id: Optional[int] = None
     name: Optional[str] = None 

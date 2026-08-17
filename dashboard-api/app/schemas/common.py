@@ -5,6 +5,29 @@ from typing import Optional, List, Dict, Any, Generic, TypeVar
 T = TypeVar('T')
 
 
+class ModelFieldsSchema(BaseModel):
+    """Base for any schema carrying `model_*` fields.
+
+    pydantic v2 reserves the `model_` prefix for its own API and emits a UserWarning at
+    class-construction time for every field that collides. This platform's domain language
+    is forecasting *models*, so `model_id`, `model_name`, `model_family`, `model_size`,
+    `model_readable_id` and `model_count` are the right names and the warning is noise
+    with nothing behind it -- none of these shadow an actual `BaseModel` attribute.
+
+    It was not cheap noise: `warnings` dedupes per distinct message, so the routers'
+    schemas produced five warnings, five stdout lines each, in every one of the four
+    uvicorn workers -- 100 of the 122 lines a fresh container wrote at startup, ahead of
+    anything an operator would want to read (ts-arena-15). backend-76 had already routed
+    them onto the timestamped stream, which was as much as the logging configuration could
+    do; opting the namespace out is the fix at source.
+
+    Inherit from this instead of repeating `model_config` per class: pydantic v2 merges a
+    subclass's own `model_config` with its parents', so a subclass can still set other
+    config keys without losing this one.
+    """
+    model_config = ConfigDict(protected_namespaces=())
+
+
 class PaginationMeta(BaseModel):
     """Pagination metadata."""
     page: int = Field(..., description="Current page number (1-indexed)", ge=1)
@@ -21,10 +44,8 @@ class PaginatedResponse(BaseModel, Generic[T]):
     pagination: PaginationMeta = Field(..., description="Pagination metadata")
 
 
-class ModelRankingSchema(BaseModel):
+class ModelRankingSchema(ModelFieldsSchema):
     """Global model ranking (Legacy - kept for backward compatibility)."""
-    model_config = {"protected_namespaces": ()}
-    
     model_id: int
     model_name: str
     n_completed: int
@@ -36,10 +57,8 @@ class RankingResponseSchema(BaseModel):
     ranges: Dict[str, List[ModelRankingSchema]]  # key = "Last 7 days", etc.
 
 
-class EnhancedModelRankingSchema(BaseModel):
+class EnhancedModelRankingSchema(ModelFieldsSchema):
     """Enhanced model ranking with filter dimensions and statistics."""
-    model_config = {"protected_namespaces": ()}
-    
     model_name: str = Field(..., description="Name of the model")
     challenges_participated: int = Field(..., description="Number of challenges the model participated in", ge=0)
     avg_mase: Optional[float] = Field(None, description="Average MASE score across all series")
@@ -95,7 +114,7 @@ class ModelDefinitionRankingSchema(BaseModel):
     rankings_365d: Optional[Dict[str, Any]] = Field(None, description="365 day ranking stats")
 
 
-class ModelRankingsResponseSchema(BaseModel):
+class ModelRankingsResponseSchema(ModelFieldsSchema):
     """Response schema for model rankings across all definitions."""
     model_id: int = Field(..., description="Model ID")
     model_name: str = Field(..., description="Model name")

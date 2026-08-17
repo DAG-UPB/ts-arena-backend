@@ -2,7 +2,9 @@ from datetime import datetime
 from pydantic import BaseModel
 from typing import List, Optional
 
-class ModelSchema(BaseModel):
+from app.schemas.common import ModelFieldsSchema
+
+class ModelSchema(ModelFieldsSchema):
     readable_id: str
     name: str
     model_family: str | None
@@ -19,7 +21,7 @@ class ModelSchema(BaseModel):
     arxiv_id: str | None = None
 
 
-class ModelListItemSchema(BaseModel):
+class ModelListItemSchema(ModelFieldsSchema):
     """Single row in the `GET /models` listing — keeps the payload thin."""
     id: int
     readable_id: str | None
@@ -55,7 +57,7 @@ class DefinitionWithSeriesSchema(BaseModel):
     series: List[SeriesInDefinitionSchema]
 
 
-class ModelSeriesByDefinitionSchema(BaseModel):
+class ModelSeriesByDefinitionSchema(ModelFieldsSchema):
     """Model's series grouped by definition."""
     model_id: int
     model_readable_id: str
@@ -79,7 +81,7 @@ class ModelActiveRoundSchema(BaseModel):
     horizon: Optional[str] = None
 
 
-class ModelActiveRoundsResponseSchema(BaseModel):
+class ModelActiveRoundsResponseSchema(ModelFieldsSchema):
     """Response wrapper for the model's active and upcoming rounds."""
     model_id: int
     model_readable_id: str
