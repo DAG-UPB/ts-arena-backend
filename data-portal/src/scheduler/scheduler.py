@@ -80,21 +80,40 @@ class DataPortalScheduler:
             raise RuntimeError("Scheduler not initialized. Call initialize() first.")
         
         logger.info("Starting scheduler...")
-        
+
+        # One line per registered job was ~156 lines of every container start, all of it
+        # saying the same thing. Count them instead and report once; the per-job detail is
+        # still there at DEBUG when a specific job's interval is in question (ts-arena #15).
+        single_failed = 0
+        multi_failed = 0
+
         # Register single-series plugin jobs
         for unique_id, plugin in self.plugins.items():
             try:
                 await self._register_plugin_job(unique_id, plugin)
             except Exception as e:
+                single_failed += 1
                 logger.error(f"Failed to register job for {unique_id}: {e}", exc_info=True)
-        
+
         # Register multi-series plugin jobs
         for group_id, plugin in self.multi_series_plugins.items():
             try:
                 await self._register_multi_series_job(group_id, plugin)
             except Exception as e:
+                multi_failed += 1
                 logger.error(f"Failed to register multi-series job for {group_id}: {e}", exc_info=True)
-        
+
+        single_ok = len(self.plugins) - single_failed
+        multi_ok = len(self.multi_series_plugins) - multi_failed
+        summary = (
+            f"Registered {single_ok + multi_ok} jobs "
+            f"({single_ok} single-series, {multi_ok} multi-series)"
+        )
+        if single_failed or multi_failed:
+            logger.warning(f"{summary}; {single_failed + multi_failed} failed to register")
+        else:
+            logger.info(summary)
+
         logger.info("Triggering initial data fetch for all plugins...")
         await self._run_initial_fetch()
 
@@ -121,7 +140,9 @@ class DataPortalScheduler:
             logger.info(f"Processing single-series batch {i//batch_size + 1}/{(len(single_items) + batch_size - 1)//batch_size}")
             
             for unique_id, plugin in batch:
-                logger.info(f"Scheduling initial fetch for {unique_id}...")
+                # The enclosing "Processing single-series batch i/N" and "Batch completed"
+                # lines already say what this batch is doing (ts-arena #15).
+                logger.debug(f"Scheduling initial fetch for {unique_id}...")
                 task = asyncio.create_task(
                     self._fetch_and_store_data(unique_id, plugin)
                 )
@@ -145,7 +166,7 @@ class DataPortalScheduler:
         
         for group_id, plugin in multi_items:
             try:
-                logger.info(f"Scheduling initial fetch for multi-series group {group_id}...")
+                logger.debug(f"Scheduling initial fetch for multi-series group {group_id}...")
                 await self._fetch_and_store_multi_series_data(group_id, plugin)
                 total_successful += 1
             except Exception as e:
@@ -180,7 +201,7 @@ class DataPortalScheduler:
             replace_existing=True
         )
         
-        logger.info(
+        logger.debug(
             f"Registered job '{job_id}' with interval {interval_params} "
             f"for {metadata.name}"
         )
@@ -209,7 +230,7 @@ class DataPortalScheduler:
             replace_existing=True
         )
         
-        logger.info(
+        logger.debug(
             f"Registered multi-series job '{job_id}' with interval {interval_params} "
             f"for group {group_id} ({series_count} time series)"
         )
