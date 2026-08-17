@@ -70,8 +70,24 @@ Create a `.env` file in the root directory of the project. You can use the varia
 **Other Settings:**
 *   `DASHBOARD_API_URL`: URL where the dashboard API is accessible.
 *   `DEBUG`: Set to `true` or `false`.
-*   `LOG_LEVEL`: Logging level (e.g., `INFO`).
+*   `LOG_LEVEL`: Logging level for the whole process (default `INFO`). Case-insensitive;
+    an unrecognised value falls back to `INFO` rather than failing to start.
+*   `LOG_LEVELS`: Per-logger overrides, comma-separated, e.g.
+    `LOG_LEVELS=httpx=INFO,apscheduler=DEBUG`. Noisy libraries (`apscheduler`, `httpx`,
+    `httpcore`, `asyncpg`, `sqlalchemy.engine`, `urllib3`) are held at `WARNING` by
+    default; this is how you turn one of them back up without raising `LOG_LEVEL`
+    everywhere.
+*   `ACCESS_LOG_FILTER`: `on` (default) drops uvicorn access lines for 404s on paths the
+    app does not serve — vulnerability scanners hitting `/wp-content/…` and the like —
+    and reports the count periodically instead. 404s on real routes are always kept. Set
+    to `off` when you want the raw scan traffic.
+*   `ACCESS_LOG_SUMMARY_INTERVAL_SECONDS`: How often that count is reported (default 300).
 *   `SCHEDULER_TIMEZONE`: Timezone for the scheduler (default: `UTC`).
+
+All log lines carry a UTC timestamp, a level and the logger name:
+`2026-08-17 09:49:36,498Z | INFO | challenge-scheduler | …`. Logging is configured on the
+**root** logger in `logging_setup.py` (one copy per service, kept identical by hand —
+each service's Docker build context covers only its own directory).
 
 ### 2. Run the Application
 

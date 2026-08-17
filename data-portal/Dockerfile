@@ -20,4 +20,8 @@ RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
 # Run the application
+# Unbuffered: stdout is block-buffered on a pipe, so without this the last lines
+# before a crash never reach the container log -- exactly when they matter most.
+ENV PYTHONUNBUFFERED=1
+
 CMD ["python", "-m", "src.main"]

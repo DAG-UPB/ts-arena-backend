@@ -1,4 +1,4 @@
-import sys
+import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 import psycopg2.extras
@@ -6,6 +6,8 @@ from cron_converter import Cron
 
 # Import utilities
 from app.core.utils import parse_iso8601_to_interval_list
+
+logger = logging.getLogger(__name__)
 
 
 class ChallengeRepository:
@@ -201,7 +203,7 @@ class ChallengeRepository:
                     frequency_conditions.append(f"frequency = INTERVAL '{interval_str}'")
                 query += f" AND ({' OR '.join(frequency_conditions)})"
             except ValueError as e:
-                print(f"ERROR: Invalid frequency format: {e}", file=sys.stderr)
+                logger.error("Invalid frequency format: %s", e)
                 # Optional: raise HTTPException or ignore
         
         if horizons and len(horizons) > 0:
@@ -212,7 +214,7 @@ class ChallengeRepository:
                     horizon_conditions.append(f"horizon = INTERVAL '{interval_str}'")
                 query += f" AND ({' OR '.join(horizon_conditions)})"
             except ValueError as e:
-                print(f"ERROR: Invalid horizon format: {e}", file=sys.stderr)
+                logger.error("Invalid horizon format: %s", e)
         
         # Build the ORDER BY clause
         order_by = """
@@ -413,7 +415,11 @@ class ChallengeRepository:
         table_name = table_map.get(resolution)
         if not table_name:
             # Default to raw if unknown frequency
-            print(f"WARNING: Unknown resolution '{resolution}' for challenge {challenge_id}, defaulting to raw.", file=sys.stderr)
+            logger.warning(
+                "Unknown resolution %r for challenge %s, defaulting to raw.",
+                resolution,
+                challenge_id,
+            )
             table_name = "data_portal.time_series_data"
 
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:

@@ -1,5 +1,5 @@
+import logging
 import os
-import sys
 import threading
 import psycopg2
 import psycopg2.extras
@@ -9,6 +9,8 @@ from contextlib import contextmanager
 # catching the base covers handlers raising either one.
 from starlette.exceptions import HTTPException
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class DatabaseConnection:
@@ -46,10 +48,10 @@ class DatabaseConnection:
                         maxconn=settings.DB_POOL_MAX,
                         dsn=self.database_url,
                     )
-                    print(
-                        f"DEBUG: DB pool ready (min={settings.DB_POOL_MIN}, "
-                        f"max={settings.DB_POOL_MAX})",
-                        file=sys.stderr,
+                    logger.debug(
+                        "DB pool ready (min=%s, max=%s)",
+                        settings.DB_POOL_MIN,
+                        settings.DB_POOL_MAX,
                     )
         return self._pool
 
@@ -86,7 +88,7 @@ class DatabaseConnection:
             # exactly the churn the pool exists to avoid.
             raise
         except Exception as e:
-            print(f"ERROR: Database connection failed: {e}", file=sys.stderr)
+            logger.error("Database connection failed: %s", e)
             # A connection that errored may be left mid-transaction; drop it
             # from the pool rather than handing the broken state to the next
             # request.

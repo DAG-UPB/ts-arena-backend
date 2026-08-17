@@ -1,4 +1,4 @@
-import sys
+import logging
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import psycopg2.extras
@@ -6,6 +6,8 @@ import math
 import isodate
 
 from app.schemas.model import ModelSchema
+
+logger = logging.getLogger(__name__)
 
 def sanitize_float(value: Any) -> Any:
     """Converts inf, -inf, nan to None for JSON compatibility."""
@@ -300,7 +302,7 @@ class ModelRepository:
             return interval_str
             
         except Exception as e:
-            print(f"Warning: Could not convert interval '{interval_value}' to ISO 8601: {e}", file=sys.stderr)
+            logger.warning("Could not convert interval %r to ISO 8601: %s", interval_value, e)
             return str(interval_value)
     
     def get_available_filter_options(self) -> Dict[str, Any]:
