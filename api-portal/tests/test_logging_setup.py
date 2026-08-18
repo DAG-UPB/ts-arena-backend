@@ -5,8 +5,10 @@ that non-service loggers actually reach a handler now, and that the access-log f
 drops scanner 404s while keeping the ones an operator needs.
 """
 
+import difflib
 import io
 import logging
+import pathlib
 import re
 import time
 import warnings
@@ -303,3 +305,84 @@ class TestWarningsCapture:
         assert "py.warnings" in out
         assert "protected namespace" in out
         assert out.startswith("20")  # timestamped, not a bare stderr dump
+
+
+# ---------------------------------------------------------------------------
+# ts-arena #15 subtask E: the copies must not drift apart.
+# ---------------------------------------------------------------------------
+
+# Where each service keeps its copy, relative to the repo root. api-portal is first
+# because it is the one this test imports and therefore the de-facto original.
+COPY_PATHS = (
+    "api-portal/app/core/logging_setup.py",
+    "dashboard-api/app/core/logging_setup.py",
+    "data-portal/src/logging_setup.py",
+)
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+
+
+def repo_checkout_available():
+    """False when only one service's subtree is present.
+
+    Each service's Docker image copies its own subdirectory and nothing else, so
+    running this suite inside the api-portal image would see no sibling services. That
+    is not drift, so the identity tests skip rather than fail there.
+    """
+    return all((REPO_ROOT / rel).is_file() for rel in COPY_PATHS)
+
+
+class TestCopiesStayIdentical:
+    """`logging_setup.py` is duplicated verbatim across the three backend services.
+
+    A shared package would need all three Coolify build contexts changed, which is a
+    Coolify write we do not have (see the module docstring), so the duplication is
+    deliberate and open-ended. This test is what replaces the collapse: it costs
+    nothing, needs no infrastructure, and turns silent drift into a red suite the next
+    time someone edits one copy and forgets the other two.
+    """
+
+    @pytest.mark.skipif(
+        not repo_checkout_available(),
+        reason="single-service subtree (e.g. inside a built image); nothing to compare",
+    )
+    def test_all_copies_are_byte_identical(self):
+        blobs = {rel: (REPO_ROOT / rel).read_bytes() for rel in COPY_PATHS}
+        reference_path = COPY_PATHS[0]
+        reference = blobs[reference_path]
+
+        for rel, blob in blobs.items():
+            if blob == reference:
+                continue
+            diff = "".join(
+                difflib.unified_diff(
+                    reference.decode().splitlines(keepends=True),
+                    blob.decode().splitlines(keepends=True),
+                    fromfile=reference_path,
+                    tofile=rel,
+                )
+            )
+            pytest.fail(
+                f"{rel} has drifted from {reference_path}. Re-sync the copies "
+                f"(ts-arena #15 subtask E), then re-run:\n\n{diff}"
+            )
+
+    @pytest.mark.skipif(
+        not repo_checkout_available(),
+        reason="single-service subtree (e.g. inside a built image); nothing to compare",
+    )
+    def test_no_unlisted_copy_exists(self):
+        """A fourth service copying the module in must be added to COPY_PATHS.
+
+        Without this, a new service could carry a silently diverging copy that the
+        identity test above never looks at -- which is the same drift, one level up.
+        """
+        found = {
+            str(p.relative_to(REPO_ROOT))
+            for p in REPO_ROOT.glob("*/**/logging_setup.py")
+            if "__pycache__" not in p.parts
+        }
+        assert found == set(COPY_PATHS), (
+            "the set of logging_setup.py copies changed; add the new one to COPY_PATHS "
+            "in this file (and keep it byte-identical to the others)"
+        )
