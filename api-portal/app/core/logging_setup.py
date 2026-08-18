@@ -24,7 +24,15 @@ scanner 404s while keeping a periodic count of what was dropped.
 This file is duplicated verbatim in api-portal, dashboard-api and data-portal. Each
 service's Dockerfile copies only its own subdirectory and the build context is set per
 app in Coolify, so a shared package would require changing all three build contexts --
-a Coolify write we do not have. Keep the three copies in sync by hand until then.
+a Coolify write we do not have. Keep the three copies in sync by hand until then;
+`api-portal/tests/test_logging_setup.py` turns drift between them into a failing test
+(ts-arena #15 subtask E), including the case where a fourth service adds a copy.
+
+A further copy lives in the separate ts-arena-console repo, at
+`app/core/logging_setup.py`. That one is deliberately NOT byte-identical -- its
+`LOG_FORMAT` carries `%(process)d`, because console-api runs `uvicorn --workers 2` and
+its two workers are otherwise indistinguishable in one container log. No test in this
+repo can see it, so changes worth having must be carried across by hand.
 """
 
 import logging

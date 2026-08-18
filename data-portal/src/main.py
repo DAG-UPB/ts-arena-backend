@@ -9,12 +9,20 @@ Pure data collection worker - scheduler loop only.
 
 import asyncio
 import logging
+import os
 import signal
 from typing import Optional
 
-from src.config import Config
-from src.logging_setup import configure_logging
-from src.scheduler.scheduler import DataPortalScheduler
+# No TTY here, so a progress bar is not a progress bar -- tqdm's carriage returns land in
+# the container log as a fresh line per refresh. `gridstatus` wraps its per-day download
+# loops in tqdm, which was writing ~55 lines per 17-minute window, none of them readable
+# and none of them going through logging at all (ts-arena-15). setdefault, so
+# TQDM_DISABLE stays an operator knob. Must precede any import that pulls in tqdm.
+os.environ.setdefault("TQDM_DISABLE", "1")
+
+from src.config import Config  # noqa: E402
+from src.logging_setup import configure_logging  # noqa: E402
+from src.scheduler.scheduler import DataPortalScheduler  # noqa: E402
 
 # One format across every backend service, and timestamps in UTC rather than local
 # container time -- the scheduler runs on Config.SCHEDULER_TIMEZONE, so an unmarked

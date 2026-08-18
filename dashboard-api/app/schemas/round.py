@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from app.core.utils import serialize_timedelta_to_iso8601
+from app.schemas.common import ModelFieldsSchema
 
 
 class RoundMetaSchema(BaseModel):
@@ -25,7 +26,7 @@ class RoundMetaSchema(BaseModel):
         return serialize_timedelta_to_iso8601(value)
     
 
-class RoundModelListSchema(BaseModel):
+class RoundModelListSchema(ModelFieldsSchema):
     """Round schema with metadata."""
     readable_id: str
     name: str

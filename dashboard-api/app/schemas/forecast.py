@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
+from app.schemas.common import ModelFieldsSchema
 from app.schemas.round import ForecastDataPoint
 
 
@@ -22,7 +23,7 @@ class RoundForecastStatus(BaseModel):
     forecasts: Optional[List[ForecastDataPoint]] = None  # The actual forecast data points if they exist
 
 
-class ModelSeriesForecastsAcrossRoundsSchema(BaseModel):
+class ModelSeriesForecastsAcrossRoundsSchema(ModelFieldsSchema):
     """Forecasts for one model and one series across all rounds of a definition."""
     model_id: int
     model_readable_id: str

@@ -80,21 +80,40 @@ class DataPortalScheduler:
             raise RuntimeError("Scheduler not initialized. Call initialize() first.")
         
         logger.info("Starting scheduler...")
-        
+
+        # One line per registered job was ~156 lines of every container start, all of it
+        # saying the same thing. Count them instead and report once; the per-job detail is
+        # still there at DEBUG when a specific job's interval is in question (ts-arena #15).
+        single_failed = 0
+        multi_failed = 0
+
         # Register single-series plugin jobs
         for unique_id, plugin in self.plugins.items():
             try:
                 await self._register_plugin_job(unique_id, plugin)
             except Exception as e:
+                single_failed += 1
                 logger.error(f"Failed to register job for {unique_id}: {e}", exc_info=True)
-        
+
         # Register multi-series plugin jobs
         for group_id, plugin in self.multi_series_plugins.items():
             try:
                 await self._register_multi_series_job(group_id, plugin)
             except Exception as e:
+                multi_failed += 1
                 logger.error(f"Failed to register multi-series job for {group_id}: {e}", exc_info=True)
-        
+
+        single_ok = len(self.plugins) - single_failed
+        multi_ok = len(self.multi_series_plugins) - multi_failed
+        summary = (
+            f"Registered {single_ok + multi_ok} jobs "
+            f"({single_ok} single-series, {multi_ok} multi-series)"
+        )
+        if single_failed or multi_failed:
+            logger.warning(f"{summary}; {single_failed + multi_failed} failed to register")
+        else:
+            logger.info(summary)
+
         logger.info("Triggering initial data fetch for all plugins...")
         await self._run_initial_fetch()
 
@@ -121,7 +140,9 @@ class DataPortalScheduler:
             logger.info(f"Processing single-series batch {i//batch_size + 1}/{(len(single_items) + batch_size - 1)//batch_size}")
             
             for unique_id, plugin in batch:
-                logger.info(f"Scheduling initial fetch for {unique_id}...")
+                # The enclosing "Processing single-series batch i/N" and "Batch completed"
+                # lines already say what this batch is doing (ts-arena #15).
+                logger.debug(f"Scheduling initial fetch for {unique_id}...")
                 task = asyncio.create_task(
                     self._fetch_and_store_data(unique_id, plugin)
                 )
@@ -145,7 +166,7 @@ class DataPortalScheduler:
         
         for group_id, plugin in multi_items:
             try:
-                logger.info(f"Scheduling initial fetch for multi-series group {group_id}...")
+                logger.debug(f"Scheduling initial fetch for multi-series group {group_id}...")
                 await self._fetch_and_store_multi_series_data(group_id, plugin)
                 total_successful += 1
             except Exception as e:
@@ -180,7 +201,7 @@ class DataPortalScheduler:
             replace_existing=True
         )
         
-        logger.info(
+        logger.debug(
             f"Registered job '{job_id}' with interval {interval_params} "
             f"for {metadata.name}"
         )
@@ -209,7 +230,7 @@ class DataPortalScheduler:
             replace_existing=True
         )
         
-        logger.info(
+        logger.debug(
             f"Registered multi-series job '{job_id}' with interval {interval_params} "
             f"for group {group_id} ({series_count} time series)"
         )
@@ -223,19 +244,22 @@ class DataPortalScheduler:
         metadata = plugin.get_metadata()
         job_start = datetime.now()
 
-        logger.info(f"[{unique_id}] Starting data fetch job...")
+        logger.debug(f"[{unique_id}] Starting data fetch job...")
 
         semaphore_wait_start = datetime.now()
         async with self.job_semaphore:
             wait_seconds = (datetime.now() - semaphore_wait_start).total_seconds()
             active_jobs = self.max_concurrent_jobs - self.job_semaphore._value
+            # Only the anomalous branch is worth a default-level line. The else branch
+            # logged the *normal* acquisition at INFO, once per job run -- 132 lines per
+            # 7-minute cycle to say nothing happened (ts-arena-15).
             if wait_seconds > 5:
                 logger.warning(
                     f"[{unique_id}] Semaphore wait: {wait_seconds:.1f}s "
                     f"(active jobs: {active_jobs}/{self.max_concurrent_jobs})"
                 )
             else:
-                logger.info(f"[{unique_id}] Acquired job semaphore (active jobs: {active_jobs}/{self.max_concurrent_jobs})")
+                logger.debug(f"[{unique_id}] Acquired job semaphore (active jobs: {active_jobs}/{self.max_concurrent_jobs})")
             
             # Log pool status periodically (every 10th job)
             if active_jobs % 10 == 0:
@@ -267,7 +291,7 @@ class DataPortalScheduler:
                         repo, unique_id, interval_seconds
                     )
                     
-                    logger.info(f"[{unique_id}] Fetching data from {start_date} to latest available")
+                    logger.debug(f"[{unique_id}] Fetching data from {start_date} to latest available")
                     
                     # Fetch data from plugin with retry logic (no end_date)
                     data = await self._fetch_with_retry(plugin, start_date, unique_id)
@@ -326,7 +350,10 @@ class DataPortalScheduler:
                     detected_timezone = plugin.get_detected_timezone()
                     if detected_timezone:
                         await repo.update_series_timezone(series_id, detected_timezone)
-                        logger.info(f"[{unique_id}] Updated timezone to {detected_timezone}")
+                        # Re-detected and rewritten identically on every run, so at INFO this
+                        # was one line per job saying the timezone had not changed
+                        # (ts-arena-15). The multi-series path never logged it at all.
+                        logger.debug(f"[{unique_id}] Updated timezone to {detected_timezone}")
                 
             except Exception as e:
                 duration = (datetime.now() - job_start).total_seconds()
@@ -348,7 +375,7 @@ class DataPortalScheduler:
         job_start = datetime.now()
         series_definitions = plugin.get_series_definitions()
         
-        logger.info(f"[{group_id}] Starting multi-series data fetch for {len(series_definitions)} series...")
+        logger.debug(f"[{group_id}] Starting multi-series data fetch for {len(series_definitions)} series...")
 
         semaphore_wait_start = datetime.now()
         async with self.job_semaphore:
@@ -360,7 +387,7 @@ class DataPortalScheduler:
                     f"(active jobs: {active_jobs}/{self.max_concurrent_jobs})"
                 )
             else:
-                logger.info(f"[{group_id}] Acquired job semaphore (active jobs: {active_jobs}/{self.max_concurrent_jobs})")
+                logger.debug(f"[{group_id}] Acquired job semaphore (active jobs: {active_jobs}/{self.max_concurrent_jobs})")
             
             try:
                 # Get database session using async context manager
@@ -380,7 +407,7 @@ class DataPortalScheduler:
                         repo, series_definitions, min_interval, group_id
                     )
                     
-                    logger.info(f"[{group_id}] Fetching data from {start_date} to latest available")
+                    logger.debug(f"[{group_id}] Fetching data from {start_date} to latest available")
                     
                     # Fetch data from plugin with retry logic (ONE API call)
                     data = await self._fetch_multi_with_retry(plugin, start_date, group_id)
