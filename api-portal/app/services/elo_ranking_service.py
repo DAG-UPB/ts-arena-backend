@@ -68,6 +68,25 @@ class EloRankingService:
         except KeyError:
             raise ValueError(f"Unsupported ranking metric '{metric}'; expected one of {self.SUPPORTED_METRICS}")
 
+    def _metric_row_filter(self, metric: str) -> str:
+        """
+        Extra predicate narrowing the score population a metric may be ranked on.
+
+        The probabilistic board ranks only forecasts that actually carried a distribution.
+        `assemble_quantile_forecasts` degrades a point forecast to a degenerate quantile
+        forecast, so point-only models do get an `sql_score` — equal to their MASE, by design
+        and arithmetically correct. But a model that never submitted a distribution did not
+        compete in the probabilistic task and must not appear on its leaderboard. Scoring
+        keeps computing and storing the value; the exclusion happens here, at ranking time.
+
+        Filtering is per score ROW, not per model: several models submit quantiles on some
+        rounds only, and those rounds are exactly the ones that belong on this board.
+
+        See issue backend-64. Returns a fragment for the `forecasts.scores fs` alias.
+        """
+        self._metric_column(metric)  # validates the metric; raises on anything unsupported
+        return " AND fs.has_quantiles = TRUE" if metric == "sql" else ""
+
     async def calculate_and_store_all_ratings(
         self,
         n_bootstraps: int = DEFAULT_N_BOOTSTRAPS,
@@ -415,7 +434,7 @@ class EloRankingService:
               AND fs.{col} IS NOT NULL
               AND fs.{col} != 'NaN'
               AND fs.{col} != 'Infinity'
-              AND fs.{col} != '-Infinity'
+              AND fs.{col} != '-Infinity'{self._metric_row_filter(metric)}
               -- Exclude series marked as excluded in definition_series_scd2
               AND NOT EXISTS (
                   SELECT 1 FROM challenges.definition_series_scd2 ds
@@ -525,7 +544,7 @@ class EloRankingService:
               AND fs.{col} IS NOT NULL
               AND fs.{col} != 'NaN'
               AND fs.{col} != 'Infinity'
-              AND fs.{col} != '-Infinity'
+              AND fs.{col} != '-Infinity'{self._metric_row_filter(metric)}
               AND NOT EXISTS (
                   SELECT 1 FROM challenges.definition_series_scd2 ds
                   WHERE ds.definition_id = cr.definition_id
