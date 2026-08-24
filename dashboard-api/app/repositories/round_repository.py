@@ -316,7 +316,9 @@ class RoundRepository:
         Otherwise, calculate MASE on-the-fly from forecasts.
         
         Returns:
-            List of dicts with model rankings, sorted by avg_mase ascending
+            List of dicts with model rankings, sorted by avg_mase ascending.
+            Rows from final scores also carry sql_score/has_quantiles; the on-the-fly
+            path leaves both None, as SQL is only computed at final evaluation.
         """
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             # Check if final evaluation exists for this round
@@ -359,6 +361,12 @@ class RoundRepository:
                     cs.forecast_count,
                     cs.mase,
                     cs.rmse,
+                    -- SQL is reported next to MASE, never used to rank: the board stays
+                    -- MASE-driven. has_quantiles rides along so the UI can tell a genuine
+                    -- probabilistic score from the degenerate point-forecast substitution
+                    -- and blank the latter rather than invite a comparison it doesn't support.
+                    cs.sql_score,
+                    cs.has_quantiles,
                     RANK() OVER (PARTITION BY cs.series_id ORDER BY cs.mase ASC NULLS LAST) as rank
                 FROM forecasts.scores cs
                 JOIN challenges.rounds cr ON cr.id = cs.round_id
@@ -384,7 +392,7 @@ class RoundRepository:
             for row in rows:
                 row['is_final'] = True
                 # Sanitize float values
-                for key in ['mase', 'rmse']:
+                for key in ['mase', 'rmse', 'sql_score']:
                     if row.get(key) is not None:
                         if math.isinf(row[key]) or math.isnan(row[key]):
                             row[key] = None
@@ -480,6 +488,11 @@ class RoundRepository:
                     'forecast_count': data['count'],
                     'mase': mase,
                     'rmse': None,  # Not calculated on-the-fly
+                    # SQL needs the stored quantiles and the final-evaluation denominator,
+                    # neither of which this path has. Reported as absent so the UI shows
+                    # it as pending rather than as a model that skipped quantiles.
+                    'sql_score': None,
+                    'has_quantiles': None,
                     'is_final': False
                 })
             
