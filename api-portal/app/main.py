@@ -102,9 +102,8 @@ _SCHEMA_PATCHES = (
 
 
 # Do NOT add `ALTER MATERIALIZED VIEW ... SET (timescaledb.materialized_only = false)` here.
-# It cannot be applied on this deployment at all — a continuous aggregate is relkind 'v' and
-# TimescaleDB does not intercept the statement, so it fails from psql as superuser too, not
-# just over asyncpg (backend-87). It was briefly in this list and, because every patch in the
+# It cannot be applied on the dev database at all — TimescaleDB intercepts no DDL there, so it
+# fails from psql as superuser too, not just over asyncpg (backend-87). It was briefly in this list and, because every patch in the
 # batch shares one transaction, its failure rolled back all the others on each boot. If a
 # future patch here can fail, give it its own transaction — this list has no per-statement
 # isolation. The publication-edge problem is solved in the read path instead; see

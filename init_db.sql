@@ -790,14 +790,22 @@ ON data_portal.time_series_data(series_id, ts DESC);
 -- — the window therefore opened inside data that was already public, and definitions 1 and 4
 -- were a lookup rather than a forecast from 2026-04-28.
 --
--- The obvious fix is `timescaledb.materialized_only = false`. It is NOT set here, because it
--- cannot be applied on this deployment: a continuous aggregate is `relkind = 'v'` in pg_class,
--- and TimescaleDB does not intercept the statement on this server, so `ALTER MATERIALIZED
--- VIEW` fails with "is not a materialized view" and `ALTER VIEW` with "unrecognized parameter
--- namespace" — from psql as superuser and owner, not only from the application. Client,
--- licence (`timescale`, not apache), ownership and version (real-time aggregation is not
--- deprecated in 2.24) were all ruled out. Setting it in this CREATE is deliberately avoided
--- too: if ALTER is rejected here, CREATE may be as well, and that would break fresh installs.
+-- The obvious fix is `timescaledb.materialized_only = false`. It is NOT set here because it
+-- cannot be applied on the dev database, and dev is where changes are validated.
+--
+-- On dev, TimescaleDB intercepts no DDL at all: `ALTER MATERIALIZED VIEW` fails with "is not a
+-- materialized view" (a cagg is relkind 'v', so that syntax only works when TimescaleDB
+-- rewrites it), while `ALTER VIEW` and even `CREATE MATERIALIZED VIEW ... WITH
+-- (timescaledb.continuous, ...)` fail with "unrecognized parameter namespace timescaledb" —
+-- from psql, as superuser and owner. Ruled out: client, licence (`timescale`, not apache),
+-- ownership, and extension version (2.24.0 on disk and installed). Dev's cagg refresh policies
+-- have never run either, which is the same fault from the other side. Consequence worth
+-- knowing: **this file cannot currently be run against the dev database** — the three
+-- CREATE MATERIALIZED VIEW statements below would fail.
+--
+-- Prod is healthy (refresh policies have run 50k+ times), so the option would very likely be
+-- accepted there. It is still left unset, because a setting that only works on prod cannot be
+-- verified before it reaches prod.
 --
 -- Instead the *read* does the union that real-time aggregation would have done — see
 -- `_read_aggregate_with_live_tail` in

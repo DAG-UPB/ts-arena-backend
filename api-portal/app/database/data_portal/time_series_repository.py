@@ -869,12 +869,23 @@ class TimeSeriesRepository:
         real-time aggregation does internally (backend-87).
 
         We do it in the query rather than by setting `timescaledb.materialized_only = false`
-        because that ALTER cannot be applied on this server: a continuous aggregate is
-        `relkind = 'v'`, and TimescaleDB does not intercept the statement here, so both
-        `ALTER MATERIALIZED VIEW` ("is not a materialized view") and `ALTER VIEW`
-        ("unrecognized parameter namespace") are rejected — from psql as superuser and owner,
-        not just from the app. Ruled out: client (psql and JDBC both), licence (`timescale`,
-        not apache), ownership, and version (real-time aggregation is not deprecated in 2.24).
+        because that setting cannot be applied on **dev**, and dev is where changes are
+        validated. On dev, TimescaleDB does not intercept DDL at all: `ALTER MATERIALIZED
+        VIEW` fails with "is not a materialized view" (a cagg is `relkind = 'v'`, so the
+        statement only works when TimescaleDB rewrites it), and `ALTER VIEW` *and even*
+        `CREATE MATERIALIZED VIEW ... WITH (timescaledb.continuous, ...)` fail with
+        "unrecognized parameter namespace timescaledb" — from psql as superuser and owner.
+        Ruled out: client (psql and JDBC alike), licence (`timescale`, not apache), ownership,
+        extension version (2.24.0 on disk and installed, matching), and deprecation (real-time
+        aggregation is alive in 2.24). Dev's cagg refresh policies have also never run, which
+        is the same fault seen from the other side.
+
+        Prod is healthy — its refresh policies have run 50k+ times — so the ALTER would very
+        likely succeed there. This union is used regardless, because it is the only form that
+        works on both, and an A-path that cannot be exercised on dev cannot be verified before
+        it reaches prod. It stays correct if real-time aggregation is ever enabled: the two
+        branches are split at the watermark, so they are disjoint either way, and enabling it
+        would make this a safe simplification rather than a behaviour change.
 
         Why this matters: without the live branch the aggregate can never return a bucket past
         its watermark, `end_offset` holds that watermark at ~now, and so `max(ts)` — which the
