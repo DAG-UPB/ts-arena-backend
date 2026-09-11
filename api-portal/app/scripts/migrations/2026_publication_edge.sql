@@ -60,19 +60,36 @@
 -- Reversible with `= true`.
 -- =====================================================================================
 
+-- SYNTAX NOTE: `ALTER MATERIALIZED VIEW` is what TimescaleDB documents, but a continuous
+-- aggregate is a plain view in pg_class (relkind 'v' on 2.24.0, which is what dev and prod
+-- run), so Postgres's own relkind check rejects that form before TimescaleDB's hook sees it:
+--
+--   ERROR: "time_series_15min" is not a materialized view  (WrongObjectTypeError)
+--
+-- Hence the fallback below. `time_series_1d` is not used by any active challenge definition
+-- today, but is set for the same reason as the other two: the defect is "the aggregate cannot
+-- hold future rows", and leaving one view behind re-arms the trap for whoever next reads it.
+
 BEGIN;
 
-ALTER MATERIALIZED VIEW data_portal.time_series_15min
-    SET (timescaledb.materialized_only = false);
-
-ALTER MATERIALIZED VIEW data_portal.time_series_1h
-    SET (timescaledb.materialized_only = false);
-
--- Not used by any active challenge definition today, but set for the same reason: the defect
--- is "the aggregate cannot hold future rows", and leaving one view behind re-arms the trap for
--- whoever next reads it.
-ALTER MATERIALIZED VIEW data_portal.time_series_1d
-    SET (timescaledb.materialized_only = false);
+DO $$
+DECLARE
+  cagg text;
+BEGIN
+  FOREACH cagg IN ARRAY ARRAY[
+    'data_portal.time_series_15min',
+    'data_portal.time_series_1h',
+    'data_portal.time_series_1d'
+  ] LOOP
+    BEGIN
+      EXECUTE format(
+        'ALTER MATERIALIZED VIEW %s SET (timescaledb.materialized_only = false)', cagg);
+    EXCEPTION WHEN wrong_object_type THEN
+      EXECUTE format(
+        'ALTER VIEW %s SET (timescaledb.materialized_only = false)', cagg);
+    END;
+  END LOOP;
+END $$;
 
 COMMIT;
 

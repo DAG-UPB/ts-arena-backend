@@ -106,9 +106,33 @@ _SCHEMA_PATCHES = (
     # (`start_time = max_ts + frequency`) opened inside already-published data. Metadata-only
     # ALTERs: no rewrite, no lock on the raw hypertable. Full rationale and the measured read
     # cost are in app/scripts/migrations/2026_publication_edge.sql.
-    "ALTER MATERIALIZED VIEW data_portal.time_series_15min SET (timescaledb.materialized_only = false)",
-    "ALTER MATERIALIZED VIEW data_portal.time_series_1h SET (timescaledb.materialized_only = false)",
-    "ALTER MATERIALIZED VIEW data_portal.time_series_1d SET (timescaledb.materialized_only = false)",
+    #
+    # `ALTER MATERIALIZED VIEW` is the syntax TimescaleDB documents, but a continuous
+    # aggregate is a plain view in pg_class (relkind 'v' — checked on 2.24.0), so on this
+    # server Postgres's own relkind check rejects it before TimescaleDB's hook sees it:
+    #   WrongObjectTypeError: "time_series_15min" is not a materialized view
+    # Try the documented form first and fall back to ALTER VIEW, so this works whichever way
+    # the installed version exposes the object. Handling the exception *inside* the DO block
+    # matters: these patches all run in one transaction, so an uncaught failure here would
+    # roll back every other patch in the batch too.
+    """DO $$
+    DECLARE
+      cagg text;
+    BEGIN
+      FOREACH cagg IN ARRAY ARRAY[
+        'data_portal.time_series_15min',
+        'data_portal.time_series_1h',
+        'data_portal.time_series_1d'
+      ] LOOP
+        BEGIN
+          EXECUTE format(
+            'ALTER MATERIALIZED VIEW %s SET (timescaledb.materialized_only = false)', cagg);
+        EXCEPTION WHEN wrong_object_type THEN
+          EXECUTE format(
+            'ALTER VIEW %s SET (timescaledb.materialized_only = false)', cagg);
+        END;
+      END LOOP;
+    END $$""",
 )
 
 
