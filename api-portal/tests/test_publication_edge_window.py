@@ -22,6 +22,7 @@ import pytest
 from app.database.data_portal.time_series_repository import (
     RESOLUTION_TO_BUCKET_LITERAL,
     RESOLUTION_TO_VIEW,
+    AggregateSource,
     TimeSeriesRepository,
     in_progress_bucket_start,
 )
@@ -205,3 +206,62 @@ def test_bucket_literals_match_the_aggregate_views():
     assert RESOLUTION_TO_VIEW["1d"] == "data_portal.time_series_1d"
     assert RESOLUTION_TO_BUCKET_LITERAL["1d"] == "1 day"
     assert set(RESOLUTION_TO_VIEW) == set(RESOLUTION_TO_BUCKET_LITERAL)
+
+
+# --- 5. the read adapts to whether the aggregate already unions its own tail ---------------
+
+@pytest.mark.asyncio
+async def test_realtime_aggregate_is_read_directly_without_our_union():
+    """If `materialized_only = false` is ever set — impossible on dev (backend-88), but it
+    works on prod — the view reaches the publication edge by itself. Doing our union on top
+    would be redundant, and computing the split via an unfiltered `max(ts)` would be actively
+    expensive: it would aggregate the live branch for every series."""
+    repo = TimeSeriesRepository.__new__(TimeSeriesRepository)
+    captured = {}
+
+    class _Session:
+        async def execute(self, stmt, params=None):
+            captured["sql"] = str(stmt)
+            captured["params"] = params
+            class _R:
+                def fetchall(self):
+                    return []
+            return _R()
+
+    repo.session = _Session()
+    await repo._read_aggregate_with_live_tail(
+        series_id=68, n=10, resolution="15min", before_time=None,
+        source=AggregateSource(realtime=True, edge=None),
+    )
+    sql = captured["sql"]
+    assert "data_portal.time_series_15min" in sql
+    assert "UNION ALL" not in sql
+    assert "time_bucket" not in sql
+
+
+@pytest.mark.asyncio
+async def test_materialized_only_aggregate_gets_the_union_split_at_the_watermark():
+    repo = TimeSeriesRepository.__new__(TimeSeriesRepository)
+    captured = {}
+
+    class _Session:
+        async def execute(self, stmt, params=None):
+            captured["sql"] = str(stmt)
+            class _R:
+                def fetchall(self):
+                    return []
+            return _R()
+
+    repo.session = _Session()
+    edge = datetime(2026, 9, 6, 0, 15, tzinfo=UTC)
+    await repo._read_aggregate_with_live_tail(
+        series_id=68, n=10, resolution="15min", before_time=None,
+        source=AggregateSource(realtime=False, edge=edge),
+    )
+    sql = captured["sql"]
+    assert "UNION ALL" in sql
+    assert "data_portal.time_series_15min" in sql
+    assert "data_portal.time_series_data" in sql
+    # Split spliced as a literal, both sides, so chunk exclusion happens at plan time.
+    assert sql.count("timestamptz '2026-09-06T00:15:00+00:00'") == 2
+    assert "time_bucket(interval '15 minutes'" in sql

@@ -1,5 +1,5 @@
 # app/database/data_portal/time_series_repository.py
-from typing import List, Optional, Dict, Any, Union, Type
+from typing import List, Optional, Dict, Any, NamedTuple, Union, Type
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert, desc, and_, text, func
@@ -72,6 +72,18 @@ RESOLUTION_TO_BUCKET_LITERAL: Dict[str, str] = {
     "1d": "1 day",
     "1 day": "1 day",
 }
+
+class AggregateSource(NamedTuple):
+    """How to read a continuous aggregate for one round (backend-87).
+
+    `realtime` — the aggregate already unions the live tail itself, so read it directly.
+    `edge`     — otherwise, the watermark to split our own union at; None means nothing is
+                 materialised and the live branch covers everything.
+    """
+
+    realtime: bool
+    edge: Optional[datetime]
+
 
 # Maps resolution strings to timedelta for validation
 RESOLUTION_INTERVALS: Dict[str, timedelta] = {
@@ -838,20 +850,45 @@ class TimeSeriesRepository:
     # Resolution-Based Data Access (Continuous Aggregate Views)
     # ==========================================================================
 
-    async def get_materialized_edge(self, resolution: str) -> Optional[datetime]:
+    async def get_aggregate_source(self, resolution: str) -> "AggregateSource":
         """
-        Newest bucket the continuous aggregate has actually materialised — its watermark, in
-        effect. One query per resolution, not per series: it is the split point shared by every
-        series in `get_last_n_points_by_resolution`'s union read.
+        How this resolution's aggregate should be read, resolved once per round.
 
-        Returns None for "raw" and for an aggregate that holds nothing yet, in which case the
-        caller reads entirely from raw.
+        If the aggregate already has real-time aggregation on
+        (`timescaledb.materialized_only = false`), TimescaleDB performs the
+        materialised/live union itself and the view already returns the publication edge —
+        so we read it directly and do no union of our own.
+
+        Otherwise we supply the split point and do the union in the query (backend-87). The
+        split is the newest materialised bucket, which in materialised-only mode is what
+        `max(ts)` returns.
+
+        Checking the mode rather than assuming it matters because the two environments differ
+        and may converge later: the `ALTER` is impossible on dev (backend-88) but works on
+        prod, verified there under `BEGIN … ROLLBACK`. Reading `max(ts)` unconditionally would
+        be actively harmful the moment prod is switched — with real-time aggregation on, an
+        unfiltered `max(ts)` over the view computes the live branch for *every* series above
+        the watermark, not a cheap index max.
         """
-        model = RESOLUTION_MODEL_MAP.get(resolution)
-        if model is None or resolution == "raw":
-            return None
-        result = await self.session.execute(select(func.max(model.ts)))
-        return result.scalar()
+        if resolution == "raw" or RESOLUTION_MODEL_MAP.get(resolution) is None:
+            return AggregateSource(realtime=False, edge=None)
+
+        view = RESOLUTION_TO_VIEW[resolution]
+        schema, _, name = view.partition(".")
+        realtime = await self.session.execute(
+            text("""
+                SELECT NOT materialized_only
+                  FROM timescaledb_information.continuous_aggregates
+                 WHERE view_schema = :schema AND view_name = :name
+            """),
+            {"schema": schema, "name": name},
+        )
+        if realtime.scalar():
+            return AggregateSource(realtime=True, edge=None)
+
+        model = RESOLUTION_MODEL_MAP[resolution]
+        edge = await self.session.execute(select(func.max(model.ts)))
+        return AggregateSource(realtime=False, edge=edge.scalar())
 
     async def get_last_n_points_by_resolution(
         self,
@@ -859,7 +896,7 @@ class TimeSeriesRepository:
         n: int,
         resolution: str,
         before_time: Optional[datetime] = None,
-        materialized_edge: Optional[datetime] = None,
+        source: Optional["AggregateSource"] = None,
     ) -> List[Dict[str, Any]]:
         """
         Retrieves the last N data points from the appropriate view based on resolution.
@@ -905,8 +942,8 @@ class TimeSeriesRepository:
             n: Number of points to retrieve
             resolution: Target resolution ("15min", "1h", "1d", "raw")
             before_time: Optional cutoff time (exclusive)
-            materialized_edge: the aggregate's watermark, from `get_materialized_edge`. Fetch
-                it once per round and pass it in; omitted, it is looked up per call.
+            source: how to read the aggregate, from `get_aggregate_source`. Resolve it once
+                per round and pass it in; omitted, it is looked up per call.
 
         Returns:
             List of data points ordered by time (ascending)
@@ -931,17 +968,16 @@ class TimeSeriesRepository:
                 data = [{"ts": row.ts, "value": row.value} for row in result.fetchall()]
                 return list(reversed(data))
 
-            if materialized_edge is None:
-                materialized_edge = await self.get_materialized_edge(resolution)
+            if source is None:
+                source = await self.get_aggregate_source(resolution)
 
-            data = await self._read_aggregate_with_live_tail(
+            return await self._read_aggregate_with_live_tail(
                 series_id=series_id,
                 n=n,
                 resolution=resolution,
                 before_time=before_time,
-                materialized_edge=materialized_edge,
+                source=source,
             )
-            return data
         except Exception as e:
             logger.error(f"Error querying last {n} points for series_id {series_id} with resolution {resolution}: {e}")
             raise
@@ -952,7 +988,7 @@ class TimeSeriesRepository:
         n: int,
         resolution: str,
         before_time: Optional[datetime],
-        materialized_edge: Optional[datetime],
+        source: "AggregateSource",
     ) -> List[Dict[str, Any]]:
         """The union read described in `get_last_n_points_by_resolution`, newest N first."""
         view = RESOLUTION_TO_VIEW[resolution]
@@ -965,7 +1001,15 @@ class TimeSeriesRepository:
         # observed. Exactly one bucket goes; past short buckets and future ones stay.
         filling_bucket = in_progress_bucket_start(resolution)
 
-        if materialized_edge is None:
+        if source.realtime:
+            # The aggregate already unions its own live tail, so it reaches the publication
+            # edge on its own — no union of ours, and no watermark to split at.
+            branches = f"""
+                SELECT ts, value, sample_count
+                  FROM {view}
+                 WHERE series_id = :series_id
+            """
+        elif source.edge is None:
             # Nothing materialised: the live branch alone covers everything.
             branches = f"""
                 SELECT time_bucket(interval '{bucket}', ts) AS ts,
@@ -976,7 +1020,7 @@ class TimeSeriesRepository:
                  GROUP BY 1
             """
         else:
-            edge = self._timestamptz_literal(materialized_edge)
+            edge = self._timestamptz_literal(source.edge)
             branches = f"""
                 SELECT ts, value, sample_count
                   FROM {view}
@@ -1173,7 +1217,7 @@ class TimeSeriesRepository:
         n: int,
         resolution: str,
         before_time: Optional[datetime] = None,
-        materialized_edge: Optional[datetime] = None,
+        source: Optional["AggregateSource"] = None,
     ) -> int:
         """
         Copies the last N data points from the appropriate resolution view to challenge context data.
@@ -1192,7 +1236,7 @@ class TimeSeriesRepository:
         try:
             # Get the last N points from the resolution view
             data = await self.get_last_n_points_by_resolution(
-                series_id, n, resolution, before_time, materialized_edge
+                series_id, n, resolution, before_time, source
             )
             
             if not data:
@@ -1254,15 +1298,14 @@ class TimeSeriesRepository:
         try:
             result = {}
 
-            # One watermark lookup for the whole round, shared by every series' union read
-            # (backend-87) — it is a property of the aggregate, not of the series.
-            materialized_edge = await self.get_materialized_edge(resolution)
+            # Resolved once for the whole round and shared by every series (backend-87) —
+            # how the aggregate must be read is a property of the aggregate, not the series.
+            source = await self.get_aggregate_source(resolution)
 
             # Copy last N points for each series from the resolution view
             for series_id, series_name in series_mapping.items():
                 count = await self.copy_last_n_to_challenge_by_resolution(
-                    series_id, series_name, round_id, n, resolution, before_time,
-                    materialized_edge,
+                    series_id, series_name, round_id, n, resolution, before_time, source,
                 )
                 result[series_id] = count
             
