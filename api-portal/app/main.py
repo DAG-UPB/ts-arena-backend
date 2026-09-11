@@ -101,14 +101,14 @@ _SCHEMA_PATCHES = (
 )
 
 
-# NOT patched here: the backend-87 continuous-aggregate change
-# (`timescaledb.materialized_only = false`). Both `ALTER MATERIALIZED VIEW` and `ALTER VIEW`
-# fail over asyncpg on this server — the first with `"time_series_15min" is not a materialized
-# view` (a cagg is relkind 'v'), the second with `unrecognized parameter namespace
-# "timescaledb"`. Because every patch in this batch shares one transaction, a failure here
-# rolls back all the others, so it must not live in this list. It is applied from
-# app/scripts/migrations/2026_publication_edge.sql instead, which is how live-database
-# migrations are handled in this repo anyway (see 2026_sql_score.sql).
+# Do NOT add `ALTER MATERIALIZED VIEW ... SET (timescaledb.materialized_only = false)` here.
+# It cannot be applied on this deployment at all — a continuous aggregate is relkind 'v' and
+# TimescaleDB does not intercept the statement, so it fails from psql as superuser too, not
+# just over asyncpg (backend-87). It was briefly in this list and, because every patch in the
+# batch shares one transaction, its failure rolled back all the others on each boot. If a
+# future patch here can fail, give it its own transaction — this list has no per-statement
+# isolation. The publication-edge problem is solved in the read path instead; see
+# `_read_aggregate_with_live_tail` in app/database/data_portal/time_series_repository.py.
 
 async def apply_schema_patches(logger):
     try:

@@ -779,34 +779,41 @@ ON data_portal.time_series_data(series_id, ts DESC);
 -- 10) Continuous Aggregates for Multi-Granularity Time Series
 -- ==========================================================
 --
--- `materialized_only = false` (real-time aggregation) is REQUIRED, not a tuning choice —
--- backend-87. With it off, a continuous aggregate cannot return any bucket newer than its
--- materialization watermark, and a positive `end_offset` keeps that watermark at ~now. For a
--- source that publishes ahead of delivery — SMARD day-ahead prices are public from ~12:45 CET
--- on D-1 — that capped `max(ts)` at ~now, and since a round's forecast window is derived as
--- `max_ts + frequency` (`ChallengeService._prepare_context_data`), the window opened inside
--- already-published data. Challenges 1 and 4 were a lookup rather than a forecast from
--- 2026-04-28 until this was fixed.
+-- A NOTE ON `end_offset` AND FUTURE-DATED DATA (backend-87) — read before changing either.
 --
--- Note this was never set explicitly before: TimescaleDB's default flipped from false to true
--- in 2.13.0 (2023-11-28), so the same DDL on an older release would have unioned in the
--- unmaterialised rows and the future values would have appeared in context all along.
+-- A continuous aggregate cannot return a bucket newer than its materialization watermark
+-- unless real-time aggregation is on, and `end_offset` holds that watermark at ~now. So the
+-- view's `max(ts)` can never exceed ~now, however far ahead the raw data actually extends.
+-- That matters because a challenge round's forecast window is derived from exactly that value
+-- (`start_time = max_ts + frequency`, in ChallengeService._prepare_context_data). For a source
+-- that publishes ahead of delivery — SMARD day-ahead prices are public from ~12:45 CET on D-1
+-- — the window therefore opened inside data that was already public, and definitions 1 and 4
+-- were a lookup rather than a forecast from 2026-04-28.
 --
--- `end_offset` below is deliberately kept: it still stops a *filling* bucket being
--- materialised, which is useful. What must not depend on it is the visibility of future rows,
--- and with real-time aggregation those come from the live branch of the union. The read side
--- drops the filling bucket itself — see `in_progress_bucket_start` in
--- api-portal/app/database/data_portal/time_series_repository.py.
+-- The obvious fix is `timescaledb.materialized_only = false`. It is NOT set here, because it
+-- cannot be applied on this deployment: a continuous aggregate is `relkind = 'v'` in pg_class,
+-- and TimescaleDB does not intercept the statement on this server, so `ALTER MATERIALIZED
+-- VIEW` fails with "is not a materialized view" and `ALTER VIEW` with "unrecognized parameter
+-- namespace" — from psql as superuser and owner, not only from the application. Client,
+-- licence (`timescale`, not apache), ownership and version (real-time aggregation is not
+-- deprecated in 2.24) were all ruled out. Setting it in this CREATE is deliberately avoided
+-- too: if ALTER is rejected here, CREATE may be as well, and that would break fresh installs.
 --
--- Cost, measured on dev 2026-09-11 (context read: 15 series x 1000 points, server-side
--- EXPLAIN ANALYZE, warm): 15-min view 31.5 ms -> 93 ms at a 15-minute watermark lag and
--- 122 ms at 14 h; 1-hour view 23.7 ms -> 72 ms / 85 ms. Roughly 3-4x on an operation that
--- runs once per round and costs tens of milliseconds.
+-- Instead the *read* does the union that real-time aggregation would have done — see
+-- `_read_aggregate_with_live_tail` in
+-- api-portal/app/database/data_portal/time_series_repository.py. It is correct whether or not
+-- real-time aggregation is ever enabled (the two branches are split at the watermark, so they
+-- are disjoint either way). If a future TimescaleDB does accept the ALTER, enabling it is a
+-- safe simplification, not a behaviour change.
+--
+-- `end_offset` below is therefore kept as-is: it still stops a filling bucket being
+-- materialised, which is useful. What must no longer depend on it is the visibility of future
+-- rows.
 
 -- Quarter-hourly aggregation (15 minutes)
 -- Contains all series with frequency <= 15 minutes
 CREATE MATERIALIZED VIEW IF NOT EXISTS data_portal.time_series_15min
-WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+WITH (timescaledb.continuous) AS
 SELECT 
     series_id,
     time_bucket('15 minutes', ts) AS ts,
@@ -838,7 +845,7 @@ SELECT add_compression_policy('data_portal.time_series_15min',
 -- Hourly aggregation (1 hour)
 -- Contains all series with frequency <= 1 hour
 CREATE MATERIALIZED VIEW IF NOT EXISTS data_portal.time_series_1h
-WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+WITH (timescaledb.continuous) AS
 SELECT 
     series_id,
     time_bucket('1 hour', ts) AS ts,
@@ -870,7 +877,7 @@ SELECT add_compression_policy('data_portal.time_series_1h',
 -- Daily aggregation (1 day)
 -- Contains all series with frequency <= 1 day
 CREATE MATERIALIZED VIEW IF NOT EXISTS data_portal.time_series_1d
-WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+WITH (timescaledb.continuous) AS
 SELECT 
     series_id,
     time_bucket('1 day', ts) AS ts,

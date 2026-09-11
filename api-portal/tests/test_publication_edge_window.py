@@ -19,7 +19,12 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.database.data_portal.time_series_repository import in_progress_bucket_start
+from app.database.data_portal.time_series_repository import (
+    RESOLUTION_TO_BUCKET_LITERAL,
+    RESOLUTION_TO_VIEW,
+    TimeSeriesRepository,
+    in_progress_bucket_start,
+)
 from app.services.forecast_service import ForecastService
 from app.services.score_evaluation_service import series_forecast_windows
 
@@ -162,3 +167,41 @@ def test_series_without_a_context_edge_is_omitted():
 def test_no_window_without_frequency_and_horizon(frequency, horizon):
     edges = {68: datetime(2026, 9, 11, 19, 45, tzinfo=UTC)}
     assert series_forecast_windows(edges, frequency, horizon) == {}
+
+
+# --- 4. the union read's SQL literal ------------------------------------------------------
+
+def test_timestamptz_literal_is_utc_normalised():
+    naive = datetime(2026, 9, 11, 19, 45)
+    assert TimeSeriesRepository._timestamptz_literal(naive) == (
+        "timestamptz '2026-09-11T19:45:00+00:00'"
+    )
+
+
+def test_timestamptz_literal_converts_other_offsets():
+    from datetime import timedelta as td
+    berlin = datetime(2026, 9, 11, 21, 45, tzinfo=timezone(td(hours=2)))
+    assert TimeSeriesRepository._timestamptz_literal(berlin) == (
+        "timestamptz '2026-09-11T19:45:00+00:00'"
+    )
+
+
+@pytest.mark.parametrize("value", ["2026-09-11'; DROP TABLE forecasts.forecasts; --", 1757600000, None])
+def test_timestamptz_literal_refuses_non_datetime(value):
+    """The split point is spliced into the SQL rather than bound, so that chunk exclusion can
+    happen at plan time. This type check is what keeps that safe — nothing but a datetime we
+    computed can ever reach the statement."""
+    with pytest.raises(TypeError):
+        TimeSeriesRepository._timestamptz_literal(value)
+
+
+def test_bucket_literals_match_the_aggregate_views():
+    """The union's live branch must produce the same buckets the materialised branch holds, so
+    these two maps have to stay aligned with the aggregates in init_db.sql."""
+    assert RESOLUTION_TO_VIEW["15min"] == "data_portal.time_series_15min"
+    assert RESOLUTION_TO_BUCKET_LITERAL["15min"] == "15 minutes"
+    assert RESOLUTION_TO_VIEW["1h"] == "data_portal.time_series_1h"
+    assert RESOLUTION_TO_BUCKET_LITERAL["1h"] == "1 hour"
+    assert RESOLUTION_TO_VIEW["1d"] == "data_portal.time_series_1d"
+    assert RESOLUTION_TO_BUCKET_LITERAL["1d"] == "1 day"
+    assert set(RESOLUTION_TO_VIEW) == set(RESOLUTION_TO_BUCKET_LITERAL)

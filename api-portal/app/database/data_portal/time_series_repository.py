@@ -51,6 +51,28 @@ RESOLUTION_TO_BUCKET_INTERVAL: Dict[str, timedelta] = {
     "1 day": timedelta(days=1),
 }
 
+# Continuous aggregate view + time_bucket() literal per resolution, for the publication-edge
+# union read below (backend-87). The bucket literals must match the aggregate definitions in
+# init_db.sql exactly — the union's live branch has to produce the same buckets the
+# materialised branch holds.
+RESOLUTION_TO_VIEW: Dict[str, str] = {
+    "15min": "data_portal.time_series_15min",
+    "15 minutes": "data_portal.time_series_15min",
+    "1h": "data_portal.time_series_1h",
+    "1 hour": "data_portal.time_series_1h",
+    "1d": "data_portal.time_series_1d",
+    "1 day": "data_portal.time_series_1d",
+}
+
+RESOLUTION_TO_BUCKET_LITERAL: Dict[str, str] = {
+    "15min": "15 minutes",
+    "15 minutes": "15 minutes",
+    "1h": "1 hour",
+    "1 hour": "1 hour",
+    "1d": "1 day",
+    "1 day": "1 day",
+}
+
 # Maps resolution strings to timedelta for validation
 RESOLUTION_INTERVALS: Dict[str, timedelta] = {
     "15min": timedelta(minutes=15),
@@ -816,76 +838,184 @@ class TimeSeriesRepository:
     # Resolution-Based Data Access (Continuous Aggregate Views)
     # ==========================================================================
 
+    async def get_materialized_edge(self, resolution: str) -> Optional[datetime]:
+        """
+        Newest bucket the continuous aggregate has actually materialised — its watermark, in
+        effect. One query per resolution, not per series: it is the split point shared by every
+        series in `get_last_n_points_by_resolution`'s union read.
+
+        Returns None for "raw" and for an aggregate that holds nothing yet, in which case the
+        caller reads entirely from raw.
+        """
+        model = RESOLUTION_MODEL_MAP.get(resolution)
+        if model is None or resolution == "raw":
+            return None
+        result = await self.session.execute(select(func.max(model.ts)))
+        return result.scalar()
+
     async def get_last_n_points_by_resolution(
         self,
         series_id: int,
         n: int,
         resolution: str,
-        before_time: Optional[datetime] = None
+        before_time: Optional[datetime] = None,
+        materialized_edge: Optional[datetime] = None,
     ) -> List[Dict[str, Any]]:
         """
         Retrieves the last N data points from the appropriate view based on resolution.
-        
+
+        For an aggregate resolution this reads the aggregate UNION a live `time_bucket` over
+        raw above the aggregate's watermark — which is precisely what TimescaleDB's own
+        real-time aggregation does internally (backend-87).
+
+        We do it in the query rather than by setting `timescaledb.materialized_only = false`
+        because that ALTER cannot be applied on this server: a continuous aggregate is
+        `relkind = 'v'`, and TimescaleDB does not intercept the statement here, so both
+        `ALTER MATERIALIZED VIEW` ("is not a materialized view") and `ALTER VIEW`
+        ("unrecognized parameter namespace") are rejected — from psql as superuser and owner,
+        not just from the app. Ruled out: client (psql and JDBC both), licence (`timescale`,
+        not apache), ownership, and version (real-time aggregation is not deprecated in 2.24).
+
+        Why this matters: without the live branch the aggregate can never return a bucket past
+        its watermark, `end_offset` holds that watermark at ~now, and so `max(ts)` — which the
+        round's forecast window is derived from — capped at ~now. For SMARD day-ahead prices,
+        public from ~12:45 CET on D-1, that put the whole forecast window inside already
+        published data.
+
+        The split point is spliced into the SQL as a literal on purpose. As a bind parameter
+        it is opaque at plan time, so Postgres cannot exclude chunks and scans every one of
+        them: measured at ~28x slower (a constant ~57 ms/series that did not vary with the
+        watermark lag at all). It is a `datetime` we computed, never user input. With the
+        literal, the cost is 93 ms for a whole 15-series context read at the design watermark
+        lag, against 31.5 ms materialised-only — once per round.
+
         Args:
             series_id: ID of the time series
             n: Number of points to retrieve
             resolution: Target resolution ("15min", "1h", "1d", "raw")
             before_time: Optional cutoff time (exclusive)
-            
+            materialized_edge: the aggregate's watermark, from `get_materialized_edge`. Fetch
+                it once per round and pass it in; omitted, it is looked up per call.
+
         Returns:
             List of data points ordered by time (ascending)
-            
+
         Raises:
             ValueError: If resolution is not recognized
         """
         model = RESOLUTION_MODEL_MAP.get(resolution)
         if not model:
             raise ValueError(f"Unknown resolution: {resolution}. Valid: {list(RESOLUTION_MODEL_MAP.keys())}")
-        
+
         try:
-            # Build query based on model type (raw vs aggregate)
             if resolution == "raw":
-                query = select(
-                    model.ts,
-                    model.value
-                ).where(
-                    model.series_id == series_id
+                query = (
+                    select(model.ts, model.value)
+                    .where(model.series_id == series_id)
                 )
-            else:
-                query = select(
-                    model.ts,
-                    model.value,
-                    model.sample_count
-                ).where(
-                    model.series_id == series_id
-                )
-            
-            if before_time:
-                query = query.where(model.ts < before_time)
-
-            # Drop the bucket that is still filling (backend-87). Without this, removing the
-            # aggregates' `end_offset` would let a half-filled bucket become the context edge,
-            # and `start_time = max_ts + frequency` would open the round one bucket early —
-            # over a stretch already partly observed. Exactly one bucket is excluded; past
-            # buckets (short ones included) and future-dated ones are untouched.
-            filling_bucket = in_progress_bucket_start(resolution)
-            if filling_bucket is not None:
-                query = query.where(model.ts != filling_bucket)
-
-            query = query.order_by(desc(model.ts)).limit(n)
-            
-            result = await self.session.execute(query)
-            
-            if resolution == "raw":
+                if before_time:
+                    query = query.where(model.ts < before_time)
+                query = query.order_by(desc(model.ts)).limit(n)
+                result = await self.session.execute(query)
                 data = [{"ts": row.ts, "value": row.value} for row in result.fetchall()]
-            else:
-                data = [{"ts": row.ts, "value": row.value, "sample_count": row.sample_count} for row in result.fetchall()]
-            
-            # Reverse to get chronological order
-            return list(reversed(data))
+                return list(reversed(data))
+
+            if materialized_edge is None:
+                materialized_edge = await self.get_materialized_edge(resolution)
+
+            data = await self._read_aggregate_with_live_tail(
+                series_id=series_id,
+                n=n,
+                resolution=resolution,
+                before_time=before_time,
+                materialized_edge=materialized_edge,
+            )
+            return data
         except Exception as e:
             logger.error(f"Error querying last {n} points for series_id {series_id} with resolution {resolution}: {e}")
             raise
+
+    async def _read_aggregate_with_live_tail(
+        self,
+        series_id: int,
+        n: int,
+        resolution: str,
+        before_time: Optional[datetime],
+        materialized_edge: Optional[datetime],
+    ) -> List[Dict[str, Any]]:
+        """The union read described in `get_last_n_points_by_resolution`, newest N first."""
+        view = RESOLUTION_TO_VIEW[resolution]
+        bucket = RESOLUTION_TO_BUCKET_LITERAL[resolution]
+
+        # Drop the bucket that is still filling. The live branch below exposes it for the first
+        # time — `end_offset` used to withhold it, at the cost of withholding the future with
+        # it — and a partially averaged bucket must not become the context edge, or
+        # `start_time = max_ts + frequency` opens the round over a stretch already partly
+        # observed. Exactly one bucket goes; past short buckets and future ones stay.
+        filling_bucket = in_progress_bucket_start(resolution)
+
+        if materialized_edge is None:
+            # Nothing materialised: the live branch alone covers everything.
+            branches = f"""
+                SELECT time_bucket(interval '{bucket}', ts) AS ts,
+                       AVG(value) AS value,
+                       COUNT(*) AS sample_count
+                  FROM data_portal.time_series_data
+                 WHERE series_id = :series_id
+                 GROUP BY 1
+            """
+        else:
+            edge = self._timestamptz_literal(materialized_edge)
+            branches = f"""
+                SELECT ts, value, sample_count
+                  FROM {view}
+                 WHERE series_id = :series_id AND ts < {edge}
+                UNION ALL
+                SELECT time_bucket(interval '{bucket}', ts) AS ts,
+                       AVG(value) AS value,
+                       COUNT(*) AS sample_count
+                  FROM data_portal.time_series_data
+                 WHERE series_id = :series_id AND ts >= {edge}
+                 GROUP BY 1
+            """
+
+        predicates = []
+        if filling_bucket is not None:
+            predicates.append(f"u.ts <> {self._timestamptz_literal(filling_bucket)}")
+        if before_time is not None:
+            predicates.append(f"u.ts < {self._timestamptz_literal(before_time)}")
+        where = ("WHERE " + " AND ".join(predicates)) if predicates else ""
+
+        query = text(f"""
+            SELECT u.ts, u.value, u.sample_count
+              FROM ({branches}) u
+            {where}
+             ORDER BY u.ts DESC
+             LIMIT :n
+        """)
+
+        result = await self.session.execute(query, {"series_id": series_id, "n": n})
+        data = [
+            {"ts": row.ts, "value": row.value, "sample_count": row.sample_count}
+            for row in result.fetchall()
+        ]
+        # Reverse to get chronological order
+        return list(reversed(data))
+
+    @staticmethod
+    def _timestamptz_literal(value: datetime) -> str:
+        """
+        Render a datetime as a SQL `timestamptz` literal, for splicing into the union read.
+
+        Splicing rather than binding is deliberate — see `get_last_n_points_by_resolution` for
+        why (chunk exclusion). The type check is the guard that keeps it safe: only a real
+        `datetime` is ever formatted, so there is no string from any caller reaching the SQL.
+        """
+        if not isinstance(value, datetime):
+            raise TypeError(f"expected datetime for SQL timestamptz literal, got {type(value)!r}")
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return f"timestamptz '{value.astimezone(timezone.utc).isoformat()}'"
 
     async def get_data_by_time_range_by_resolution(
         self,
@@ -1031,7 +1161,8 @@ class TimeSeriesRepository:
         round_id: int,
         n: int,
         resolution: str,
-        before_time: Optional[datetime] = None
+        before_time: Optional[datetime] = None,
+        materialized_edge: Optional[datetime] = None,
     ) -> int:
         """
         Copies the last N data points from the appropriate resolution view to challenge context data.
@@ -1049,7 +1180,9 @@ class TimeSeriesRepository:
         """
         try:
             # Get the last N points from the resolution view
-            data = await self.get_last_n_points_by_resolution(series_id, n, resolution, before_time)
+            data = await self.get_last_n_points_by_resolution(
+                series_id, n, resolution, before_time, materialized_edge
+            )
             
             if not data:
                 logger.warning(f"No data found to copy for series_id {series_id} with resolution {resolution}")
@@ -1109,11 +1242,16 @@ class TimeSeriesRepository:
         """
         try:
             result = {}
-            
+
+            # One watermark lookup for the whole round, shared by every series' union read
+            # (backend-87) — it is a property of the aggregate, not of the series.
+            materialized_edge = await self.get_materialized_edge(resolution)
+
             # Copy last N points for each series from the resolution view
             for series_id, series_name in series_mapping.items():
                 count = await self.copy_last_n_to_challenge_by_resolution(
-                    series_id, series_name, round_id, n, resolution, before_time
+                    series_id, series_name, round_id, n, resolution, before_time,
+                    materialized_edge,
                 )
                 result[series_id] = count
             

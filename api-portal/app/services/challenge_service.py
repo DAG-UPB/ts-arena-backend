@@ -338,14 +338,13 @@ class ChallengeService:
             # Copy context data WITHOUT before_time cutoff - gets all available data up to max
             # timestamp.
             #
-            # This depends on the continuous aggregates being able to return rows the
-            # publisher has already released (backend-87). That was not true until
-            # 2026-09-11: `materialized_only` defaulted to true, so the view could not return
-            # any bucket past its watermark, `end_offset` held that watermark at ~now, and
-            # "all available data" silently meant "everything up to now" — which for SMARD
-            # day-ahead prices put the whole forecast window inside published data. If the
-            # aggregates ever go back to `materialized_only = true`, this call quietly starts
-            # lying again and the window below moves with it.
+            # "All available data" means as far as the publisher has released, which for a
+            # publish-ahead source is in the future (backend-87). That is only true because the
+            # read unions the aggregate with a live tail over raw
+            # (`_read_aggregate_with_live_tail`); the aggregate alone stops at its watermark,
+            # which `end_offset` holds at ~now. Before that union existed this call silently
+            # meant "everything up to now", which for SMARD day-ahead prices put the whole
+            # forecast window inside already-published data.
             copy_result = await self.time_series_repository.copy_bulk_to_challenge_by_resolution(
                 series_mapping=series_mapping,
                 round_id=round_id,
