@@ -60,38 +60,36 @@
 -- Reversible with `= true`.
 -- =====================================================================================
 
--- SYNTAX NOTE: `ALTER MATERIALIZED VIEW` is what TimescaleDB documents, but a continuous
--- aggregate is a plain view in pg_class (relkind 'v' on 2.24.0, which is what dev and prod
--- run), so Postgres's own relkind check rejects that form before TimescaleDB's hook sees it:
+-- HOW TO APPLY — run this with psql, as a TOP-LEVEL statement:
 --
---   ERROR: "time_series_15min" is not a materialized view  (WrongObjectTypeError)
+--   psql -h <host> -p <port> -U <admin> -d ts-arena -f 2026_publication_edge.sql
 --
--- Hence the fallback below. `time_series_1d` is not used by any active challenge definition
--- today, but is set for the same reason as the other two: the defect is "the aggregate cannot
--- hold future rows", and leaving one view behind re-arms the trap for whoever next reads it.
+-- It must be top level. Applying the same ALTER from the application (asyncpg, via the
+-- startup patches in api-portal/app/main.py) fails, and so does wrapping it in a DO block:
+--
+--   ALTER MATERIALIZED VIEW …  ->  ERROR: "time_series_15min" is not a materialized view
+--   ALTER VIEW …               ->  ERROR: unrecognized parameter namespace "timescaledb"
+--
+-- Both are what you get when TimescaleDB's ProcessUtility hook does not intercept the
+-- statement — a continuous aggregate is relkind 'v' in pg_class (checked on 2.24.0), so
+-- without the hook Postgres applies its own plain-view rules and rejects both forms. A DO
+-- block runs through SPI rather than at top level, which is why it does not help either.
+-- Hence: psql, top level, no wrapper. This is also how live-database migrations are handled
+-- in this repo generally (see 2026_sql_score.sql) — main.py's patch list is only a bridge for
+-- column adds.
+--
+-- `time_series_1d` is not used by any active challenge definition today, but is set for the
+-- same reason as the other two: the defect is "the aggregate cannot hold future rows", and
+-- leaving one view behind re-arms the trap for whoever next reads it.
 
-BEGIN;
+ALTER MATERIALIZED VIEW data_portal.time_series_15min
+    SET (timescaledb.materialized_only = false);
 
-DO $$
-DECLARE
-  cagg text;
-BEGIN
-  FOREACH cagg IN ARRAY ARRAY[
-    'data_portal.time_series_15min',
-    'data_portal.time_series_1h',
-    'data_portal.time_series_1d'
-  ] LOOP
-    BEGIN
-      EXECUTE format(
-        'ALTER MATERIALIZED VIEW %s SET (timescaledb.materialized_only = false)', cagg);
-    EXCEPTION WHEN wrong_object_type THEN
-      EXECUTE format(
-        'ALTER VIEW %s SET (timescaledb.materialized_only = false)', cagg);
-    END;
-  END LOOP;
-END $$;
+ALTER MATERIALIZED VIEW data_portal.time_series_1h
+    SET (timescaledb.materialized_only = false);
 
-COMMIT;
+ALTER MATERIALIZED VIEW data_portal.time_series_1d
+    SET (timescaledb.materialized_only = false);
 
 -- Verify: all three should report `materialized_only = f`.
 --
