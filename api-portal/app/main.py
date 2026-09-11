@@ -98,43 +98,17 @@ _SCHEMA_PATCHES = (
         END;
       END IF;
     END $$""",
-    # backend-87: the continuous aggregates must be able to return rows the publisher has
-    # already released. With `materialized_only = true` a cagg cannot return any bucket
-    # newer than its watermark, and `end_offset` holds that watermark at ~now — so for a
-    # publish-ahead source (SMARD day-ahead prices are public from ~12:45 CET on D-1)
-    # `max(ts)` capped at ~now, and the round window derived from it
-    # (`start_time = max_ts + frequency`) opened inside already-published data. Metadata-only
-    # ALTERs: no rewrite, no lock on the raw hypertable. Full rationale and the measured read
-    # cost are in app/scripts/migrations/2026_publication_edge.sql.
-    #
-    # `ALTER MATERIALIZED VIEW` is the syntax TimescaleDB documents, but a continuous
-    # aggregate is a plain view in pg_class (relkind 'v' — checked on 2.24.0), so on this
-    # server Postgres's own relkind check rejects it before TimescaleDB's hook sees it:
-    #   WrongObjectTypeError: "time_series_15min" is not a materialized view
-    # Try the documented form first and fall back to ALTER VIEW, so this works whichever way
-    # the installed version exposes the object. Handling the exception *inside* the DO block
-    # matters: these patches all run in one transaction, so an uncaught failure here would
-    # roll back every other patch in the batch too.
-    """DO $$
-    DECLARE
-      cagg text;
-    BEGIN
-      FOREACH cagg IN ARRAY ARRAY[
-        'data_portal.time_series_15min',
-        'data_portal.time_series_1h',
-        'data_portal.time_series_1d'
-      ] LOOP
-        BEGIN
-          EXECUTE format(
-            'ALTER MATERIALIZED VIEW %s SET (timescaledb.materialized_only = false)', cagg);
-        EXCEPTION WHEN wrong_object_type THEN
-          EXECUTE format(
-            'ALTER VIEW %s SET (timescaledb.materialized_only = false)', cagg);
-        END;
-      END LOOP;
-    END $$""",
 )
 
+
+# NOT patched here: the backend-87 continuous-aggregate change
+# (`timescaledb.materialized_only = false`). Both `ALTER MATERIALIZED VIEW` and `ALTER VIEW`
+# fail over asyncpg on this server — the first with `"time_series_15min" is not a materialized
+# view` (a cagg is relkind 'v'), the second with `unrecognized parameter namespace
+# "timescaledb"`. Because every patch in this batch shares one transaction, a failure here
+# rolls back all the others, so it must not live in this list. It is applied from
+# app/scripts/migrations/2026_publication_edge.sql instead, which is how live-database
+# migrations are handled in this repo anyway (see 2026_sql_score.sql).
 
 async def apply_schema_patches(logger):
     try:
