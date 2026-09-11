@@ -2,7 +2,7 @@ import logging
 from typing import List, Dict, Any, Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, status
 
 from app.database.forecasts.repository import ForecastRepository
@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 # the rest as a count — enough to diagnose a submitter's key format, bounded so a pathological
 # payload cannot blow up the log line.
 MAX_DROPPED_KEY_SAMPLE = 10
+
+
+def _as_utc(value: datetime) -> datetime:
+    """Normalise to UTC so naive DB timestamps and tz-aware payload timestamps compare."""
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
 class ForecastService:
@@ -106,9 +111,11 @@ class ForecastService:
         await self._auto_register_participant(round_id, model_id)
         logger.info(f"Model {model_id} registered for round {round_id}")
         
-        # === Step 4: Validate forecast timestamps ===
-        # Timestamp validation disabled - accept all forecasts regardless of window
-        
+        # === Step 4: Prepare forecast timestamp validation ===
+        # Context edge per series, to validate submitted timestamps against (backend-87).
+        # One query for the round rather than one per series.
+        context_edges = await self.challenge_repo.get_series_context_edges(round_id)
+
         errors = []
         total_inserted = 0
         
@@ -142,7 +149,38 @@ class ForecastService:
                     )
                     continue
 
-            # Prepare forecasts without timestamp validation.
+            # Validate forecast timestamps against the window this series was actually
+            # issued (backend-87). Until now no timestamp was checked at all, so a model
+            # could submit points for any already-published stretch and be scored on them
+            # regardless of where the round window sat.
+            expected_ts = self._expected_forecast_timestamps(
+                context_edge=context_edges.get(series_id),
+                frequency=challenge.frequency,
+                count=expected_forecast_count,
+            )
+            if expected_ts is not None:
+                submitted_ts = [_as_utc(point.ts) for point in series_upload.forecasts]
+                # Set comparison, so a duplicated timestamp masking a missing one is caught
+                # even though the count check above passes.
+                if set(submitted_ts) != set(expected_ts):
+                    received = (
+                        f"{min(submitted_ts).isoformat()} to {max(submitted_ts).isoformat()}"
+                        if submitted_ts else "no points"
+                    )
+                    error_msg = (
+                        f"Invalid forecast timestamps for series '{challenge_series_name}': "
+                        f"expected {len(expected_ts)} points at {challenge.frequency} spacing "
+                        f"from {expected_ts[0].isoformat()} to {expected_ts[-1].isoformat()} "
+                        f"(the step after this series' last context point), but received "
+                        f"{received}"
+                    )
+                    errors.append(error_msg)
+                    logger.warning(
+                        f"round={round_id} model={model_id} series={series_id}: {error_msg}"
+                    )
+                    continue
+
+            # Prepare forecasts.
             # Repair any quantile crossings (isotonic sort per point) so stored quantiles are
             # monotone; count repairs to surface as a non-fatal upload warning.
             valid_forecasts = []
@@ -340,6 +378,25 @@ class ForecastService:
             }
             for f in forecasts
         ]
+
+    @staticmethod
+    def _expected_forecast_timestamps(
+        context_edge: Optional[datetime],
+        frequency: Optional[timedelta],
+        count: Optional[int],
+    ) -> Optional[List[datetime]]:
+        """
+        The timestamps an honest forecast for this series must carry: `context_edge + k *
+        frequency` for k = 1..count.
+
+        Returns None when the window cannot be derived — no context was stored for the series,
+        or the round has no frequency/horizon — in which case the caller skips the check rather
+        than rejecting on incomplete information.
+        """
+        if context_edge is None or not frequency or not count:
+            return None
+        edge = _as_utc(context_edge)
+        return [edge + frequency * k for k in range(1, count + 1)]
 
     async def _resolve_series_id(self, round_id: int, challenge_series_name: str) -> Optional[int]:
         """Resolve a challenge_series_name to the underlying series_id for the challenge."""

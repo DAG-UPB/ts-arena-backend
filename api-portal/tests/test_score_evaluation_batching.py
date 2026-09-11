@@ -84,17 +84,24 @@ class _FakeRoundRepo:
     def __init__(self, end_time, series_max_ts):
         self._end_time = end_time
         self._series_max_ts = series_max_ts
-        self.calls = {"pseudo": 0}
+        self.calls = {"pseudo": 0, "context_edges": 0}
 
     async def get_by_id(self, round_id):
         return SimpleNamespace(
-            id=round_id, frequency=timedelta(hours=1), end_time=self._end_time
+            id=round_id,
+            frequency=timedelta(hours=1),
+            horizon=timedelta(hours=3),
+            end_time=self._end_time,
         )
 
     async def get_series_pseudo(self, round_id, series_id):
         self.calls["pseudo"] += 1
         max_ts = self._series_max_ts.get(series_id)
         return SimpleNamespace(max_ts=max_ts) if max_ts else None
+
+    async def get_series_context_edges(self, round_id):
+        self.calls["context_edges"] += 1
+        return dict(self._series_max_ts)
 
 
 class _FakeTimeSeriesRepo:
@@ -132,6 +139,76 @@ def _service(forecast_repo, round_repo, time_series_repo):
 
 def _by_pair(scores):
     return {(s["model_id"], s["series_id"]): s for s in scores}
+
+
+# --- backend-87: scoring is bounded by the window the series was issued ------
+
+@pytest.mark.asyncio
+async def test_out_of_window_points_are_not_scored():
+    """A point outside the series' window is excluded from the score and from coverage.
+
+    Forecast timestamps went unvalidated on upload until backend-87, and the score is an
+    inner join on (series_id, ts) with no window predicate — so a point placed over an
+    already-published stretch was evaluated like any other. Here hour 8 is past the 3 h
+    horizon; it has a matching actual and would otherwise be scored.
+    """
+    forecasts = [(1, 10, h, 10.0, None) for h in (1, 2, 3, 8)]
+    actuals = {10: [(1, 10.0), (2, 10.0), (3, 10.0), (8, 10.0)]}
+    repo = _FakeForecastRepo(forecasts, actuals)
+    round_repo = _FakeRoundRepo(end_time=_ts(4), series_max_ts={10: _ts(0)})
+    svc = _service(repo, round_repo, _FakeTimeSeriesRepo({10: 5.0}))
+
+    assert await svc.evaluate_challenge_scores(round_id=99) is True
+
+    score = _by_pair(repo.inserted)[(1, 10)]
+    # Four were submitted; only the three inside [_ts(1), _ts(3)] count, and coverage is
+    # measured against those three rather than against all four.
+    assert score["forecast_count"] == 3
+    assert score["evaluated_count"] == 3
+    assert score["data_coverage"] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_a_model_with_only_out_of_window_points_still_gets_a_row():
+    """It must not vanish from the round silently — it falls through to `no_forecasts`."""
+    forecasts = [(1, 10, h, 10.0, None) for h in (1, 2, 3)] + [(2, 10, 8, 10.0, None)]
+    actuals = {10: [(1, 10.0), (2, 10.0), (3, 10.0), (8, 10.0)]}
+    repo = _FakeForecastRepo(forecasts, actuals)
+    round_repo = _FakeRoundRepo(end_time=_ts(4), series_max_ts={10: _ts(0)})
+    svc = _service(repo, round_repo, _FakeTimeSeriesRepo({10: 5.0}))
+
+    assert await svc.evaluate_challenge_scores(round_id=99) is True
+
+    scores = _by_pair(repo.inserted)
+    # Model 2 submitted nothing valid, so it is not stored as a scored pair (the
+    # `no_forecasts` branch is skipped by the caller) — but model 1 is unaffected.
+    assert (1, 10) in scores
+    assert scores[(1, 10)]["evaluated_count"] == 3
+    assert (2, 10) not in scores
+
+
+@pytest.mark.asyncio
+async def test_a_lagging_series_is_scored_on_its_own_window():
+    """Series 11's context ends an hour behind series 10's, so its legitimate first point is
+    an hour earlier. A single round-level `start_time` bound would drop it."""
+    forecasts = [(1, 10, h, 10.0, None) for h in (2, 3, 4)] + [
+        (1, 11, h, 10.0, None) for h in (1, 2, 3)
+    ]
+    actuals = {
+        10: [(2, 10.0), (3, 10.0), (4, 10.0)],
+        11: [(1, 10.0), (2, 10.0), (3, 10.0)],
+    }
+    repo = _FakeForecastRepo(forecasts, actuals)
+    round_repo = _FakeRoundRepo(
+        end_time=_ts(5), series_max_ts={10: _ts(1), 11: _ts(0)}
+    )
+    svc = _service(repo, round_repo, _FakeTimeSeriesRepo({10: 5.0, 11: 5.0}))
+
+    assert await svc.evaluate_challenge_scores(round_id=99) is True
+
+    scores = _by_pair(repo.inserted)
+    assert scores[(1, 10)]["evaluated_count"] == 3
+    assert scores[(1, 11)]["evaluated_count"] == 3
 
 
 # --- scores produced ---------------------------------------------------------

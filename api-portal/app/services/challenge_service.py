@@ -335,7 +335,17 @@ class ChallengeService:
             resolution = self._frequency_to_resolution(frequency)
             logger.info(f"Copying {context_length} context points for {len(series_mapping)} series (resolution: {resolution})")
             
-            # Copy context data WITHOUT before_time cutoff - gets all available data up to max timestamp
+            # Copy context data WITHOUT before_time cutoff - gets all available data up to max
+            # timestamp.
+            #
+            # This depends on the continuous aggregates being able to return rows the
+            # publisher has already released (backend-87). That was not true until
+            # 2026-09-11: `materialized_only` defaulted to true, so the view could not return
+            # any bucket past its watermark, `end_offset` held that watermark at ~now, and
+            # "all available data" silently meant "everything up to now" — which for SMARD
+            # day-ahead prices put the whole forecast window inside published data. If the
+            # aggregates ever go back to `materialized_only = true`, this call quietly starts
+            # lying again and the window below moves with it.
             copy_result = await self.time_series_repository.copy_bulk_to_challenge_by_resolution(
                 series_mapping=series_mapping,
                 round_id=round_id,
@@ -376,6 +386,10 @@ class ChallengeService:
             ]
             
             if all_max_ts:
+                # The publication edge, not "now": for a source that publishes ahead of
+                # delivery this is genuinely in the future, which is what puts the forecast
+                # window after the data that already exists (backend-87). The read side has
+                # already dropped the still-filling bucket, so this cannot be a partial one.
                 global_max_ts = max(all_max_ts)
                 new_start_time = global_max_ts + frequency_timedelta
                 new_end_time = new_start_time + horizon

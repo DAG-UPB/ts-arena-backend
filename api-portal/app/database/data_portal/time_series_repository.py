@@ -1,6 +1,6 @@
 # app/database/data_portal/time_series_repository.py
 from typing import List, Optional, Dict, Any, Union, Type
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert, desc, and_, text, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -60,6 +60,57 @@ RESOLUTION_INTERVALS: Dict[str, timedelta] = {
     "1d": timedelta(days=1),
     "1 day": timedelta(days=1),
 }
+
+
+def in_progress_bucket_start(
+    resolution: str,
+    now: Optional[datetime] = None,
+) -> Optional[datetime]:
+    """
+    Start of the continuous aggregate bucket that currently contains `now` — the one bucket
+    that is still filling, and the only one whose AVG is not yet the value it will settle on.
+
+    This replaces what the aggregates' `end_offset` used to do (backend-87). `end_offset`
+    conflated "incomplete" with "recent": it withheld the filling bucket, but in doing so it
+    also made the view unable to hold *any* bucket newer than the watermark, including
+    future-dated ones. For a source that publishes ahead of delivery — SMARD day-ahead prices
+    are public from ~12:45 CET on D-1 — that capped `max(ts)` at ~now, so a round's
+    `start_time` (derived as `max_ts + frequency`) opened inside already-published data and the
+    forecast was a lookup rather than a forecast.
+
+    Excluding exactly this one bucket keeps the protection and drops the amputation: older
+    buckets are returned as before (short ones included — see below), and future buckets are
+    returned in full.
+
+    Deliberately NOT a `sample_count` completeness test, which is what backend-87 first
+    proposed. Measured on dev 2026-09-11:
+
+    - `bucket_width / series.frequency` is not an integer for 110 of 287 series: a 15-minute
+      bucket over a 10-minute series (all Gridstatus, all Tankerkoenig) holds 1 or 2 points,
+      never a fixed count, so an equality test is undefined rather than merely strict.
+    - Short buckets are normal, not artefacts. Tankerkoenig 1 h buckets over 14 days: 1527 at
+      6/6 but 234 at 5/6 and 15 at 4/6. And for the def-1 price series the only partial buckets
+      in 14 days sit at 2026-08-28 07:00 and 2026-09-08 21:00 — historical ingest gaps strictly
+      in the past, not at the *now* edge. Filtering on completeness would punch holes in the
+      middle of the context handed to participants.
+    - `time_series.imputation_policy` is NULL for all 287 series, so it cannot inform a guard.
+
+    Returns the bucket start, or None for resolutions with no fixed bucket width ("raw"), for
+    which there is nothing to trim.
+
+    The floor matches `time_bucket()`'s origin: 15 min, 1 h and 1 d all divide the Unix epoch
+    evenly, so flooring the epoch second is the same boundary TimescaleDB computes.
+    """
+    width = RESOLUTION_TO_BUCKET_INTERVAL.get(resolution)
+    if width is None:
+        return None
+
+    now = now or datetime.now(timezone.utc)
+    width_seconds = int(width.total_seconds())
+    epoch_seconds = int(now.timestamp())
+    return datetime.fromtimestamp(
+        epoch_seconds - (epoch_seconds % width_seconds), tz=timezone.utc
+    )
 
 
 def parse_interval_string_to_timedelta(interval_str: str) -> timedelta:
@@ -811,7 +862,16 @@ class TimeSeriesRepository:
             
             if before_time:
                 query = query.where(model.ts < before_time)
-            
+
+            # Drop the bucket that is still filling (backend-87). Without this, removing the
+            # aggregates' `end_offset` would let a half-filled bucket become the context edge,
+            # and `start_time = max_ts + frequency` would open the round one bucket early —
+            # over a stretch already partly observed. Exactly one bucket is excluded; past
+            # buckets (short ones included) and future-dated ones are untouched.
+            filling_bucket = in_progress_bucket_start(resolution)
+            if filling_bucket is not None:
+                query = query.where(model.ts != filling_bucket)
+
             query = query.order_by(desc(model.ts)).limit(n)
             
             result = await self.session.execute(query)

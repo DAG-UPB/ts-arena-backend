@@ -1,4 +1,5 @@
 from typing import List, Optional, Any, Dict
+from datetime import datetime
 import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -415,6 +416,24 @@ class ChallengeRoundRepository:
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
+
+    async def get_series_context_edges(self, round_id: int) -> Dict[int, Optional[datetime]]:
+        """
+        `series_id -> last context timestamp` for every series in a round, in one query.
+
+        `series_pseudo.max_ts` is the newest point that series' context actually contained,
+        which is what a participant forecasts forward from — and what both upload validation
+        and the scoring window are derived from (backend-87). Per series on purpose:
+        `rounds.start_time` is the global max across the round's series, so for a lagging
+        series it sits one or more steps after that series' own legitimate first point.
+        """
+        result = await self.session.execute(
+            select(
+                ChallengeSeriesPseudo.series_id,
+                ChallengeSeriesPseudo.max_ts,
+            ).where(ChallengeSeriesPseudo.round_id == round_id)
+        )
+        return {row[0]: row[1] for row in result.fetchall()}
 
     async def get_round_complete_data(self, round_id: int) -> Dict[str, Any]:
         """
