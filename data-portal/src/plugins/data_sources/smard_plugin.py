@@ -8,6 +8,16 @@ from typing import Dict, Any, List, Optional
 from src.plugins.base_plugin import BasePlugin, TimeSeriesMetadata
 
 
+def _as_utc(value) -> pd.Timestamp:
+    """Normalise any timestamp-like value to a tz-aware UTC Timestamp.
+
+    Everything inside this plugin is compared and stored as a UTC *instant*. A naive
+    value is assumed to already be UTC, which is what every caller passes.
+    """
+    ts = pd.Timestamp(value)
+    return ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
+
+
 class SmardDataPortal:
     """Client for SMARD API"""
     
@@ -52,13 +62,10 @@ class SmardDataPortal:
         if timestamps is None:
             return {"error": "Failed to fetch timestamps"}
 
-        pd_ts = sorted(pd.to_datetime(timestamps, unit="ms"))
+        pd_ts = sorted(pd.to_datetime(timestamps, unit="ms", utc=True))
         target = []
         if start_date:
-            if not isinstance(start_date, pd.Timestamp):
-                start_date = pd.Timestamp(start_date)
-            start_date = start_date.tz_localize(
-                None) if start_date.tzinfo else start_date
+            start_date = _as_utc(start_date)
             after = [ts for ts in pd_ts if ts >= start_date]
             before = [ts for ts in pd_ts if ts < start_date]
             sel = []
@@ -97,11 +104,12 @@ class SmardDataPortal:
         All filtering, conversion and cleaning happens here.
         """
         if start_date is None:
-            start_date = pd.Timestamp.now() - pd.Timedelta(days=7)
+            start_date = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=7)
         else:
-            # start date is always in utc, we convert to Europe/Berlin timezone and remove timezone info
-            start_date = pd.Timestamp(start_date).tz_localize("UTC").tz_convert(
-                "Europe/Berlin").tz_localize(None) if isinstance(start_date, pd.Timestamp) else pd.Timestamp(start_date)
+            start_date = _as_utc(start_date)
+        if end_date is not None:
+            end_date = _as_utc(end_date)
+
         
         raw_data = self.download_historical_data(
             filter=filter_value,
@@ -116,7 +124,10 @@ class SmardDataPortal:
         values = raw_data["series"]
         history = [
             {
-                "ts": pd.to_datetime(val[0], unit="ms"),
+                # SMARD timestamps are epoch milliseconds, i.e. UTC instants. Keep them
+                # as instants; only the rendering below is Europe/Berlin. Re-labelling the
+                # UTC wall clock as local time shifts every point by the Berlin offset.
+                "ts": pd.to_datetime(val[0], unit="ms", utc=True),
                 "value": val[1]
             }
             for val in values
@@ -134,27 +145,12 @@ class SmardDataPortal:
             history = [
                 entry for entry in history if entry["ts"] <= end_date]
         
-        # Convert timestamps to ISO format
-        # Handle DST transitions: ambiguous times are marked as True for first occurrence (DST)
-        # and False for second occurrence (standard time)
-        for i, entry in enumerate(history):
-            try:
-                entry["ts"] = entry["ts"].tz_localize("Europe/Berlin", nonexistent='shift_forward').isoformat()
-            except Exception as e:
-                # If ambiguous, check if we've seen this timestamp before
-                if "AmbiguousTimeError" in str(type(e).__name__):
-                    # Check if there's a previous entry with the same naive timestamp
-                    is_first_occurrence = True
-                    for j in range(i):
-                        if history[j]["ts"] == entry["ts"] if isinstance(history[j]["ts"], str) else False:
-                            is_first_occurrence = False
-                            break
-                    # First occurrence: DST (True), Second occurrence: Standard time (False)
-                    entry["ts"] = entry["ts"].tz_localize(
-                        "Europe/Berlin", ambiguous=is_first_occurrence).isoformat()
-                else:
-                    raise
-        
+        # Render in Europe/Berlin. The offset is carried explicitly, so both DST
+        # transitions are unambiguous and need no ambiguous/nonexistent handling: the
+        # instant never changes, only how it is written.
+        for entry in history:
+            entry["ts"] = entry["ts"].tz_convert("Europe/Berlin").isoformat()
+
         return history
 
 
@@ -183,11 +179,10 @@ class SmardDataSourcePlugin(BasePlugin):
         
         SMARD API does not require an end_date - it returns data up to the latest available.
         """
-        # Convert date strings to Timestamp objects and remove timezone information
-        start_dt = pd.Timestamp(start_date).tz_localize(
-            None) if start_date else None
-        # end_date is optional, SMARD will return up to latest if not provided
-        end_dt = pd.Timestamp(end_date).tz_localize(None) if end_date else None
+        # Normalise to UTC instants; end_date is optional, SMARD returns up to the
+        # latest available when it is not given.
+        start_dt = _as_utc(start_date) if start_date else None
+        end_dt = _as_utc(end_date) if end_date else None
         
         # Run blocking HTTP calls in a thread to avoid blocking the event loop
         loop = asyncio.get_event_loop()
