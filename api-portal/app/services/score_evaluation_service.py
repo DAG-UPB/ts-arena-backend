@@ -32,6 +32,45 @@ EVALUATION_TIMEOUT = timedelta(days=1)  # Grace period after round end
 MIN_COVERAGE_FOR_FINAL = 0.95           # Minimum 95% coverage required for valid score
 
 
+def _as_utc(value: datetime) -> datetime:
+    """Normalise to UTC so naive DB timestamps compare against tz-aware ones."""
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+def series_forecast_windows(
+    context_edges: Dict[int, Optional[datetime]],
+    frequency: Optional[timedelta],
+    horizon: Optional[timedelta],
+) -> Dict[int, tuple]:
+    """
+    `series_id -> (first_ts, last_ts)`, the closed range of timestamps a forecast for that
+    series may legitimately carry: `context_edge + frequency` through
+    `context_edge + horizon`.
+
+    The scoring backstop for backend-87. Uploads are validated against exactly this range
+    (`ForecastService._expected_forecast_timestamps`), but validation only binds new uploads —
+    rows already in `forecasts.forecasts` were accepted when no timestamp was checked at all.
+    Bounding the score here means an out-of-window point is not evaluated even if it is
+    already stored.
+
+    Derived per series rather than from `rounds.start_time` for the same reason upload
+    validation is: `start_time` is the global max context edge across the round's series, and
+    a lagging series' legitimate window starts one step earlier.
+
+    Series with no stored context edge are omitted — the caller leaves those unfiltered, since
+    there is nothing to derive a window from.
+    """
+    if not frequency or not horizon:
+        return {}
+    windows = {}
+    for series_id, edge in context_edges.items():
+        if edge is None:
+            continue
+        edge = _as_utc(edge)
+        windows[series_id] = (edge + frequency, edge + horizon)
+    return windows
+
+
 def timedelta_to_resolution(frequency: Optional[timedelta]) -> str:
     """
     Maps a timedelta frequency to the corresponding resolution view name.
@@ -284,9 +323,58 @@ class ScoreEvaluationService:
             # of per (model, series). Only the source of the data changes; the scoring,
             # coverage and finalization rules below are untouched.
             forecast_rows = await self.forecast_repo.get_round_forecasts(round_id)
+
+            # Score only what falls inside the window each series was actually issued
+            # (backend-87). Forecast timestamps were unvalidated on upload until now, and the
+            # score is an inner join on (series_id, ts) with no window predicate, so a point
+            # placed over an already-published stretch was evaluated like any other —
+            # wherever the round window sat. Uploads are now checked against exactly this
+            # range; this is the backstop for rows already stored.
+            #
+            # Dropped points still count against coverage: `forecast_count` below is taken
+            # from the filtered rows, so a model submitting out-of-window points scores as
+            # having submitted fewer valid ones, not as having submitted good ones.
+            windows = series_forecast_windows(
+                await self.round_repo.get_series_context_edges(round_id),
+                round_info.frequency,
+                round_info.horizon,
+            )
+            if windows:
+                kept = []
+                dropped = 0
+                for row in forecast_rows:
+                    window = windows.get(row["series_id"])
+                    if window is None:
+                        kept.append(row)
+                        continue
+                    ts = _as_utc(row["ts"])
+                    if window[0] <= ts <= window[1]:
+                        kept.append(row)
+                    else:
+                        dropped += 1
+                if dropped:
+                    logger.warning(
+                        f"Round {round_id}: excluded {dropped} out-of-window forecast "
+                        f"point(s) from scoring"
+                    )
+                forecast_rows = kept
+
             forecasts_by_pair: Dict[tuple, List[Dict[str, Any]]] = {}
             for row in forecast_rows:
                 forecasts_by_pair.setdefault((row["model_id"], row["series_id"]), []).append(row)
+
+            # Re-derive the per-pair stats from the filtered rows so that `count` (the
+            # coverage denominator) and the actuals ts bounds both describe in-window points
+            # only. The participant and series sets stay as `get_round_forecast_stats`
+            # returned them, so a model whose every point was out of window still gets a
+            # score row — it falls through to the `no_forecasts` branch rather than vanishing
+            # from the round silently.
+            for pair, stats in stats_by_pair.items():
+                rows = forecasts_by_pair.get(pair, [])
+                timestamps = [_as_utc(row["ts"]) for row in rows]
+                stats["count"] = len(rows)
+                stats["min_ts"] = min(timestamps) if timestamps else None
+                stats["max_ts"] = max(timestamps) if timestamps else None
 
             actuals_cache = _SeriesActualsCache(
                 self.forecast_repo, resolution, stats_by_pair

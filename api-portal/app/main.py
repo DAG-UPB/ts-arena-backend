@@ -98,6 +98,17 @@ _SCHEMA_PATCHES = (
         END;
       END IF;
     END $$""",
+    # backend-87: the continuous aggregates must be able to return rows the publisher has
+    # already released. With `materialized_only = true` a cagg cannot return any bucket
+    # newer than its watermark, and `end_offset` holds that watermark at ~now — so for a
+    # publish-ahead source (SMARD day-ahead prices are public from ~12:45 CET on D-1)
+    # `max(ts)` capped at ~now, and the round window derived from it
+    # (`start_time = max_ts + frequency`) opened inside already-published data. Metadata-only
+    # ALTERs: no rewrite, no lock on the raw hypertable. Full rationale and the measured read
+    # cost are in app/scripts/migrations/2026_publication_edge.sql.
+    "ALTER MATERIALIZED VIEW data_portal.time_series_15min SET (timescaledb.materialized_only = false)",
+    "ALTER MATERIALIZED VIEW data_portal.time_series_1h SET (timescaledb.materialized_only = false)",
+    "ALTER MATERIALIZED VIEW data_portal.time_series_1d SET (timescaledb.materialized_only = false)",
 )
 
 
