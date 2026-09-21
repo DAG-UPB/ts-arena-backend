@@ -3,13 +3,20 @@ import asyncio
 import logging
 import functools
 import time
+from datetime import datetime, timezone
 from typing import Any, Dict, Callable, Awaitable
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.alerts import send_alert_async
 from app.database.connection import SessionLocal
 from app.services.challenge_service import ChallengeService
 from app.services.score_evaluation_service import ScoreEvaluationService
 from app.services.elo_ranking_service import EloRankingService
+from app.services.monitoring_service import (
+    MonitoringService,
+    ParticipationThresholds,
+    build_participation_alert,
+)
 from app.scheduler.dependencies import get_scheduler
 
 
@@ -308,4 +315,42 @@ async def startup_elo_check_job() -> None:
             f"❌ Startup ELO check FAILED after {duration_seconds:.1f}s: {e}",
             exc_info=True
         )
+        raise  # Re-raise to let decorator handle it
+
+
+@job_error_handler
+async def periodic_participation_check_job() -> None:
+    """
+    Daily job that looks for models which stopped registering on a challenge (backend #92).
+
+    A participant-operated runner that dies leaves no trace in our logs — registration
+    happens inside the upload handler, so no upload means no request at all. The only
+    evidence is the absence of `challenges.participants` rows, so this is the one check
+    that can see it. Emits a single grouped digest per run, or nothing when all is well.
+    """
+    logger = logging.getLogger("challenge-scheduler")
+    logger.info("Starting participation check job")
+
+    try:
+        thresholds = ParticipationThresholds.from_env()
+        as_of = datetime.now(timezone.utc)
+
+        async with SessionLocal() as session:
+            service = MonitoringService(session)
+            findings = await service.check_participation_drop(
+                as_of=as_of, thresholds=thresholds
+            )
+
+        if not findings:
+            logger.info("Participation check: no model/challenge pair below threshold.")
+            return
+
+        logger.info(
+            "Participation check: %d model/challenge pair(s) below threshold; alerting.",
+            len(findings),
+        )
+        await send_alert_async(build_participation_alert(findings, thresholds, as_of))
+
+    except Exception as e:
+        logger.exception(f"Failed to run participation check: {e}")
         raise  # Re-raise to let decorator handle it
