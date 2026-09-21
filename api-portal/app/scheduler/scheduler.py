@@ -20,6 +20,7 @@ from app.scheduler.jobs import (
     prepare_round_context_data_job,
     periodic_challenge_scores_evaluation_job,
     periodic_elo_ranking_calculation_job,
+    periodic_participation_check_job,
     startup_elo_check_job
 )
 import yaml
@@ -105,6 +106,9 @@ class ChallengeScheduler:
 
                 # Schedule the ELO ranking calculation job (4x daily)
                 await self.schedule_periodic_elo_calculation()
+
+                # Schedule the daily participation check (backend #92)
+                await self.schedule_periodic_participation_check()
 
                 # Run startup ELO check in background (don't block startup!)
                 # This allows the application to become healthy before calculation starts
@@ -450,6 +454,42 @@ class ChallengeScheduler:
             )
         except Exception as e:
             self.logger.exception(f"Failed to schedule periodic ELO calculation job: {e}")
+            raise
+
+    async def schedule_periodic_participation_check(self) -> None:
+        """
+        Schedules the daily participation check (backend #92).
+
+        Runs at 04:30 UTC — after the 00:00 ELO run and outside every definition's
+        registration window (the earliest opens at 04:45), so the check never reads a
+        round whose window is still filling up.
+        """
+        # Note: _ensure_started() is not called here to avoid recursion
+        # This method is only called from start() after the scheduler is already started
+
+        try:
+            await self.scheduler.configure_task(
+                periodic_participation_check_job,
+                max_running_jobs=1,
+                misfire_grace_time=3600,
+            )
+            # Same reasoning as the eval and ELO schedules: set misfire_grace_time on the
+            # SCHEDULE so a queued fire gets a start_deadline and expires instead of
+            # piling up, and conflict_policy=replace so an existing row in the persistent
+            # data store picks up changes to this configuration (backend-48).
+            await self.scheduler.add_schedule(
+                func_or_task_id=periodic_participation_check_job,
+                trigger=CronTrigger(hour="4", minute="30"),
+                id="periodic_participation_check",
+                coalesce=CoalescePolicy.latest,
+                misfire_grace_time=3600,
+                conflict_policy=ConflictPolicy.replace,
+            )
+            self.logger.info(
+                "Scheduled daily participation check job (runs at 04:30 UTC)"
+            )
+        except Exception as e:
+            self.logger.exception(f"Failed to schedule participation check job: {e}")
             raise
 
     async def _ensure_started(self) -> None:
