@@ -8,6 +8,8 @@ import numpy as np
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
+from app.services.monitoring_service import alert_on_ranking_membership_change
+
 logger = logging.getLogger(__name__)
 
 
@@ -202,13 +204,21 @@ class EloRankingService:
         
         total_duration = int((time.time() - total_start) * 1000)
         results["total_duration_ms"] = total_duration
-        
+
         logger.info(
             f"ELO calculation complete. "
             f"Total: {completed}, Failed: {failed}, "
             f"Duration: {total_duration}ms ({total_duration/1000:.1f}s)"
         )
-        
+
+        # Announce any change to who is on the global leaderboard (backend #92). The
+        # global scope is written above, so the diff sees the rows this run just stored.
+        # Deliberately not conditional on `results["global"]`: a run that produced no
+        # global rows at all is precisely the case where everyone dropped out.
+        # alert_on_ranking_membership_change swallows its own failures — monitoring must
+        # never fail the calculation it observes.
+        await alert_on_ranking_membership_change(self.session, metric, calc_date)
+
         return results
 
     

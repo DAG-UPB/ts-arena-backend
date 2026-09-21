@@ -84,6 +84,30 @@ Create a `.env` file in the root directory of the project. You can use the varia
 *   `ACCESS_LOG_SUMMARY_INTERVAL_SECONDS`: How often that count is reported (default 300).
 *   `SCHEDULER_TIMEZONE`: Timezone for the scheduler (default: `UTC`).
 
+**Monitoring & Alerts (`api-portal`):**
+*   `ALERT_WEBHOOK_URL`: Where operational alerts are posted, as JSON `{"text": ...}` —
+    the shape Slack incoming webhooks, Telegram bridges and Discord (`/slack` suffix) all
+    accept. When unset, alerts go to the container log at `WARNING` with their full text
+    and nothing else changes, so the checks are useful before a channel exists.
+
+The `api-portal` runs a daily participation check at 04:30 UTC: for each model and
+challenge definition it compares the model's registration rate over the last rounds
+against its own trailing baseline, and reports models that stopped registering. It also
+diffs global leaderboard membership on every ELO write and reports models entering or
+leaving. Defaults are tuned against production history; override only if the alert volume
+is wrong for your deployment.
+
+*   `PARTICIPATION_RECENT_N`: Rounds in the recent window (default 7).
+*   `PARTICIPATION_BASELINE_N`: Rounds in the trailing baseline before those (default 28).
+*   `PARTICIPATION_MIN_RECENT_ROUNDS`: Skip a pair with fewer recent rounds (default 4).
+*   `PARTICIPATION_MIN_BASELINE_ROUNDS`: Skip a pair with a shorter baseline (default 14).
+*   `PARTICIPATION_MIN_BASELINE_RATE`: Only consider models that were participating at
+    least this much (default 0.5).
+*   `PARTICIPATION_DROP_RATIO`: Alert when the recent rate falls to this share of the
+    baseline rate or below (default 0.34).
+*   `PARTICIPATION_SILENCE_STREAK`: Alert when a model has missed this many consecutive
+    rounds of a definition, whatever the rates say (default 5).
+
 All log lines carry a UTC timestamp, a level and the logger name:
 `2026-08-17 09:49:36,498Z | INFO | challenge-scheduler | …`. Logging is configured on the
 **root** logger in `logging_setup.py` (one copy per service, kept identical by hand —
