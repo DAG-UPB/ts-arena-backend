@@ -423,9 +423,19 @@ class ChallengeRoundRepository:
 
         `series_pseudo.max_ts` is the newest point that series' context actually contained,
         which is what a participant forecasts forward from — and what both upload validation
-        and the scoring window are derived from (backend-87). Per series on purpose:
-        `rounds.start_time` is the global max across the round's series, so for a lagging
-        series it sits one or more steps after that series' own legitimate first point.
+        and the scoring window are derived from (backend-87).
+
+        Per series because there is no round-wide answer. The upstream providers are not
+        live: each delivers with a delay we do not know and which differs per provider and
+        per series, so when a round opens, different series have context reaching different
+        distances toward the present. Lagging is normal, not exceptional — on definitions 2
+        and 3 most series lag on every round.
+
+        **`rounds.start_time` is not the anchor and must never be used as one.** It is an
+        informative field. It happens to coincide with `max_ts + frequency` on rounds where
+        nothing lags, which is precisely what makes the mistake easy to make and hard to
+        catch: a spot check on a healthy definition confirms a rule that is false.
+        See `wiki/30_Notes/round-time-fields-and-forecast-anchoring.md`.
         """
         result = await self.session.execute(
             select(
