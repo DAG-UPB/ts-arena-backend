@@ -401,9 +401,10 @@ class ChallengeService:
                 # origin of a recurring misreading — that they mark where a forecast
                 # begins. They do not. The first forecast timestamp is per series
                 # (`series_pseudo.max_ts + frequency`) and differs per series, because the
-                # upstream providers deliver with unknown, differing delays. On a round
-                # where nothing lags these values coincide, which is what keeps the
-                # misreading alive. Anchor on `get_series_context_edges`, never on this.
+                # providers publish with a small lag that varies slightly between them. On
+                # a round where nothing lags these values coincide, which is what keeps the
+                # misreading alive: it is correct on most rounds and on most series.
+                # Anchor on `get_series_context_edges`, never on this.
                 # See wiki/30_Notes/round-time-fields-and-forecast-anchoring.md.
                 # Update round's start_time and end_time
                 await self.round_repository.update_round_times(
@@ -593,13 +594,14 @@ class ChallengeService:
         #
         # `rounds.start_time` anchors nothing. It is an informative field; the first
         # forecast timestamp is `that series' own last context ts + frequency`, and it
-        # differs per series because the upstream providers deliver with delays we do not
-        # know and which differ per series. Measured on prod over 2026-09-08..09-22, 115 of
-        # 140 series-rows on definition 2 and 181 of 224 on definition 3 had their own last
-        # context point strictly before the round-wide value, the worst by six days. For
-        # every one of those the template emitted timestamps that do not exist for that
-        # series — which `ForecastService._expected_forecast_timestamps` rejects, since it
-        # validates `series_pseudo.max_ts + k * frequency` per series.
+        # differs per series because the providers publish with a small lag that varies
+        # slightly between them. The lag is usually harmless — median zero on most
+        # definitions — but one step off invalidates every timestamp in the submission.
+        # Measured on prod over 2026-09-08..09-22, 65 % of definition 2's series and 42 %
+        # of definition 3's sat more than one step behind the round-wide value. For every
+        # one of those the template emitted timestamps that do not exist for that series —
+        # which `ForecastService._expected_forecast_timestamps` rejects, since it validates
+        # `series_pseudo.max_ts + k * frequency` per series.
         # See wiki/30_Notes/round-time-fields-and-forecast-anchoring.md.
         #
         # `max(...)` over the points rather than `data[-1]` so this does not depend on the

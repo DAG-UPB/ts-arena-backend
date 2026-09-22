@@ -425,11 +425,12 @@ class ChallengeRoundRepository:
         which is what a participant forecasts forward from — and what both upload validation
         and the scoring window are derived from (backend-87).
 
-        Per series because there is no round-wide answer. The upstream providers are not
-        live: each delivers with a delay we do not know and which differs per provider and
-        per series, so when a round opens, different series have context reaching different
-        distances toward the present. Lagging is normal, not exceptional — on definitions 2
-        and 3 most series lag on every round.
+        Per series because there is no round-wide answer. The upstream providers are live,
+        but not real-time to the second: each publishes with a small lag, normally
+        immaterial — the median series sits exactly at the round-wide edge on 12 of the 16
+        definitions. But `normally` is not `always`, and being one step off invalidates
+        every timestamp in a submission: on definitions 2 and 3, 65 % and 42 % of series
+        sit more than one step behind.
 
         **`rounds.start_time` is not the anchor and must never be used as one.** It is an
         informative field. It happens to coincide with `max_ts + frequency` on rounds where
