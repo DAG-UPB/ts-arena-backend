@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Type
+from typing import List, Dict, Any, Optional, Tuple, Type
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
@@ -37,7 +37,7 @@ class ForecastRepository:
         model_id: int,
         series_id: int,
         forecast_data: List[Dict[str, Any]]
-    ) -> int:
+    ) -> Tuple[int, int]:
         """
         Bulk insert forecasts for a specific challenge round, model, and series.
         Uses INSERT ... ON CONFLICT DO NOTHING to handle duplicates gracefully.
@@ -49,10 +49,14 @@ class ForecastRepository:
             forecast_data: List of dicts with 'timestamp', 'value', 'probabilistic_values'
         
         Returns:
-            Number of rows inserted
+            (rows inserted, of which carried usable quantiles)
+
+        The second count is taken from RETURNING rather than from the input, so it reflects
+        what ON CONFLICT actually stored: re-sending an already-uploaded round reports 0/0,
+        not the size of the payload (backend-94).
         """
         if not forecast_data:
-            return 0
+            return 0, 0
         
         # Prepare data for bulk insert
         mappings = [
@@ -73,10 +77,15 @@ class ForecastRepository:
             index_elements=["round_id", "model_id", "series_id", "ts"]
         )
         
+        stmt = stmt.returning(Forecast.probabilistic_values)
+
         result = await self.session.execute(stmt)
+        inserted_probabilistic_values = result.scalars().all()
         await self.session.commit()
-        
-        return result.rowcount if result.rowcount else 0
+
+        inserted = len(inserted_probabilistic_values)
+        with_quantiles = sum(1 for pv in inserted_probabilistic_values if pv)
+        return inserted, with_quantiles
 
     async def get_ids_needing_evaluation(self) -> List[int]:
         """
