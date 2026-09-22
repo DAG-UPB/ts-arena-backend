@@ -64,11 +64,39 @@ class ForecastUploadRequest(BaseModel):
 
 
 class ForecastUploadResponse(BaseModel):
-    """Response after forecast upload."""
+    """Response after forecast upload.
+
+    Everything added here is additive (backend-94): older participant clients that only read
+    `success` / `message` / `forecasts_inserted` / `errors` keep working unchanged.
+    """
     success: bool
     message: str
     forecasts_inserted: int
-    errors: List[str] = Field(default_factory=list)
+    model_id: Optional[int] = Field(
+        None,
+        description="Numeric id the upload was attributed to. Use it with "
+                    "GET /forecasts/{round_id}/{model_id} to read the stored forecast back.",
+    )
+    points_inserted: int = Field(
+        0, description="Forecast points stored (same as forecasts_inserted; named for symmetry)."
+    )
+    probabilistic_points_inserted: int = Field(
+        0,
+        description="Of those, how many carried usable quantiles. A submitter can confirm "
+                    "probabilistic persistence from this alone, without a readback.",
+    )
+    errors: List[str] = Field(
+        default_factory=list,
+        description="Conditions that cost you data: a series was rejected, or points were "
+                    "dropped. For backward compatibility this also still carries the "
+                    "advisories now repeated in `warnings`.",
+    )
+    warnings: List[str] = Field(
+        default_factory=list,
+        description="Advisories that did NOT cost you data — repaired quantile crossings, "
+                    "unrecognised keys dropped from an otherwise-accepted point. Clients "
+                    "should fail on `errors`, not on these.",
+    )
 
 
 # ==========================================================================

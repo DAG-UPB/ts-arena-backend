@@ -109,8 +109,16 @@ class ForecastService:
         # === Step 4: Validate forecast timestamps ===
         # Timestamp validation disabled - accept all forecasts regardless of window
         
-        errors = []
+        # Rejections that cost the submitter data: an unknown series, a bad point count,
+        # a failed insert.
+        hard_errors: List[str] = []
+        # Advisories that cost nothing: repaired quantile crossings, unrecognised keys
+        # dropped from an otherwise-accepted point. Historically these went into `errors`
+        # too, so a client could not fail on real rejections without also failing on these
+        # (backend-94). `errors` is recomposed from both below to keep that wire format.
+        warnings: List[str] = []
         total_inserted = 0
+        total_probabilistic_inserted = 0
         
         # === Step 5: Calculate expected forecast count ===
         # Each series should have horizon/frequency forecast points
@@ -128,14 +136,14 @@ class ForecastService:
             challenge_series_name = series_upload.challenge_series_name
             series_id = await self._resolve_series_id(round_id, challenge_series_name)
             if series_id is None:
-                errors.append(f"Unknown challenge_series_name '{challenge_series_name}' for round {round_id}")
+                hard_errors.append(f"Unknown challenge_series_name '{challenge_series_name}' for round {round_id}")
                 continue
 
             # Validate forecast count
             actual_forecast_count = len(series_upload.forecasts)
             if expected_forecast_count is not None:
                 if actual_forecast_count != expected_forecast_count:
-                    errors.append(
+                    hard_errors.append(
                         f"Invalid forecast count for series '{challenge_series_name}': "
                         f"expected {expected_forecast_count} forecast points (horizon={challenge.horizon}, "
                         f"frequency={challenge.frequency}), but received {actual_forecast_count}"
@@ -175,7 +183,7 @@ class ForecastService:
                     f"point(s); distinct keys: {sample}"
                     + (f" (+{more} more)" if more > 0 else "")
                 )
-                errors.append(warning)
+                warnings.append(warning)
                 logger.warning(
                     f"round={round_id} model={model_id} series={series_id}: {warning}"
                 )
@@ -185,7 +193,7 @@ class ForecastService:
                     f"Series '{challenge_series_name}': repaired quantile crossings on "
                     f"{crossing_repairs} forecast point(s) (values sorted ascending by level)"
                 )
-                errors.append(warning)
+                warnings.append(warning)
                 logger.warning(
                     f"round={round_id} model={model_id} series={series_id}: {warning}"
                 )
@@ -193,15 +201,17 @@ class ForecastService:
             # Insert all forecasts
             if valid_forecasts:
                 try:
-                    inserted_count = await self.forecast_repo.bulk_create_forecasts(
+                    inserted_count, probabilistic_count = await self.forecast_repo.bulk_create_forecasts(
                         round_id=round_id,
                         model_id=model_id,
                         series_id=series_id,
                         forecast_data=valid_forecasts
                     )
                     total_inserted += inserted_count
+                    total_probabilistic_inserted += probabilistic_count
                     logger.info(
-                        f"Inserted {inserted_count} forecasts for round={round_id}, "
+                        f"Inserted {inserted_count} forecasts "
+                        f"({probabilistic_count} with quantiles) for round={round_id}, "
                         f"model={model_id}, series={series_id} ({challenge_series_name})"
                     )
                     
@@ -222,20 +232,33 @@ class ForecastService:
                     
                 except Exception as e:
                     error_msg = f"Series {series_id} ({challenge_series_name}): Failed to insert forecasts - {str(e)}"
-                    errors.append(error_msg)
+                    hard_errors.append(error_msg)
                     logger.error(error_msg)
         
         # === Step 7: Return response ===
+        # `success` stays "anything landed" and `errors` stays the union of rejections and
+        # advisories, so existing clients behave exactly as before. What is new is that a
+        # client can now tell a whole upload from a partial one: compare `points_inserted`
+        # with what it sent, and treat `set(errors) - set(warnings)` as the fatal subset.
         success = total_inserted > 0
+        errors = hard_errors + warnings
         message = f"Successfully inserted {total_inserted} forecasts"
-        if errors:
-            message += f" with {len(errors)} error(s)"
+        if total_probabilistic_inserted:
+            message += f" ({total_probabilistic_inserted} with quantiles)"
+        if hard_errors:
+            message += f" with {len(hard_errors)} error(s)"
+        if warnings:
+            message += f" and {len(warnings)} warning(s)"
         
         return ForecastUploadResponse(
             success=success,
             message=message,
             forecasts_inserted=total_inserted,
-            errors=errors
+            model_id=model_id,
+            points_inserted=total_inserted,
+            probabilistic_points_inserted=total_probabilistic_inserted,
+            errors=errors,
+            warnings=warnings,
         )
 
     async def _auto_register_participant(self, round_id: int, model_id: int) -> None:
