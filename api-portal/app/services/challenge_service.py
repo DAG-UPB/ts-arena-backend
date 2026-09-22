@@ -271,7 +271,10 @@ class ChallengeService:
         - If required_series_ids is provided and non-empty: use ONLY those series
         - If required_series_ids is empty: select n_time_series random series
         - Context data is copied up to the maximum available timestamp (no cutoff)
-        - Round's start_time and end_time are updated based on: max_context_ts + frequency
+        - Round's start_time and end_time are updated based on: max_context_ts + frequency,
+          where max_context_ts is the GLOBAL max across the round's series. Both fields are
+          informative only — they do not define where any series' forecast starts. See
+          wiki/30_Notes/round-time-fields-and-forecast-anchoring.md.
         """
         try:
             # Simple logic: use required series OR random series, never mix
@@ -392,7 +395,16 @@ class ChallengeService:
                 global_max_ts = max(all_max_ts)
                 new_start_time = global_max_ts + frequency_timedelta
                 new_end_time = new_start_time + horizon
-                
+
+                # NOTE: `start_time` / `end_time` are INFORMATIVE ONLY. This is the one
+                # place they are written, and writing them from the GLOBAL max is the
+                # origin of a recurring misreading — that they mark where a forecast
+                # begins. They do not. The first forecast timestamp is per series
+                # (`series_pseudo.max_ts + frequency`) and differs per series, because the
+                # upstream providers deliver with unknown, differing delays. On a round
+                # where nothing lags these values coincide, which is what keeps the
+                # misreading alive. Anchor on `get_series_context_edges`, never on this.
+                # See wiki/30_Notes/round-time-fields-and-forecast-anchoring.md.
                 # Update round's start_time and end_time
                 await self.round_repository.update_round_times(
                     round_id=round_id,
@@ -577,13 +589,18 @@ class ChallengeService:
         # Build naive forecast for each series.
         #
         # Anchoring is PER SERIES (backend-95). The template used to walk a single global
-        # window, `rounds.start_time` -> `end_time`, for every series at once. But
-        # `start_time` is the max context edge across the round, and series lag: measured on
-        # prod over 2026-09-08..09-22, 115 of 140 series-rows on definition 2 and 181 of 224
-        # on definition 3 had their own last context point strictly before it, the worst by
-        # six days. For every one of those the template emitted timestamps that do not exist
-        # for that series — which `ForecastService._expected_forecast_timestamps` rejects,
-        # since it validates `series_pseudo.max_ts + k * frequency` per series.
+        # window, `rounds.start_time` -> `end_time`, for every series at once.
+        #
+        # `rounds.start_time` anchors nothing. It is an informative field; the first
+        # forecast timestamp is `that series' own last context ts + frequency`, and it
+        # differs per series because the upstream providers deliver with delays we do not
+        # know and which differ per series. Measured on prod over 2026-09-08..09-22, 115 of
+        # 140 series-rows on definition 2 and 181 of 224 on definition 3 had their own last
+        # context point strictly before the round-wide value, the worst by six days. For
+        # every one of those the template emitted timestamps that do not exist for that
+        # series — which `ForecastService._expected_forecast_timestamps` rejects, since it
+        # validates `series_pseudo.max_ts + k * frequency` per series.
+        # See wiki/30_Notes/round-time-fields-and-forecast-anchoring.md.
         #
         # `max(...)` over the points rather than `data[-1]` so this does not depend on the
         # repository's ORDER BY (cf. ts-arena #20).
