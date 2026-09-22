@@ -62,6 +62,11 @@ class ModelInfoCreateInternal(ModelInfoCreate):
 
 
 class ModelInfo(ModelInfoBase):
+    # The numeric id is what GET /forecasts/{round_id}/{model_id} takes. It was previously
+    # dropped from every response, so participants had no way to read their own forecasts
+    # back and confirm what we stored (backend-94). Both endpoints returning this schema
+    # already scope to the authenticated user, so exposing it reveals nothing new.
+    id: int
     name: str
     readable_id: Optional[str] = None
     model_type: Optional[str] = None
