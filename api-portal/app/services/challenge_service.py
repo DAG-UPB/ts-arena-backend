@@ -271,7 +271,10 @@ class ChallengeService:
         - If required_series_ids is provided and non-empty: use ONLY those series
         - If required_series_ids is empty: select n_time_series random series
         - Context data is copied up to the maximum available timestamp (no cutoff)
-        - Round's start_time and end_time are updated based on: max_context_ts + frequency
+        - Round's start_time and end_time are updated based on: max_context_ts + frequency,
+          where max_context_ts is the GLOBAL max across the round's series. Both fields are
+          informative only — they do not define where any series' forecast starts. See
+          wiki/30_Notes/round-time-fields-and-forecast-anchoring.md.
         """
         try:
             # Simple logic: use required series OR random series, never mix
@@ -335,7 +338,15 @@ class ChallengeService:
             resolution = self._frequency_to_resolution(frequency)
             logger.info(f"Copying {context_length} context points for {len(series_mapping)} series (resolution: {resolution})")
             
-            # Copy context data WITHOUT before_time cutoff - gets all available data up to max timestamp
+            # Copy context data WITHOUT before_time cutoff - gets all available data up to max
+            # timestamp.
+            #
+            # "All available data" means as far as the publisher has released, which for a
+            # publish-ahead source is in the future (backend-87). That is only true because
+            # the aggregates run with real-time aggregation (`timescaledb.materialized_only =
+            # false`); materialised-only, they stop at their watermark, which `end_offset`
+            # holds at ~now, and this call silently means "everything up to now" — which for
+            # SMARD day-ahead prices put the whole forecast window inside published data.
             copy_result = await self.time_series_repository.copy_bulk_to_challenge_by_resolution(
                 series_mapping=series_mapping,
                 round_id=round_id,
@@ -376,10 +387,24 @@ class ChallengeService:
             ]
             
             if all_max_ts:
+                # The publication edge, not "now": for a source that publishes ahead of
+                # delivery this is genuinely in the future, which is what puts the forecast
+                # window after the data that already exists (backend-87). The trailing bucket
+                # of a live series may still be filling (backend-96).
                 global_max_ts = max(all_max_ts)
                 new_start_time = global_max_ts + frequency_timedelta
                 new_end_time = new_start_time + horizon
-                
+
+                # NOTE: `start_time` / `end_time` are INFORMATIVE ONLY. This is the one
+                # place they are written, and writing them from the GLOBAL max is the
+                # origin of a recurring misreading — that they mark where a forecast
+                # begins. They do not. The first forecast timestamp is per series
+                # (`series_pseudo.max_ts + frequency`) and differs per series, because the
+                # providers publish with a small lag that varies slightly between them. On
+                # a round where nothing lags these values coincide, which is what keeps the
+                # misreading alive: it is correct on most rounds and on most series.
+                # Anchor on `get_series_context_edges`, never on this.
+                # See wiki/30_Notes/round-time-fields-and-forecast-anchoring.md.
                 # Update round's start_time and end_time
                 await self.round_repository.update_round_times(
                     round_id=round_id,
@@ -489,6 +514,48 @@ class ChallengeService:
             for r in rounds
         ]
 
+    # Deciles the platform scores on (backend-13/backend-64). Kept here rather than imported
+    # so the template cannot silently fall out of step with `canonical_quantile_key`.
+    NAIVE_QUANTILE_LEVELS = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
+
+    @staticmethod
+    def _naive_quantile_offsets(values: List[float]) -> Dict[str, float]:
+        """Offsets from the persistence point forecast, one per canonical decile.
+
+        Derived from the empirical quantiles of the context's first differences: if the
+        series has moved by `d` between steps historically, a one-step-ahead persistence
+        forecast is wrong by about `d`. Deterministic — no sampling — so the same round
+        always yields the same template, which matters for a payload participants diff
+        against their own output.
+
+        Degenerate input (fewer than two points, or a flat series) yields a zero offset at
+        every level. That is a valid, monotone, non-crossing set of quantiles; it simply
+        expresses no uncertainty.
+        """
+        levels = ChallengeService.NAIVE_QUANTILE_LEVELS
+        if len(values) < 2:
+            return {f"q_{level}": 0.0 for level in levels}
+
+        diffs = sorted(values[i + 1] - values[i] for i in range(len(values) - 1))
+
+        offsets: Dict[str, float] = {}
+        for level in levels:
+            # Linear interpolation between order statistics (numpy's default method),
+            # written out to keep this dependency-free.
+            position = level * (len(diffs) - 1)
+            lower_index = int(position)
+            upper_index = min(lower_index + 1, len(diffs) - 1)
+            weight = position - lower_index
+            offsets[f"q_{level}"] = (
+                diffs[lower_index] * (1 - weight) + diffs[upper_index] * weight
+            )
+
+        # Empirical quantiles of a sorted sample are already non-decreasing; assert the
+        # invariant the upload path would otherwise silently repair.
+        ordered = [offsets[f"q_{level}"] for level in levels]
+        assert ordered == sorted(ordered), "naive quantile offsets must not cross"
+        return offsets
+
     async def generate_naive_forecast_template(
         self,
         round_id: int
@@ -509,36 +576,67 @@ class ChallengeService:
         if not context_data:
             raise ValueError(f"No context data available for round {round_id}")
         
-        # Calculate forecast timestamps based on horizon and frequency
-        # Forecast starts at registration_end (= start_time of actual forecast period)
-        forecast_start = round_obj.start_time
-        forecast_end = round_obj.end_time
         frequency = round_obj.frequency
-        
         if not frequency:
             raise ValueError(f"Round {round_id} has no frequency defined")
-        
-        # Generate timestamps
-        forecast_timestamps = []
-        current_ts = forecast_start
-        while current_ts < forecast_end:
-            forecast_timestamps.append(current_ts)
-            current_ts += frequency
-        
-        # Build naive forecast for each series
+
+        # How many points a forecast must carry. Same derivation the upload path uses to
+        # validate the count, so the template cannot produce a payload of the wrong length.
+        if not round_obj.horizon:
+            raise ValueError(f"Round {round_id} has no horizon defined")
+        step_count = int(round_obj.horizon.total_seconds() / frequency.total_seconds())
+
+        # Build naive forecast for each series.
+        #
+        # Anchoring is PER SERIES (backend-95). The template used to walk a single global
+        # window, `rounds.start_time` -> `end_time`, for every series at once.
+        #
+        # `rounds.start_time` anchors nothing. It is an informative field; the first
+        # forecast timestamp is `that series' own last context ts + frequency`, and it
+        # differs per series because the providers publish with a small lag that varies
+        # slightly between them. The lag is usually harmless — median zero on most
+        # definitions — but one step off invalidates every timestamp in the submission.
+        # Measured on prod over 2026-09-08..09-22, 65 % of definition 2's series and 42 %
+        # of definition 3's sat more than one step behind the round-wide value. For every
+        # one of those the template emitted timestamps that do not exist for that series —
+        # which `ForecastService._expected_forecast_timestamps` rejects, since it validates
+        # `series_pseudo.max_ts + k * frequency` per series.
+        # See wiki/30_Notes/round-time-fields-and-forecast-anchoring.md.
+        #
+        # `max(...)` over the points rather than `data[-1]` so this does not depend on the
+        # repository's ORDER BY (cf. ts-arena #20).
         forecasts_list = []
         for series_data in context_data:
             # Get last known value (naive persistence)
             if not series_data.data:
                 continue
-            
-            last_value = series_data.data[-1].value
-            
+
+            last_point = max(series_data.data, key=lambda point: point.ts)
+            last_value = last_point.value
+            forecast_timestamps = [
+                last_point.ts + k * frequency for k in range(1, step_count + 1)
+            ]
+
+            # Persistence has no spread of its own, so the band comes from the dispersion of
+            # the context's own step-to-step changes. It is a weak forecast on purpose — the
+            # point is that the template demonstrates the *shape* the platform expects,
+            # including the nine canonical quantile keys the SQL leaderboard requires
+            # (backend-64). A point-only template could never reach that board.
+            quantile_offsets = self._naive_quantile_offsets(
+                [point.value for point in series_data.data]
+            )
+
             forecasts = [
-                {"ts": ts, "value": last_value}
+                {
+                    "ts": ts,
+                    "value": last_value,
+                    "probabilistic_values": {
+                        key: last_value + offset for key, offset in quantile_offsets.items()
+                    },
+                }
                 for ts in forecast_timestamps
             ]
-            
+
             forecasts_list.append({
                 "challenge_series_name": series_data.challenge_series_name,
                 "forecasts": forecasts
