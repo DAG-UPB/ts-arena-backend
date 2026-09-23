@@ -147,3 +147,87 @@ async def test_message_reports_quantiles_and_both_severities():
     assert "with quantiles" in resp.message
     assert "warning(s)" in resp.message
     assert "error(s)" not in resp.message
+
+
+# --- backend-97: the per-series timestamp window, exercised through the upload itself ---
+#
+# The helpers above stub the context edge away. These tests give each series a real edge, so
+# the check that decides whether a participant's upload lands is covered end to end.
+
+EDGE = NOW - FREQ  # last context point; an honest forecast starts one step later, at NOW
+
+
+def _windowed_service(edges, names_to_ids, inserted=(3, 0)):
+    svc = _service(inserted=inserted)
+    svc.challenge_repo.get_series_context_edges = AsyncMock(return_value=edges)
+    svc._resolve_series_id = AsyncMock(side_effect=lambda _round, name: names_to_ids.get(name))
+    return svc
+
+
+def _shifted_points(steps):
+    """Three points starting `steps` frequency steps away from the honest first point."""
+    return [
+        ForecastDataPoint(ts=NOW + (i + steps) * FREQ, value=float(i)) for i in range(3)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_window_after_the_series_edge_is_accepted():
+    svc = _windowed_service({7: EDGE}, {"series_a": 7})
+    resp = await svc.upload_forecasts(_request(_points()), user_id=1)
+    assert resp.success is True
+    assert set(resp.errors) - set(resp.warnings) == set()
+    svc.forecast_repo.bulk_create_forecasts.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_lagging_series_is_accepted_on_its_own_edge():
+    """A series one step behind the round's other series starts one step earlier. Anchoring
+    on the round-wide `start_time` would reject it; the per-series edge does not."""
+    svc = _windowed_service({7: EDGE - FREQ}, {"series_a": 7})
+    resp = await svc.upload_forecasts(_request(_shifted_points(-1)), user_id=1)
+    assert resp.success is True
+    assert set(resp.errors) - set(resp.warnings) == set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("steps", [-1, 1], ids=["backdated_into_context", "shifted_later"])
+async def test_window_off_the_series_edge_is_rejected_with_the_accepted_range(steps):
+    svc = _windowed_service({7: EDGE}, {"series_a": 7})
+    resp = await svc.upload_forecasts(_request(_shifted_points(steps)), user_id=1)
+    assert resp.success is False
+    svc.forecast_repo.bulk_create_forecasts.assert_not_awaited()
+    fatal = set(resp.errors) - set(resp.warnings)
+    assert len(fatal) == 1
+    msg = fatal.pop()
+    assert "Invalid forecast timestamps for series 'series_a'" in msg
+    # The message names the range that would have been accepted, so the fix is actionable.
+    assert f"from {NOW.isoformat()} to {(NOW + 2 * FREQ).isoformat()}" in msg
+
+
+@pytest.mark.asyncio
+async def test_duplicate_timestamp_masking_a_missing_one_is_rejected():
+    """Right count, wrong set: the count check alone would let this through."""
+    svc = _windowed_service({7: EDGE}, {"series_a": 7})
+    points = [ForecastDataPoint(ts=NOW + i * FREQ, value=0.0) for i in (0, 1, 1)]
+    resp = await svc.upload_forecasts(_request(points), user_id=1)
+    assert resp.success is False
+    assert any("Invalid forecast timestamps" in e for e in resp.errors)
+
+
+@pytest.mark.asyncio
+async def test_one_bad_series_does_not_sink_the_rest_of_the_upload():
+    svc = _windowed_service({7: EDGE, 8: EDGE}, {"series_a": 7, "series_b": 8})
+    req = ForecastUploadRequest(
+        round_id=1,
+        model_name="TestModel",
+        forecasts=[
+            ForecastSeriesUpload(challenge_series_name="series_a", forecasts=_points()),
+            ForecastSeriesUpload(challenge_series_name="series_b", forecasts=_shifted_points(1)),
+        ],
+    )
+    resp = await svc.upload_forecasts(req, user_id=1)
+    assert resp.success is True
+    fatal = set(resp.errors) - set(resp.warnings)
+    assert len(fatal) == 1 and "'series_b'" in fatal.pop()
+    svc.forecast_repo.bulk_create_forecasts.assert_awaited_once()
