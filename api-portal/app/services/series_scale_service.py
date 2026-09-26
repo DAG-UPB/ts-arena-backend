@@ -9,8 +9,8 @@ Two sources, one definition:
 - At round creation, from the context just written to `challenges.context_data`, i.e.
   exactly what participants download.
 - Otherwise (rounds created before this existed, or a missed round-creation write), rebuilt
-  from `data_portal.time_series_data_scd2` as of `rounds.created_at`. On dev this reproduces
-  99.98 % of served points exactly. `context_data` is never read at that point: it is a
+  from `data_portal.time_series_data_scd2` as of `rounds.created_at` (see
+  `SeriesScaleRepository.read_context_as_of`). `context_data` is never read then: it is a
   serving cache for registration and is not kept.
 """
 import logging
