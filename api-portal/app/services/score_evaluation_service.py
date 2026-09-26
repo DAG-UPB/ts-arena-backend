@@ -4,7 +4,8 @@ This service runs independently every 30 minutes to calculate and update scores
 for active and completed challenge rounds.
 """
 import logging
-from typing import List, Dict, Any, Optional
+from dataclasses import dataclass
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timezone, timedelta
 import numpy as np
 from sklearn.metrics import mean_squared_error
@@ -15,7 +16,13 @@ from app.database.challenges.challenge_repository import ChallengeRoundRepositor
 from app.database.data_portal.time_series_repository import TimeSeriesRepository
 from app.database.forecasts.repository import ForecastRepository
 from app.services.evaluation_alignment import align_evaluation_data, group_actuals_by_minute
-from app.services.forecast_metrics import compute_sql_fields
+from app.services.forecast_metrics import (
+    MASE_METHOD,
+    compute_real_mase_fields,
+    compute_sql_fields,
+    mase_scale_defined,
+)
+from app.services.series_scale_service import SeriesScaleService
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +116,106 @@ def evaluation_timeout_passed(round_end_time: Optional[datetime]) -> bool:
     return datetime.now(timezone.utc) > end_time + EVALUATION_TIMEOUT
 
 
+def coverage_verdict(data_coverage: float, timeout_passed: bool) -> Tuple[str, bool]:
+    """`(evaluation_status, final_evaluation)` of a pair with at least one evaluated point.
+
+    Complete coverage is final at once. After the grace period a pair is final either way:
+    with at least `MIN_COVERAGE_FOR_FINAL` it is a valid `partial` score, below that it is
+    `insufficient_data` and carries no score. Before it, a partial pair waits for more data.
+    Shared by `forecasts.scores` and `forecasts.scores_mase`, so both finalise the same pairs.
+    """
+    if data_coverage >= 1.0:
+        return "complete", True
+    if timeout_passed:
+        if data_coverage < MIN_COVERAGE_FOR_FINAL:
+            return "insufficient_data", True
+        return "partial", True
+    return ("partial" if data_coverage > 0 else "pending"), False
+
+
+def insufficient_coverage_message(data_coverage: float) -> str:
+    return f"Timeout: only {data_coverage:.1%} coverage (min {MIN_COVERAGE_FOR_FINAL:.0%} required)"
+
+
+def build_mase_score_row(
+    round_id: int,
+    model_id: int,
+    series_id: int,
+    forecast_count: int,
+    evaluation_data: List[Dict[str, Any]],
+    scale_row: Optional[Dict[str, Any]],
+    timeout_passed: bool,
+) -> Optional[Dict[str, Any]]:
+    """One `forecasts.scores_mase` row, or None when the pair submitted nothing.
+
+    Same evaluated points and the same coverage/finalisation rules as `forecasts.scores`;
+    only the denominator differs: `scale_row` is the (round, series) context scale from
+    `forecasts.series_scale`, identical for every model. When it is missing, NULL or 0 the
+    pair gets `undefined_scale` and no MASE, for every model alike, never `inf`.
+    """
+    if forecast_count == 0:
+        return None
+
+    row: Dict[str, Any] = {
+        "round_id": round_id,
+        "model_id": model_id,
+        "series_id": series_id,
+        "mae": None,
+        "n_points": len(evaluation_data),
+        "scale": scale_row["scale"] if scale_row else None,
+        "mase": None,
+        "sql_score": None,
+        "sql_per_quantile": None,
+        "has_quantiles": None,
+        "quantile_levels_count": None,
+        "quantile_crossing_count": None,
+        "forecast_count": forecast_count,
+        "data_coverage": 0.0,
+        "final_evaluation": timeout_passed,
+        "evaluation_status": "no_overlap",
+        "error_message": "No overlapping timestamps between forecasts and actuals",
+        "method": MASE_METHOD,
+    }
+    if not evaluation_data:
+        return row
+
+    data_coverage = len(evaluation_data) / forecast_count
+    status, final = coverage_verdict(data_coverage, timeout_passed)
+    row.update(data_coverage=data_coverage, evaluation_status=status,
+               final_evaluation=final, error_message=None)
+    if status == "insufficient_data":
+        row["error_message"] = insufficient_coverage_message(data_coverage)
+        return row
+
+    fields = compute_real_mase_fields(
+        np.array([item["actual_value"] for item in evaluation_data], dtype=float),
+        np.array([item["predicted_value"] for item in evaluation_data], dtype=float),
+        [item.get("probabilistic_values") for item in evaluation_data],
+        row["scale"],
+    )
+    row.update(fields)
+    if not mase_scale_defined(row["scale"]):
+        row["evaluation_status"] = "undefined_scale"
+        row["error_message"] = (
+            "No context as of round creation to scale by" if scale_row is None
+            else "Context has no variation at lag m (scale 0) or no lag pair"
+        )
+    return row
+
+
+@dataclass
+class _RoundInputs:
+    """What `_load_round_inputs` fetched for one round."""
+
+    round_info: Any
+    resolution: str
+    participant_model_ids: List[int]
+    series_ids: List[int]
+    stats_by_pair: Dict[tuple, Dict[str, Any]]
+    forecasts_by_pair: Dict[tuple, List[Dict[str, Any]]]
+    actuals_cache: "_SeriesActualsCache"
+
+
 # A forecast and an actual join when their minute-truncated timestamps are equal, so any
 # actual that can possibly match lies strictly within one minute of some forecast. Padding
 # the actuals fetch by exactly that much makes the ts-bounded batch query provably lossless
@@ -174,10 +281,12 @@ class _SeriesActualsCache:
         forecast_repo: ForecastRepository,
         resolution: str,
         stats_by_pair: Dict[tuple, Dict[str, Any]],
+        raw_fallback: bool = False,
     ):
         self._forecast_repo = forecast_repo
         self._resolution = resolution
         self._stats_by_pair = stats_by_pair
+        self._raw_fallback = raw_fallback
         self._by_minute: Dict[int, Dict[datetime, List[float]]] = {}
 
     def _ts_bounds(self, series_id: int) -> Optional[tuple]:
@@ -200,6 +309,12 @@ class _SeriesActualsCache:
                 rows = await self._forecast_repo.get_series_actuals_aggregate(
                     series_id, self._resolution, bounds[0], bounds[1]
                 )
+                if not rows and self._raw_fallback:
+                    # Backfill only: an aggregate that was never materialised for an old
+                    # period (dev restores) reads as "no actuals". Same buckets from raw.
+                    rows = await self._forecast_repo.get_series_actuals_raw_bucketed(
+                        series_id, self._resolution, bounds[0], bounds[1]
+                    )
                 self._by_minute[series_id] = group_actuals_by_minute(rows)
         return self._by_minute[series_id]
 
@@ -213,12 +328,18 @@ class ScoreEvaluationService:
     2. For each round, calculates MASE and RMSE for all model/series combinations
     3. Updates the scores in the database
     4. When all data is complete and all forecasts are evaluated, sets final_evaluation=True
+    5. Writes context-scaled MASE for the same pairs to forecasts.scores_mase, once the
+       migration that creates it has been applied (see `_score_real_mase`)
     """
+
+    # Context-scaled MASE is skipped without one (tests build the service bare).
+    scale_service: Optional[SeriesScaleService] = None
 
     def __init__(self, db_session: AsyncSession):
         self.round_repo = ChallengeRoundRepository(db_session)
         self.time_series_repo = TimeSeriesRepository(db_session)
         self.forecast_repo = ForecastRepository(db_session)
+        self.scale_service = SeriesScaleService(db_session)
         self.db_session = db_session
 
     async def get_ids_needing_evaluation(self) -> List[int]:
@@ -288,99 +409,17 @@ class ScoreEvaluationService:
         try:
             logger.info(f"Evaluating scores for round {round_id}")
             
-            # Get round details
-            round_info = await self.round_repo.get_by_id(round_id)
-            if not round_info:
-                logger.warning(f"Round {round_id} not found")
+            inputs = await self._load_round_inputs(round_id)
+            if inputs is None:
                 return False
-            
-            # Per-(model, series) forecast stats for the whole round in one query. This
-            # also yields the participant and series sets — both were previously separate
-            # `SELECT DISTINCT`s over the same rows, so deriving them here is equivalent.
-            round_stats = await self.forecast_repo.get_round_forecast_stats(round_id)
-            stats_by_pair = {
-                (s["model_id"], s["series_id"]): s for s in round_stats
-            }
-
-            participant_model_ids = sorted({s["model_id"] for s in round_stats})
-            if not participant_model_ids:
-                logger.info(f"No participants found for round {round_id}")
-                return False
-
-            series_ids = sorted({s["series_id"] for s in round_stats})
-            if not series_ids:
-                logger.info(f"No series found for round {round_id}")
-                return False
-
-            logger.info(f"Round {round_id}: {len(participant_model_ids)} participants, {len(series_ids)} series")
-
-            # Determine resolution from frequency
-            resolution = timedelta_to_resolution(round_info.frequency)
-            logger.info(f"Round {round_id}: using resolution '{resolution}' (frequency: {round_info.frequency})")
-
-            # --- Batched fetch (backend-68) ------------------------------------------
-            # Everything this round needs is read here, per round and per series, instead
-            # of per (model, series). Only the source of the data changes; the scoring,
-            # coverage and finalization rules below are untouched.
-            forecast_rows = await self.forecast_repo.get_round_forecasts(round_id)
-
-            # Score only what falls inside the window each series was actually issued
-            # (backend-87). Forecast timestamps were unvalidated on upload until now, and the
-            # score is an inner join on (series_id, ts) with no window predicate, so a point
-            # placed over an already-published stretch was evaluated like any other —
-            # wherever the round window sat. Uploads are now checked against exactly this
-            # range; this is the backstop for rows already stored.
-            #
-            # Dropped points still count against coverage: `forecast_count` below is taken
-            # from the filtered rows, so a model submitting out-of-window points scores as
-            # having submitted fewer valid ones, not as having submitted good ones.
-            windows = series_forecast_windows(
-                await self.round_repo.get_series_context_edges(round_id),
-                round_info.frequency,
-                round_info.horizon,
-            )
-            if windows:
-                kept = []
-                dropped = 0
-                for row in forecast_rows:
-                    window = windows.get(row["series_id"])
-                    if window is None:
-                        kept.append(row)
-                        continue
-                    ts = _as_utc(row["ts"])
-                    if window[0] <= ts <= window[1]:
-                        kept.append(row)
-                    else:
-                        dropped += 1
-                if dropped:
-                    logger.warning(
-                        f"Round {round_id}: excluded {dropped} out-of-window forecast "
-                        f"point(s) from scoring"
-                    )
-                forecast_rows = kept
-
-            forecasts_by_pair: Dict[tuple, List[Dict[str, Any]]] = {}
-            for row in forecast_rows:
-                forecasts_by_pair.setdefault((row["model_id"], row["series_id"]), []).append(row)
-
-            # Re-derive the per-pair stats from the filtered rows so that `count` (the
-            # coverage denominator) and the actuals ts bounds both describe in-window points
-            # only. The participant and series sets stay as `get_round_forecast_stats`
-            # returned them, so a model whose every point was out of window still gets a
-            # score row — it falls through to the `no_forecasts` branch rather than vanishing
-            # from the round silently.
-            for pair, stats in stats_by_pair.items():
-                rows = forecasts_by_pair.get(pair, [])
-                timestamps = [_as_utc(row["ts"]) for row in rows]
-                stats["count"] = len(rows)
-                stats["min_ts"] = min(timestamps) if timestamps else None
-                stats["max_ts"] = max(timestamps) if timestamps else None
-
-            actuals_cache = _SeriesActualsCache(
-                self.forecast_repo, resolution, stats_by_pair
-            )
+            round_info = inputs.round_info
+            participant_model_ids = inputs.participant_model_ids
+            series_ids = inputs.series_ids
+            stats_by_pair = inputs.stats_by_pair
+            forecasts_by_pair = inputs.forecasts_by_pair
+            actuals_cache = inputs.actuals_cache
             naive_cache = _SeriesNaiveCache(
-                self.round_repo, self.time_series_repo, round_id, resolution
+                self.round_repo, self.time_series_repo, round_id, inputs.resolution
             )
 
             # Calculate scores for each model/series combination
@@ -443,7 +482,10 @@ class ScoreEvaluationService:
             if all_scores:
                 rows_affected = await self.forecast_repo.bulk_insert_scores(all_scores)
                 logger.info(f"Updated {rows_affected} scores for round {round_id}")
-            
+
+            # After forecasts.scores has committed, so a failure here cannot touch it.
+            await self._score_real_mase(round_id, inputs)
+
             return True
             
         finally:
@@ -454,6 +496,185 @@ class ScoreEvaluationService:
                 )
                 # No need to commit here as pg_advisory_unlock is immediate, 
                 # and previous ops already committed.
+
+    async def _real_mase_rows(self, round_id: int, inputs: "_RoundInputs") -> List[Dict[str, Any]]:
+        """`forecasts.scores_mase` rows for every pair `forecasts.scores` evaluates.
+
+        Rebuilds any missing (round, series) scale first. Uses the round's already fetched
+        forecasts and actuals, so it costs no forecast or actuals query of its own.
+        """
+        scales = await self.scale_service.ensure_scales(
+            round_id, inputs.resolution, inputs.round_info.created_at
+        )
+        timeout_passed = evaluation_timeout_passed(inputs.round_info.end_time)
+        rows = []
+        for model_id in inputs.participant_model_ids:
+            for series_id in inputs.series_ids:
+                forecast_rows = inputs.forecasts_by_pair.get((model_id, series_id), [])
+                if not forecast_rows:
+                    continue
+                args = (round_id, model_id, series_id, len(forecast_rows))
+                try:
+                    evaluation_data = align_evaluation_data(
+                        forecast_rows, await inputs.actuals_cache.by_minute(series_id)
+                    )
+                    rows.append(build_mase_score_row(
+                        *args, evaluation_data, scales.get(series_id), timeout_passed
+                    ))
+                except Exception as e:
+                    logger.exception(
+                        f"Context-scaled MASE failed for round {round_id}, "
+                        f"model {model_id}, series {series_id}: {e}"
+                    )
+                    row = build_mase_score_row(*args, [], scales.get(series_id), timeout_passed)
+                    row.update(evaluation_status="error", error_message=str(e)[:500])
+                    rows.append(row)
+        return rows
+
+    async def _score_real_mase(self, round_id: int, inputs: "_RoundInputs") -> None:
+        """Write `forecasts.scores_mase` for a round. Never raises.
+
+        A no-op until the migration creating the tables has been applied. Runs in its own
+        transaction after `forecasts.scores` committed; a failure is logged and rolled back.
+        A round whose scores went final while this failed is not revisited by the live
+        loop; `app.scripts.backfill_real_mase` picks it up.
+        """
+        if self.scale_service is None:
+            return
+        try:
+            if not await self.scale_service.repo.tables_exist():
+                return
+            rows = await self._real_mase_rows(round_id, inputs)
+            written = await self.scale_service.repo.upsert_mase_scores(rows)
+            await self.db_session.commit()
+            logger.info(f"Updated {written} context-scaled MASE rows for round {round_id}")
+        except Exception as e:
+            await self.db_session.rollback()
+            logger.exception(f"Round {round_id}: context-scaled MASE not updated: {e}")
+
+    async def compute_real_mase(
+        self, round_id: int, raw_actuals_fallback: bool = False
+    ) -> Optional[List[Dict[str, Any]]]:
+        """`forecasts.scores_mase` rows for one round, without touching `forecasts.scores`.
+
+        For the backfill: same inputs and rules as the live scorer. Stores any rebuilt scale
+        (not committed here); the caller writes the rows and commits. None when the round
+        has nothing to score.
+        """
+        inputs = await self._load_round_inputs(round_id, raw_actuals_fallback=raw_actuals_fallback)
+        if inputs is None:
+            return None
+        return await self._real_mase_rows(round_id, inputs)
+
+    async def _load_round_inputs(
+        self, round_id: int, raw_actuals_fallback: bool = False
+    ) -> Optional["_RoundInputs"]:
+        """Everything a round's scoring reads, fetched per round and per series.
+
+        Shared by `forecasts.scores` and `forecasts.scores_mase`, so both see the same
+        forecasts, window filter and actuals. None when there is nothing to score.
+        """
+        # Get round details
+        round_info = await self.round_repo.get_by_id(round_id)
+        if not round_info:
+            logger.warning(f"Round {round_id} not found")
+            return None
+        
+        # Per-(model, series) forecast stats for the whole round in one query. This
+        # also yields the participant and series sets — both were previously separate
+        # `SELECT DISTINCT`s over the same rows, so deriving them here is equivalent.
+        round_stats = await self.forecast_repo.get_round_forecast_stats(round_id)
+        stats_by_pair = {
+            (s["model_id"], s["series_id"]): s for s in round_stats
+        }
+
+        participant_model_ids = sorted({s["model_id"] for s in round_stats})
+        if not participant_model_ids:
+            logger.info(f"No participants found for round {round_id}")
+            return None
+
+        series_ids = sorted({s["series_id"] for s in round_stats})
+        if not series_ids:
+            logger.info(f"No series found for round {round_id}")
+            return None
+
+        logger.info(f"Round {round_id}: {len(participant_model_ids)} participants, {len(series_ids)} series")
+
+        # Determine resolution from frequency
+        resolution = timedelta_to_resolution(round_info.frequency)
+        logger.info(f"Round {round_id}: using resolution '{resolution}' (frequency: {round_info.frequency})")
+
+        # --- Batched fetch (backend-68) ------------------------------------------
+        # Everything this round needs is read here, per round and per series, instead
+        # of per (model, series). Only the source of the data changes; the scoring,
+        # coverage and finalization rules below are untouched.
+        forecast_rows = await self.forecast_repo.get_round_forecasts(round_id)
+
+        # Score only what falls inside the window each series was actually issued
+        # (backend-87). Forecast timestamps were unvalidated on upload until now, and the
+        # score is an inner join on (series_id, ts) with no window predicate, so a point
+        # placed over an already-published stretch was evaluated like any other —
+        # wherever the round window sat. Uploads are now checked against exactly this
+        # range; this is the backstop for rows already stored.
+        #
+        # Dropped points still count against coverage: `forecast_count` below is taken
+        # from the filtered rows, so a model submitting out-of-window points scores as
+        # having submitted fewer valid ones, not as having submitted good ones.
+        windows = series_forecast_windows(
+            await self.round_repo.get_series_context_edges(round_id),
+            round_info.frequency,
+            round_info.horizon,
+        )
+        if windows:
+            kept = []
+            dropped = 0
+            for row in forecast_rows:
+                window = windows.get(row["series_id"])
+                if window is None:
+                    kept.append(row)
+                    continue
+                ts = _as_utc(row["ts"])
+                if window[0] <= ts <= window[1]:
+                    kept.append(row)
+                else:
+                    dropped += 1
+            if dropped:
+                logger.warning(
+                    f"Round {round_id}: excluded {dropped} out-of-window forecast "
+                    f"point(s) from scoring"
+                )
+            forecast_rows = kept
+
+        forecasts_by_pair: Dict[tuple, List[Dict[str, Any]]] = {}
+        for row in forecast_rows:
+            forecasts_by_pair.setdefault((row["model_id"], row["series_id"]), []).append(row)
+
+        # Re-derive the per-pair stats from the filtered rows so that `count` (the
+        # coverage denominator) and the actuals ts bounds both describe in-window points
+        # only. The participant and series sets stay as `get_round_forecast_stats`
+        # returned them, so a model whose every point was out of window still gets a
+        # score row — it falls through to the `no_forecasts` branch rather than vanishing
+        # from the round silently.
+        for pair, stats in stats_by_pair.items():
+            rows = forecasts_by_pair.get(pair, [])
+            timestamps = [_as_utc(row["ts"]) for row in rows]
+            stats["count"] = len(rows)
+            stats["min_ts"] = min(timestamps) if timestamps else None
+            stats["max_ts"] = max(timestamps) if timestamps else None
+
+        actuals_cache = _SeriesActualsCache(
+            self.forecast_repo, resolution, stats_by_pair, raw_fallback=raw_actuals_fallback
+        )
+
+        return _RoundInputs(
+            round_info=round_info,
+            resolution=resolution,
+            participant_model_ids=participant_model_ids,
+            series_ids=series_ids,
+            stats_by_pair=stats_by_pair,
+            forecasts_by_pair=forecasts_by_pair,
+            actuals_cache=actuals_cache,
+        )
 
     async def _calculate_score_for_model_series(
         self,
@@ -571,51 +792,33 @@ class ScoreEvaluationService:
         # Calculate data coverage
         data_coverage = evaluated_count / forecast_count if forecast_count > 0 else 0.0
         
-        # Determine evaluation status
-        if data_coverage >= 1.0:
-            evaluation_status = "complete"
-        elif data_coverage > 0:
-            evaluation_status = "partial"
-        else:
-            evaluation_status = "pending"
-        
-        # Check if evaluation timeout has passed
-        timeout_passed = evaluation_timeout_passed(round_end_time)
-
-        # Determine if final evaluation
         # Complete = 100% coverage -> final
         # Timeout passed with >= 95% coverage -> final (valid score)
         # Timeout passed with < 95% coverage -> final but excluded (mase=NULL)
-        if evaluation_status == "complete":
-            final_evaluation = True
-        elif timeout_passed:
-            final_evaluation = True
-            if data_coverage < MIN_COVERAGE_FOR_FINAL:
-                # Insufficient data after timeout - exclude from ELO
-                logger.info(
-                    f"Timeout: round {round_id}, model {model_id}, series {series_id} "
-                    f"has only {data_coverage:.1%} coverage - marking as insufficient_data"
-                )
-                return {
-                    "round_id": round_id,
-                    "model_id": model_id,
-                    "series_id": series_id,
-                    "mase": None,  # Excluded from ELO
-                    "rmse": None,
-                    "forecast_count": forecast_count,
-                    "actual_count": actual_count,
-                    "evaluated_count": evaluated_count,
-                    "data_coverage": data_coverage,
-                    "final_evaluation": True,
-                    "evaluation_status": "insufficient_data",
-                    "error_message": f"Timeout: only {data_coverage:.1%} coverage (min {MIN_COVERAGE_FOR_FINAL:.0%} required)",
-                }
-            else:
-                # Sufficient data after timeout - keep as valid partial
-                evaluation_status = "partial"
-        else:
-            final_evaluation = False
-        
+        evaluation_status, final_evaluation = coverage_verdict(
+            data_coverage, evaluation_timeout_passed(round_end_time)
+        )
+        if evaluation_status == "insufficient_data":
+            # Insufficient data after timeout - exclude from ELO
+            logger.info(
+                f"Timeout: round {round_id}, model {model_id}, series {series_id} "
+                f"has only {data_coverage:.1%} coverage - marking as insufficient_data"
+            )
+            return {
+                "round_id": round_id,
+                "model_id": model_id,
+                "series_id": series_id,
+                "mase": None,  # Excluded from ELO
+                "rmse": None,
+                "forecast_count": forecast_count,
+                "actual_count": actual_count,
+                "evaluated_count": evaluated_count,
+                "data_coverage": data_coverage,
+                "final_evaluation": True,
+                "evaluation_status": "insufficient_data",
+                "error_message": insufficient_coverage_message(data_coverage),
+            }
+
         # Aligned arrays
         y_pred = np.array([item["predicted_value"] for item in evaluation_data])
         y_true = np.array([item["actual_value"] for item in evaluation_data])
