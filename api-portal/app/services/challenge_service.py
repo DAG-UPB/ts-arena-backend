@@ -16,6 +16,7 @@ from app.database.challenges.challenge_repository import (
 from app.database.data_portal.time_series_repository import TimeSeriesRepository
 from app.database.forecasts.repository import ForecastRepository
 from app.scheduler.schedule_validation import parse_duration
+from app.services.series_scale_service import SeriesScaleService
 
 logger = logging.getLogger(__name__)
 
@@ -379,7 +380,8 @@ class ChallengeService:
 
             if pseudo_entries:
                 await self.round_repository.upsert_series_pseudo(pseudo_entries)
-            
+                await self._store_served_mase_scales(round_id, resolution)
+
             # Determine the global max timestamp across all series in context
             # This becomes the basis for forecast_start = max_ts + 1 frequency step
             all_max_ts = [
@@ -430,6 +432,23 @@ class ChallengeService:
     # ==========================================================
     # Query operations
     # ==========================================================
+
+    async def _store_served_mase_scales(self, round_id: int, resolution: str) -> None:
+        """Record each series' MASE scale from the context exactly as served.
+
+        This is the only point at which the served context is guaranteed to be stored
+        (`context_data` is not kept). Best-effort: it runs in a savepoint, so a failure here
+        never costs the round its context. A missing scale is rebuilt at scoring time.
+        """
+        scale_service = SeriesScaleService(self.db_session)
+        try:
+            if not await scale_service.repo.tables_exist():
+                return
+            async with self.db_session.begin_nested():
+                stored = await scale_service.store_served_scales(round_id, resolution)
+            logger.info(f"Stored MASE scales for {stored} series of round {round_id}")
+        except Exception as e:
+            logger.warning(f"Could not store MASE scales for round {round_id}: {e}")
 
     async def get_context_data_bulk(self, round_id: int) -> List[ChallengeContextData]:
         """Returns all stored context data points for a round."""
