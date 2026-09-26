@@ -18,13 +18,21 @@ Key identity (regression anchor): a degenerate distribution where all nine decil
 point forecast scores exactly the same as the arena MASE of that point forecast, because the
 deciles are symmetric about 0.5 and ``mean_q |1(y≤ŷ) − q| = 0.5``.
 
+Naming caveat: the value stored as ``forecasts.scores.mase`` is not MASE in the sense of
+Hyndman & Koehler (2006). Its denominator is out-of-sample (the evaluated window), so it is a
+relative MAE against persistence. Real MASE scales by the in-sample naive error of the
+**context**, ``mean |y_t − y_{t−m}|``. ``context_scale`` and ``compute_real_mase_fields``
+below compute it, into the separate ``forecasts.scores_mase`` table, with ``m = 1``. There, SQL
+uses the context scale as well, which is fev-bench's definition up to the choice of ``m``.
+
 These functions are intentionally free of any database or framework dependency so they can be
 unit-tested in isolation and reused by the scoring service.
 """
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Optional, Tuple
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -305,9 +313,11 @@ def compute_sql_fields(
         y_pred: point forecasts, shape (T,).
         probabilistic_values: per-timestamp ``probabilistic_values`` dicts (or None),
             aligned with ``y_true``/``y_pred``.
-        mae_naive: the MAE of the flat last-context-value naive over the evaluated
-            timestamps (same denominator as arena MASE). ``0`` means the SQL scale is
-            undefined -> ``sql_score``/``sql_per_quantile`` come back ``None``.
+        mae_naive: the SQL scale. For ``forecasts.scores`` it is the MAE of the flat
+            last-context-value naive over the evaluated timestamps (same denominator as
+            arena MASE); ``compute_real_mase_fields`` passes the context scale instead.
+            ``0`` means the SQL scale is undefined -> ``sql_score``/``sql_per_quantile``
+            come back ``None``.
 
     Returns:
         Dict with keys ``sql_score, sql_per_quantile, has_quantiles,
@@ -329,4 +339,102 @@ def compute_sql_fields(
         "has_quantiles": has_quantiles,
         "quantile_levels_count": levels_count,
         "quantile_crossing_count": crossing_count,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Real MASE (Hyndman & Koehler 2006): scaled by the in-sample naive error on the context.
+# ---------------------------------------------------------------------------
+
+# Seasonal lag `m` of the MASE scale. 1 is Hyndman & Koehler's non-seasonal MASE: it assumes
+# no seasonality, which the platform cannot know per series. Stored with every scale, so a
+# different choice later is visible in the data rather than implied.
+MASE_SEASONAL_LAG = 1
+
+# Identifies how a `forecasts.scores_mase` row was computed.
+MASE_METHOD = "hk2006_context_m1"
+
+
+def context_scale(
+    timestamps: Sequence[datetime],
+    values: Sequence[Optional[float]],
+    frequency: timedelta,
+    m: int = MASE_SEASONAL_LAG,
+) -> Tuple[Optional[float], int, int, int]:
+    """In-sample naive scale of one series' context: ``mean |y_t − y_{t−m}|``.
+
+    This is the MASE denominator of Hyndman & Koehler (2006) and GluonTS ``MASE()``, taken
+    over the context the forecast was made from, not over the evaluated window. It is a
+    property of (round, series), so every model is scored against the same value.
+
+    The lag is taken by **timestamp**: ``y_{t−m}`` is the point at ``t − m·frequency``. A
+    pair whose lagged point is missing (a gap in the context) is skipped, rather than
+    differencing across the gap as a positional lag would. Missing or non-finite values
+    count as gaps.
+
+    When the context has ``<= m`` points, ``m`` falls back to 1. GluonTS uses ``>`` there,
+    so a context exactly ``m`` long would give it no pairs at all.
+
+    Args:
+        timestamps: context timestamps, one per bucket at the round resolution.
+        values: context values aligned with ``timestamps``.
+        frequency: the round frequency (bucket width).
+        m: seasonal lag in steps of ``frequency``.
+
+    Returns:
+        ``(scale, m_used, n_points, n_pairs)``. ``scale`` is ``None`` when no pair exists and
+        ``0.0`` for a constant context; both mean MASE is undefined for this series.
+    """
+    series: Dict[datetime, float] = {}
+    for ts, value in zip(timestamps, values):
+        if value is None:
+            continue
+        value = float(value)
+        if np.isfinite(value):
+            series[ts] = value
+
+    n_points = len(series)
+    m_used = m if n_points > m else 1
+    lag = m_used * frequency
+
+    diffs = [abs(value - series[ts - lag]) for ts, value in series.items() if ts - lag in series]
+    if not diffs:
+        return None, m_used, n_points, 0
+    return float(np.mean(diffs)), m_used, n_points, len(diffs)
+
+
+def mase_scale_defined(scale: Optional[float]) -> bool:
+    """A scale MASE can divide by: present, finite and positive."""
+    return scale is not None and bool(np.isfinite(scale)) and scale > 0
+
+
+def compute_real_mase_fields(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    probabilistic_values: List[Optional[Dict[str, object]]],
+    scale: Optional[float],
+) -> Dict[str, object]:
+    """MASE and SQL of one (model, series) evaluation against the context scale.
+
+    The numerator is the model's MAE over the evaluated timestamps, as for the arena score;
+    only the denominator differs. ``mae`` is returned alongside, so a later change of the
+    scale is a single division over stored rows.
+
+    SQL uses the same scale via ``compute_sql_fields``, which keeps the regression anchor:
+    a point-only forecast scores ``sql_score == mase``.
+
+    An undefined scale (see ``mase_scale_defined``) gives ``mase`` and ``sql_score`` of
+    ``None``, never ``inf``. The caller excludes the series for every model.
+    """
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    mae = float(np.mean(np.abs(y_true - y_pred)))
+    defined = mase_scale_defined(scale)
+    sql_fields = compute_sql_fields(y_true, y_pred, probabilistic_values, scale if defined else 0.0)
+    return {
+        "mae": mae,
+        "n_points": int(len(y_true)),
+        "scale": scale,
+        "mase": mae / scale if defined else None,
+        **sql_fields,
     }
