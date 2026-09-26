@@ -8,6 +8,7 @@ from sqlalchemy import (
     UniqueConstraint,
     BigInteger,
     Boolean,
+    SmallInteger,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
@@ -66,3 +67,48 @@ class ChallengeScore(Base):
 
     round = relationship("ChallengeRound", back_populates="scores")
     model = relationship("ModelInfo", back_populates="scores")
+
+
+class SeriesScale(Base):
+    """MASE denominator of one (round, series): the in-sample naive error of its context."""
+
+    __tablename__ = "series_scale"
+    __table_args__ = {"schema": "forecasts"}
+
+    round_id = Column(Integer, ForeignKey("challenges.rounds.id", ondelete="CASCADE"), primary_key=True)
+    series_id = Column(Integer, ForeignKey("data_portal.time_series.series_id", ondelete="CASCADE"), primary_key=True)
+    m = Column(SmallInteger, nullable=False)
+    scale = Column(Float)
+    n_points = Column(Integer, nullable=False)
+    n_pairs = Column(Integer, nullable=False)
+    context_start = Column(DateTime(timezone=True))
+    context_end = Column(DateTime(timezone=True))
+    source = Column(String, nullable=False)
+    computed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class MaseScore(Base):
+    """MASE and SQL of one (round, model, series) against `SeriesScale`."""
+
+    __tablename__ = "scores_mase"
+    __table_args__ = {"schema": "forecasts"}
+
+    round_id = Column(Integer, ForeignKey("challenges.rounds.id", ondelete="CASCADE"), primary_key=True)
+    model_id = Column(Integer, ForeignKey("models.model_info.id", ondelete="CASCADE"), primary_key=True)
+    series_id = Column(Integer, ForeignKey("data_portal.time_series.series_id", ondelete="CASCADE"), primary_key=True)
+    mae = Column(Float)
+    n_points = Column(Integer)
+    scale = Column(Float)
+    mase = Column(Float)
+    sql_score = Column(Float)
+    sql_per_quantile = Column(JSONB)
+    has_quantiles = Column(Boolean)
+    quantile_levels_count = Column(Integer)
+    quantile_crossing_count = Column(Integer)
+    forecast_count = Column(Integer)
+    data_coverage = Column(Float)
+    final_evaluation = Column(Boolean, nullable=False, server_default="false")
+    evaluation_status = Column(String, nullable=False)
+    error_message = Column(String)
+    method = Column(String, nullable=False)
+    calculated_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
