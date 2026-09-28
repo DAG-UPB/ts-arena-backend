@@ -3,6 +3,9 @@
 -- =====================================================================================
 -- Idempotent migration for LIVE databases (there is no migration tool yet; init_db.sql is
 -- for fresh installs only). Apply to DEV first; prod is human-gated. Safe to re-run.
+-- Run it as the schema owner (internaluser), the role api-portal writes with:
+--
+--   psql "$DB_URL" -v ON_ERROR_STOP=1 -f api-portal/app/scripts/migrations/2026_forecast_scores.sql
 --
 -- Adds two tables and changes nothing that exists:
 --   forecasts.series_scale     one context scale per (round, series)
@@ -59,5 +62,16 @@ CREATE TABLE IF NOT EXISTS forecasts.forecast_scores (
     calculated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (round_id, model_id, series_id)
 );
+
+-- Read access for the read-only role. On DAG-UPB DBs `ALTER DEFAULT PRIVILEGES ... IN SCHEMA
+-- forecasts` grants it automatically when this runs as the owner (internaluser); the explicit
+-- GRANTs make it hold regardless of who runs it. Guarded so a DB without the role does not fail.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'readonly_user') THEN
+    GRANT SELECT ON forecasts.series_scale TO readonly_user;
+    GRANT SELECT ON forecasts.forecast_scores TO readonly_user;
+  END IF;
+END $$;
 
 COMMIT;
