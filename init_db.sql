@@ -484,6 +484,67 @@ CREATE TABLE forecasts.scores (
 CREATE INDEX idx_scores_round ON forecasts.scores(round_id);
 
 -- ==========================================================
+-- Forecast scores: MASE (Hyndman & Koehler 2006), scaled on the forecast context
+-- ==========================================================
+-- `forecasts.scores.mase` divides by the error of a flat naive forecast over the evaluated
+-- window, which makes it a relative MAE against persistence. The two tables below hold MASE
+-- as usually defined: the denominator is the in-sample lag-m naive error of the context the
+-- forecast was made from. ForecastScoringService writes them, next to the scorer of
+-- forecasts.scores, and replaces that scorer once every reader has switched. Keep in sync
+-- with scripts/migrations/2026_forecast_scores.sql.
+
+-- One scale per (round, series), the same for every model. Written once and never
+-- updated: it describes the context as served, which is fixed before any forecast exists.
+CREATE TABLE forecasts.series_scale (
+    round_id INTEGER NOT NULL REFERENCES challenges.rounds(id) ON DELETE CASCADE,
+    series_id INTEGER NOT NULL REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
+    m SMALLINT NOT NULL,                 -- seasonal lag actually used, in steps of the round frequency
+    scale DOUBLE PRECISION,              -- mean |y_t - y_{t-m}| over the context; NULL = no lag pair
+    last_value DOUBLE PRECISION,         -- last context value: the persistence forecast behind naive_mae
+    n_points INTEGER NOT NULL,           -- context points with a value
+    n_pairs INTEGER NOT NULL,            -- lag pairs averaged (pairs across a gap are skipped)
+    context_start TIMESTAMPTZ,           -- window the context was read from (series_pseudo.min_ts)
+    context_end TIMESTAMPTZ,             -- ... through series_pseudo.max_ts
+    source TEXT NOT NULL CHECK (source IN ('context_data', 'scd2_as_of_round_creation')),
+    computed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (round_id, series_id)
+);
+
+COMMENT ON COLUMN forecasts.series_scale.source IS
+'context_data: computed from the context as served, while the round was in registration. scd2_as_of_round_creation: rebuilt from data_portal.time_series_data_scd2 as of rounds.created_at (per point the newest version with a value), where the served context was not captured.';
+
+-- Per (round, model, series). The evaluated points follow the same window, coverage and
+-- finalisation rules as forecasts.scores; MASE and SQL divide by forecasts.series_scale.scale.
+-- `mae` is stored so a different scale later is one division, and `naive_mae` (the
+-- persistence forecast's MAE on the same points) keeps the relative MAE available as
+-- mae / naive_mae. A series whose scale is NULL or 0 gets evaluation_status
+-- 'undefined_scale' and mase NULL for every model, never Infinity.
+CREATE TABLE forecasts.forecast_scores (
+    round_id INTEGER NOT NULL REFERENCES challenges.rounds(id) ON DELETE CASCADE,
+    model_id INTEGER NOT NULL REFERENCES models.model_info(id) ON DELETE CASCADE,
+    series_id INTEGER NOT NULL REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
+    mae DOUBLE PRECISION CHECK (mae IS NULL OR (mae >= 0 AND mae < 'Infinity'::float8)),
+    rmse DOUBLE PRECISION CHECK (rmse IS NULL OR (rmse >= 0 AND rmse < 'Infinity'::float8)),
+    naive_mae DOUBLE PRECISION CHECK (naive_mae IS NULL OR (naive_mae >= 0 AND naive_mae < 'Infinity'::float8)),
+    n_points INTEGER,                    -- evaluated points (the MAE's sample size)
+    scale DOUBLE PRECISION,              -- copy of forecasts.series_scale.scale used here
+    mase DOUBLE PRECISION CHECK (mase IS NULL OR (mase >= 0 AND mase < 'Infinity'::float8)),
+    sql_score DOUBLE PRECISION CHECK (sql_score IS NULL OR (sql_score >= 0 AND sql_score < 'Infinity'::float8)),
+    sql_per_quantile JSONB,
+    has_quantiles BOOLEAN,
+    quantile_levels_count INTEGER,
+    quantile_crossing_count INTEGER,
+    forecast_count INTEGER,              -- in-window forecast points: the coverage denominator
+    data_coverage DOUBLE PRECISION,
+    final_evaluation BOOLEAN NOT NULL DEFAULT FALSE,
+    evaluation_status TEXT NOT NULL,
+    error_message TEXT,
+    method TEXT NOT NULL,                -- how mase was computed, e.g. 'hk2006_context_m1'
+    calculated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (round_id, model_id, series_id)
+);
+
+-- ==========================================================
 -- View: Challenge Round Status (computed from timestamps)
 -- ==========================================================
 CREATE OR REPLACE VIEW challenges.v_rounds_with_status AS
