@@ -1,4 +1,8 @@
-"""Reads and writes for context-scaled MASE (`forecasts.series_scale`, `forecasts.scores_mase`)."""
+"""Reads and writes for `ForecastScoringService`: `forecasts.series_scale` and
+`forecasts.forecast_scores`, and the rounds the service works on.
+
+Nothing here reads `forecasts.scores`: the service picks its rounds by its own table.
+"""
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -8,12 +12,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import func
 
 from app.database.challenges.challenge import ChallengeContextData, ChallengeSeriesPseudo
-from app.database.forecasts.models import MaseScore, SeriesScale
+from app.database.forecasts.models import ForecastScore, SeriesScale
 
 _UPSERT_CHUNK = 1000
 
+# First key of the per-round advisory lock, so the scheduled job and the backfill never
+# score the same round at once. The arena scorer locks its rounds under 42.
+ROUND_LOCK_NAMESPACE = 43
 
-class SeriesScaleRepository:
+
+class ForecastScoresRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -22,10 +30,69 @@ class SeriesScaleRepository:
         result = await self.session.execute(
             text(
                 "SELECT to_regclass('forecasts.series_scale') IS NOT NULL "
-                "AND to_regclass('forecasts.scores_mase') IS NOT NULL"
+                "AND to_regclass('forecasts.forecast_scores') IS NOT NULL"
             )
         )
         return bool(result.scalar())
+
+    async def try_lock_round(self, round_id: int) -> bool:
+        """Take the round's advisory lock for the current transaction, without waiting."""
+        result = await self.session.execute(
+            select(func.pg_try_advisory_xact_lock(ROUND_LOCK_NAMESPACE, round_id))
+        )
+        return bool(result.scalar())
+
+    async def rounds_awaiting_capture(self, lookback: timedelta) -> List[Tuple[int, Optional[timedelta]]]:
+        """`(round_id, frequency)` of rounds whose context was served but has no scale yet.
+
+        The context is written together with `series_pseudo` in one transaction, so a round
+        with `series_pseudo` rows has its complete served context in `context_data`. Only
+        rounds whose registration started within `lookback` qualify: `context_data` is a
+        serving cache and is not kept, so later rounds are rebuilt from SCD2 instead.
+        """
+        result = await self.session.execute(
+            text("""
+                SELECT r.id, r.frequency
+                FROM challenges.rounds r
+                WHERE r.registration_start <= now()
+                  AND r.registration_start > now() - CAST(:lookback AS interval)
+                  AND NOT COALESCE(r.is_cancelled, FALSE)
+                  AND EXISTS (SELECT 1 FROM challenges.series_pseudo sp WHERE sp.round_id = r.id)
+                  AND NOT EXISTS (SELECT 1 FROM forecasts.series_scale s WHERE s.round_id = r.id)
+                ORDER BY r.id
+            """),
+            {"lookback": lookback},
+        )
+        return [(row[0], row[1]) for row in result.fetchall()]
+
+    async def rounds_to_score(self, lookback: timedelta) -> List[int]:
+        """Active or completed rounds with participants that are not final yet.
+
+        A round is final once it has `forecast_scores` rows and none of them is pending.
+        Rounds that ended more than `lookback` ago are left out, so a round that never gets
+        a row (every forecast outside its window) drops out on its own; the backfill covers
+        anything older. The status comes from `v_rounds_with_status`, so cancelled rounds
+        are never scored.
+        """
+        result = await self.session.execute(
+            text("""
+                SELECT r.id
+                FROM challenges.v_rounds_with_status r
+                WHERE r.status IN ('active', 'completed')
+                  AND r.end_time > now() - CAST(:lookback AS interval)
+                  AND EXISTS (SELECT 1 FROM challenges.participants p WHERE p.round_id = r.id)
+                  AND (
+                      NOT EXISTS (SELECT 1 FROM forecasts.forecast_scores s WHERE s.round_id = r.id)
+                      OR EXISTS (
+                          SELECT 1 FROM forecasts.forecast_scores s
+                          WHERE s.round_id = r.id AND NOT s.final_evaluation
+                      )
+                  )
+                ORDER BY r.id
+            """),
+            {"lookback": lookback},
+        )
+        return [row[0] for row in result.fetchall()]
 
     async def get_scales(self, round_id: int) -> Dict[int, Dict[str, Any]]:
         """`series_id -> stored scale row` for one round."""
@@ -37,6 +104,7 @@ class SeriesScaleRepository:
                 "series_id": row.series_id,
                 "m": row.m,
                 "scale": row.scale,
+                "last_value": row.last_value,
                 "n_points": row.n_points,
                 "n_pairs": row.n_pairs,
                 "source": row.source,
@@ -66,9 +134,9 @@ class SeriesScaleRepository:
     async def read_served_context(self, round_id: int) -> List[Dict[str, Any]]:
         """The context exactly as served for a round, from `challenges.context_data`.
 
-        Only valid at round creation, straight after the context was written: the table is a
-        serving cache for registration and is not kept, so a later read may find nothing or
-        only part of it. Everything after round creation uses `read_context_as_of`.
+        Only reliable while the round is in registration: the table is a serving cache and
+        is not kept, so a later read may find nothing or only part of it. Everything after
+        that uses `read_context_as_of`.
         """
         result = await self.session.execute(
             select(
@@ -138,14 +206,14 @@ class SeriesScaleRepository:
         )
         await self.session.execute(stmt)
 
-    async def upsert_mase_scores(self, rows: List[Dict[str, Any]]) -> int:
-        """Insert or refresh `forecasts.scores_mase` rows. Does not commit."""
+    async def upsert_forecast_scores(self, rows: List[Dict[str, Any]]) -> int:
+        """Insert or refresh `forecasts.forecast_scores` rows. Does not commit."""
         keys = ("round_id", "model_id", "series_id")
         written = 0
-        # asyncpg caps a statement at 32767 bind parameters; a row has 19.
+        # asyncpg caps a statement at 32767 bind parameters; a row has 20.
         for i in range(0, len(rows), _UPSERT_CHUNK):
             chunk = rows[i:i + _UPSERT_CHUNK]
-            stmt = insert(MaseScore).values(chunk)
+            stmt = insert(ForecastScore).values(chunk)
             stmt = stmt.on_conflict_do_update(
                 index_elements=list(keys),
                 set_={

@@ -1,29 +1,31 @@
 """
-Backfill context-scaled MASE (`forecasts.scores_mase`) for every finalised round.
+Backfill `forecasts.forecast_scores` for every round past its grace period.
 
-Runs exactly the live scorer's path (`ScoreEvaluationService.compute_real_mase`): the same
-forecast fetch, per-series window, actuals and coverage rules, then MASE and SQL against the
-(round, series) context scale. MAE is computed from the forecasts, not backed out of the
-stored arena score, which is not reliable across data revisions.
+Runs exactly the scheduled job's path (`ForecastScoringService.compute_round`): the same
+forecast fetch, per-series window, actuals and coverage rules, then MAE, RMSE, MASE, SQL and
+the persistence baseline against the (round, series) context scale. MAE is computed from the
+forecasts, not backed out of the stored arena score, which is not reliable across data
+revisions. Actuals are the ones available when the backfill runs, late ones included.
 
 Scales missing from `forecasts.series_scale` are rebuilt from SCD2 as of
-`rounds.created_at` and stored once. `forecasts.scores` is never written.
+`rounds.created_at` and stored once. `forecasts.scores` is neither read nor written.
 
-Candidates are rounds whose `forecasts.scores` rows are all final and that have no
-`forecasts.scores_mase` row yet, so an interrupted run resumes where it stopped. One
-transaction per round: a failing round is rolled back, reported and skipped.
+Candidates are rounds that ended more than the grace period ago, are not cancelled, have
+participants and have no `forecasts.forecast_scores` row yet, so an interrupted run resumes
+where it stopped. One transaction per round: a failing round is rolled back, reported and
+skipped. Rounds the scheduled job is scoring at the same moment are skipped as well.
 
 Usage (inside the api-portal container, or locally with DATABASE_URL set):
 
-    python -m app.scripts.backfill_real_mase [--dry-run] [--limit N] [--round-id X]
-        [--refresh] [--check-served] [--no-raw-fallback] [--dump rows.csv]
+    python -m app.scripts.backfill_forecast_scores [--dry-run] [--limit N] [--round-id X]
+        [--sample N] [--refresh] [--check-served] [--no-raw-fallback] [--dump rows.csv]
 
     --dry-run          Compute and report in read-only transactions. Works before the
                        migration is applied (every scale is then rebuilt, none stored).
     --limit N          Process at most N rounds.
     --round-id X       Process only round X.
     --sample N         Process N candidates spread over the whole history (spot check).
-    --refresh          Also recompute rounds that already have scores_mase rows.
+    --refresh          Also recompute rounds that already have forecast_scores rows.
     --check-served     Where a round's served context still exists in context_data,
                        compare the scale used against the one computed from it.
     --no-raw-fallback  Read actuals from the continuous aggregate only. By default a series
@@ -52,11 +54,15 @@ from app.database.auth.user import User  # noqa: F401
 from app.database.auth.organization import Organization  # noqa: F401
 from app.database.auth.api_key import APIKey  # noqa: F401
 from app.database.connection import SessionLocal
-from app.database.forecasts.series_scale_repository import SeriesScaleRepository
-from app.services.score_evaluation_service import ScoreEvaluationService, timedelta_to_resolution
+from app.database.forecasts.forecast_scores_repository import ForecastScoresRepository
+from app.services.forecast_scoring_service import (
+    EVALUATION_TIMEOUT,
+    ForecastScoringService,
+    timedelta_to_resolution,
+)
 from app.services.series_scale_service import SOURCE_SERVED, build_scale_rows, resolution_bucket
 
-logger = logging.getLogger("backfill-real-mase")
+logger = logging.getLogger("backfill-forecast-scores")
 
 DEFAULT_PROGRESS_EVERY = 25
 
@@ -64,7 +70,7 @@ DEFAULT_PROGRESS_EVERY = 25
 TOLERANCE = 1e-9
 
 
-class _ReadOnlyScaleRepository(SeriesScaleRepository):
+class _ReadOnlyRepository(ForecastScoresRepository):
     """Reads like the real repository and writes nothing, with or without the tables."""
 
     def __init__(self, session, tables_exist: bool):
@@ -77,7 +83,7 @@ class _ReadOnlyScaleRepository(SeriesScaleRepository):
     async def insert_scales(self, rows: List[Dict[str, Any]]) -> None:
         return None
 
-    async def upsert_mase_scores(self, rows: List[Dict[str, Any]]) -> int:
+    async def upsert_forecast_scores(self, rows: List[Dict[str, Any]]) -> int:
         return len(rows)
 
 
@@ -85,6 +91,7 @@ class _ReadOnlyScaleRepository(SeriesScaleRepository):
 class Summary:
     rounds_processed: int = 0
     rounds_skipped: int = 0
+    rounds_locked: int = 0
     rounds_failed: int = 0
     rows: int = 0
     status: Counter = field(default_factory=Counter)
@@ -120,10 +127,11 @@ class Summary:
         lines = [
             "",
             "=" * 72,
-            f"Context-scaled MASE backfill{' (DRY RUN, read-only)' if dry_run else ''}",
+            f"Forecast scores backfill{' (DRY RUN, read-only)' if dry_run else ''}",
             "=" * 72,
             f"Rounds processed:        {self.rounds_processed}",
             f"Rounds skipped (empty):  {self.rounds_skipped}",
+            f"Rounds skipped (locked): {self.rounds_locked}",
             f"Rounds failed:           {self.rounds_failed}",
             f"Rows:                    {self.rows}",
         ]
@@ -154,7 +162,7 @@ class Summary:
 
 async def _tables_exist() -> bool:
     async with SessionLocal() as session:
-        return await SeriesScaleRepository(session).tables_exist()
+        return await ForecastScoresRepository(session).tables_exist()
 
 
 async def candidate_rounds(
@@ -164,14 +172,15 @@ async def candidate_rounds(
     limit: Optional[int],
     sample: Optional[int] = None,
 ) -> List[int]:
-    """Rounds whose arena scores are all final, optionally only those not yet backfilled."""
+    """Rounds past the grace period, optionally only those not backfilled yet."""
     clauses = [
-        "EXISTS (SELECT 1 FROM forecasts.scores s WHERE s.round_id = r.id)",
-        "NOT EXISTS (SELECT 1 FROM forecasts.scores s WHERE s.round_id = r.id AND NOT s.final_evaluation)",
+        "r.end_time < now() - CAST(:grace AS interval)",
+        "NOT COALESCE(r.is_cancelled, FALSE)",
+        "EXISTS (SELECT 1 FROM challenges.participants p WHERE p.round_id = r.id)",
     ]
+    params: Dict[str, Any] = {"grace": EVALUATION_TIMEOUT}
     if tables_exist and not refresh:
-        clauses.append("NOT EXISTS (SELECT 1 FROM forecasts.scores_mase m WHERE m.round_id = r.id)")
-    params: Dict[str, Any] = {}
+        clauses.append("NOT EXISTS (SELECT 1 FROM forecasts.forecast_scores s WHERE s.round_id = r.id)")
     if round_id is not None:
         clauses.append("r.id = :round_id")
         params["round_id"] = round_id
@@ -188,14 +197,13 @@ async def candidate_rounds(
         return [row[0] for row in result.fetchall()]
 
 
-async def _check_served(svc: ScoreEvaluationService, round_id: int, rows, summary: Summary) -> None:
-    repo = svc.scale_service.repo
-    served = await repo.read_served_context(round_id)
+async def _check_served(svc: ForecastScoringService, round_id: int, rows, summary: Summary) -> None:
+    served = await svc.repo.read_served_context(round_id)
     if not served:
         return
     info = await svc.round_repo.get_by_id(round_id)
     served_rows = build_scale_rows(
-        round_id, served, await repo.get_context_windows(round_id),
+        round_id, served, await svc.repo.get_context_windows(round_id),
         resolution_bucket(timedelta_to_resolution(info.frequency)), SOURCE_SERVED,
     )
     used = {row["series_id"]: row["scale"] for row in rows}
@@ -215,13 +223,16 @@ async def process_round(round_id: int, args: argparse.Namespace, tables_exist: b
     started = time.monotonic()
     async with SessionLocal() as session:
         try:
+            svc = ForecastScoringService(session, raw_actuals_fallback=not args.no_raw_fallback)
             if args.dry_run:
                 await session.execute(text("SET TRANSACTION READ ONLY"))
-            svc = ScoreEvaluationService(session)
-            if args.dry_run:
-                svc.scale_service.repo = _ReadOnlyScaleRepository(session, tables_exist)
+                svc.scale_service.repo = _ReadOnlyRepository(session, tables_exist)
+            elif not await svc.repo.try_lock_round(round_id):
+                summary.rounds_locked += 1
+                await session.rollback()
+                return
 
-            rows = await svc.compute_real_mase(round_id, raw_actuals_fallback=not args.no_raw_fallback)
+            rows = await svc.compute_round(round_id)
             if not rows:
                 summary.rounds_skipped += 1
                 await session.rollback()
@@ -229,7 +240,7 @@ async def process_round(round_id: int, args: argparse.Namespace, tables_exist: b
 
             if args.check_served:
                 await _check_served(svc, round_id, rows, summary)
-            await svc.scale_service.repo.upsert_mase_scores(rows)
+            await svc.repo.upsert_forecast_scores(rows)
             if args.dry_run:
                 await session.rollback()
             else:
@@ -261,7 +272,7 @@ def _write_dump(path: str, rows: List[Dict[str, Any]]) -> None:
 
 
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Backfill context-scaled MASE for finalised rounds.")
+    parser = argparse.ArgumentParser(description="Backfill forecast_scores for rounds past the grace period.")
     parser.add_argument("--dry-run", action="store_true", help="Compute and report in read-only transactions.")
     parser.add_argument("--limit", type=int, default=None, help="Max number of rounds to process.")
     parser.add_argument("--round-id", type=int, default=None, help="Process only this round.")
@@ -282,8 +293,8 @@ async def main(argv: Optional[List[str]] = None) -> Summary:
     tables_exist = await _tables_exist()
     if not tables_exist and not args.dry_run:
         raise SystemExit(
-            "forecasts.series_scale / forecasts.scores_mase do not exist. Apply "
-            "app/scripts/migrations/2026_real_mase.sql first, or pass --dry-run."
+            "forecasts.series_scale / forecasts.forecast_scores do not exist. Apply "
+            "app/scripts/migrations/2026_forecast_scores.sql first, or pass --dry-run."
         )
 
     round_ids = await candidate_rounds(tables_exist, args.refresh, args.round_id, args.limit, args.sample)

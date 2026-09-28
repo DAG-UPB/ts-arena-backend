@@ -1,4 +1,4 @@
-"""Real MASE (Hyndman & Koehler 2006): context scale and per-evaluation fields.
+"""MASE (Hyndman & Koehler 2006): context scale and per-evaluation score fields.
 
 Reference values marked "GluonTS" were produced with gluonts 0.16
 (`gluonts.evaluation.metrics.calculate_seasonal_error` + `mase`, past data passed through
@@ -12,7 +12,7 @@ import pytest
 
 from app.services.forecast_metrics import (
     MASE_SEASONAL_LAG,
-    compute_real_mase_fields,
+    compute_score_fields,
     context_scale,
     mase_scale_defined,
 )
@@ -53,7 +53,7 @@ def test_issue_example_matches_hand_written_and_gluonts():
     scale, m_used, n_points, n_pairs = context_scale(ts, vals, HOUR)
     assert (scale, m_used, n_points, n_pairs) == (1.75, 1, 5, 4)
 
-    fields = compute_real_mase_fields(np.array([14.0, 16.0]), np.array([15.0, 14.0]), [None, None], scale)
+    fields = compute_score_fields(np.array([14.0, 16.0]), np.array([15.0, 14.0]), [None, None], scale, None)
     assert fields["mae"] == pytest.approx(1.5)
     assert fields["mase"] == pytest.approx(0.8571428571428571)  # GluonTS
     assert fields["mase"] == pytest.approx(hyndman_koehler_mase([10, 12, 11, 13, 15], [14, 16], [15, 14]))
@@ -72,7 +72,7 @@ def test_hourly_daily_cycle_matches_gluonts(forecast_kind, expected):
     assert scale == pytest.approx(3.3193031083709568)  # GluonTS seasonal_error, m=1
     assert (n_points, n_pairs) == (168, 167)
 
-    fields = compute_real_mase_fields(future, forecast, [None] * 24, scale)
+    fields = compute_score_fields(future, forecast, [None] * 24, scale, None)
     assert fields["mase"] == pytest.approx(expected)
     assert fields["mase"] == pytest.approx(hyndman_koehler_mase(past, future, forecast))
 
@@ -83,7 +83,7 @@ def test_seasonal_lag_matches_gluonts():
     scale, m_used, _, n_pairs = context_scale(ts, vals, HOUR, m=24)
     assert (m_used, n_pairs) == (24, 144)
     assert scale == pytest.approx(12.0)  # GluonTS, m=24
-    fields = compute_real_mase_fields(future, np.full(24, past[-1]), [None] * 24, scale)
+    fields = compute_score_fields(future, np.full(24, past[-1]), [None] * 24, scale, None)
     assert fields["mase"] == pytest.approx(1.0970727099928699)  # GluonTS
 
 
@@ -100,7 +100,7 @@ def test_gap_pairs_are_skipped_like_gluonts_masked(gap):
     scale, m_used, n_points, n_pairs = context_scale(ts, vals, HOUR)
     assert (m_used, n_points, n_pairs) == (1, 5, 3)
     assert scale == pytest.approx(1.6666666666666667)  # GluonTS, masked
-    fields = compute_real_mase_fields(np.array([14.0, 16.0]), np.array([15.0, 14.0]), [None, None], scale)
+    fields = compute_score_fields(np.array([14.0, 16.0]), np.array([15.0, 14.0]), [None, None], scale, None)
     assert fields["mase"] == pytest.approx(0.9)  # GluonTS, masked
 
 
@@ -141,7 +141,7 @@ def test_constant_context_gives_zero_scale_and_no_mase():
     assert scale == 0.0 and n_pairs == 9
     assert not mase_scale_defined(scale)
 
-    fields = compute_real_mase_fields(np.array([5.0, 6.0]), np.array([5.0, 5.0]), [None, None], scale)
+    fields = compute_score_fields(np.array([5.0, 6.0]), np.array([5.0, 5.0]), [None, None], scale, None)
     assert fields["mase"] is None and fields["sql_score"] is None
     assert fields["mae"] == pytest.approx(0.5)  # raw MAE kept for later rescaling
 
@@ -151,25 +151,25 @@ def test_no_lag_pair_gives_undefined_scale(values):
     ts, vals = _grid(values)
     scale, _, _, n_pairs = context_scale(ts, vals, HOUR)
     assert scale is None and n_pairs == 0
-    fields = compute_real_mase_fields(np.array([1.0]), np.array([2.0]), [None], scale)
+    fields = compute_score_fields(np.array([1.0]), np.array([2.0]), [None], scale, None)
     assert fields["mase"] is None and fields["sql_score"] is None
 
 
 @pytest.mark.parametrize("scale", [None, 0.0, -1.0, float("nan"), float("inf")])
 def test_undefined_scales_never_yield_inf(scale):
-    fields = compute_real_mase_fields(np.array([1.0, 2.0]), np.array([2.0, 2.0]), [None, None], scale)
+    fields = compute_score_fields(np.array([1.0, 2.0]), np.array([2.0, 2.0]), [None, None], scale, None)
     assert fields["mase"] is None
     assert fields["sql_score"] is None
 
 
 # ---------------------------------------------------------------------------------------
-# compute_real_mase_fields: SQL against the same scale
+# compute_score_fields: SQL against the same scale
 # ---------------------------------------------------------------------------------------
 
 def test_point_only_sql_equals_mase():
     y_true = np.array([14.0, 16.0, 13.0])
     y_pred = np.array([15.0, 14.0, 13.5])
-    fields = compute_real_mase_fields(y_true, y_pred, [None] * 3, 1.75)
+    fields = compute_score_fields(y_true, y_pred, [None] * 3, 1.75, None)
     assert fields["has_quantiles"] is False
     assert fields["sql_score"] == pytest.approx(fields["mase"], abs=1e-12)
 
@@ -179,7 +179,7 @@ def test_quantile_sql_uses_context_scale():
     y_pred = np.array([12.0, 18.0])
     pv = [{"q_0.1": 8.0, "q_0.5": 12.0, "q_0.9": 16.0}, {"q_0.1": 15.0, "q_0.5": 18.0, "q_0.9": 25.0}]
     scale = 2.0
-    fields = compute_real_mase_fields(y_true, y_pred, pv, scale)
+    fields = compute_score_fields(y_true, y_pred, pv, scale, None)
 
     def ql(y, q, level):
         return 2 * abs((y - q) * ((y <= q) - level))
@@ -197,8 +197,37 @@ def test_quantile_sql_uses_context_scale():
 
 
 def test_fields_carry_mae_and_point_count():
-    fields = compute_real_mase_fields(np.array([1.0, 2.0, 3.0, 4.0]), np.array([1.0, 1.0, 1.0, 1.0]), [None] * 4, 3.0)
+    fields = compute_score_fields(np.array([1.0, 2.0, 3.0, 4.0]), np.array([1.0, 1.0, 1.0, 1.0]), [None] * 4, 3.0, None)
     assert fields["mae"] == pytest.approx(1.5)
     assert fields["n_points"] == 4
     assert fields["scale"] == 3.0
     assert fields["mase"] == pytest.approx(0.5)
+
+
+def test_fields_carry_rmse():
+    fields = compute_score_fields(np.array([1.0, 2.0, 3.0, 4.0]), np.array([1.0, 1.0, 1.0, 1.0]), [None] * 4, 3.0, None)
+    # errors 0, 1, 2, 3
+    assert fields["rmse"] == pytest.approx(np.sqrt(14 / 4))
+
+
+# ---------------------------------------------------------------------------------------
+# naive_mae: the arena score's relative MAE stays one division away
+# ---------------------------------------------------------------------------------------
+
+def test_naive_mae_reproduces_the_arena_relative_mae():
+    """Issue example: context 10, 12, 11, 13, 15, actuals 14, 16, forecast 15, 14."""
+    y_true = np.array([14.0, 16.0])
+    y_pred = np.array([15.0, 14.0])
+    fields = compute_score_fields(y_true, y_pred, [None, None], 1.75, 15.0)
+
+    arena_mase = np.mean(np.abs(y_true - y_pred)) / np.mean(np.abs(y_true - 15.0))
+    assert fields["naive_mae"] == pytest.approx(1.0)
+    assert fields["mae"] / fields["naive_mae"] == pytest.approx(arena_mase)
+    assert fields["mae"] / fields["naive_mae"] == pytest.approx(1.5)
+    assert fields["mase"] == pytest.approx(0.857142857)
+
+
+def test_no_context_value_gives_no_naive_mae():
+    fields = compute_score_fields(np.array([1.0]), np.array([2.0]), [None], 1.0, None)
+    assert fields["naive_mae"] is None
+    assert fields["mase"] == pytest.approx(1.0)

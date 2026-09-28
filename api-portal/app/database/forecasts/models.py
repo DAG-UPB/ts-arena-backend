@@ -79,6 +79,7 @@ class SeriesScale(Base):
     series_id = Column(Integer, ForeignKey("data_portal.time_series.series_id", ondelete="CASCADE"), primary_key=True)
     m = Column(SmallInteger, nullable=False)
     scale = Column(Float)
+    last_value = Column(Float)
     n_points = Column(Integer, nullable=False)
     n_pairs = Column(Integer, nullable=False)
     context_start = Column(DateTime(timezone=True))
@@ -87,16 +88,18 @@ class SeriesScale(Base):
     computed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
-class MaseScore(Base):
-    """MASE and SQL of one (round, model, series) against `SeriesScale`."""
+class ForecastScore(Base):
+    """Scores of one (round, model, series); MASE and SQL are scaled by `SeriesScale`."""
 
-    __tablename__ = "scores_mase"
+    __tablename__ = "forecast_scores"
     __table_args__ = {"schema": "forecasts"}
 
     round_id = Column(Integer, ForeignKey("challenges.rounds.id", ondelete="CASCADE"), primary_key=True)
     model_id = Column(Integer, ForeignKey("models.model_info.id", ondelete="CASCADE"), primary_key=True)
     series_id = Column(Integer, ForeignKey("data_portal.time_series.series_id", ondelete="CASCADE"), primary_key=True)
     mae = Column(Float)
+    rmse = Column(Float)
+    naive_mae = Column(Float)
     n_points = Column(Integer)
     scale = Column(Float)
     mase = Column(Float)

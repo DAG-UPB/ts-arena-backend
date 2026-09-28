@@ -1,7 +1,7 @@
 """The backfill's own bookkeeping: its drift checks must catch what they claim to."""
 import argparse
 
-from app.scripts.backfill_real_mase import Summary, _parse_args
+from app.scripts.backfill_forecast_scores import Summary, _parse_args
 
 
 def _row(model_id, series_id, mase, sql, scale=2.0, has_quantiles=False, status="complete"):
