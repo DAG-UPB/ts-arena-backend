@@ -259,22 +259,6 @@ WHERE
     dr.is_latest = TRUE
     OR (dr.calculation_date = (date_trunc('month', dr.calculation_date) + interval '1 month - 1 day')::date);
 
--- 5) Re-grant SELECT to the read-only role on the recreated objects -------------------
--- round_model_scores + the leaderboard/monthly views were DROP+CREATEd, so they lose any
--- prior grants. On DAG-UPB DBs `ALTER DEFAULT PRIVILEGES ... IN SCHEMA forecasts` already
--- re-grants automatically IF this migration is run as the object owner (internaluser); the
--- explicit GRANTs below make the migration correct regardless of who runs it or whether
--- default privileges are configured. Guarded so a DB without the role does not fail.
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'readonly_user') THEN
-    GRANT SELECT ON forecasts.round_model_scores TO readonly_user;
-    GRANT SELECT ON forecasts.v_ranking_base TO readonly_user;
-    GRANT SELECT ON forecasts.v_daily_rankings_leaderboard TO readonly_user;
-    GRANT SELECT ON forecasts.v_monthly_and_latest_rankings TO readonly_user;
-  END IF;
-END $$;
-
 COMMIT;
 
 -- Populate the rebuilt matview outside the transaction is unnecessary: CREATE MATERIALIZED
