@@ -4,6 +4,8 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 import psycopg2.extras
 
+from app.core.tracks import track_for_user_id, track_sql
+
 logger = logging.getLogger(__name__)
 
 
@@ -308,12 +310,18 @@ class RoundRepository:
             
             return grouped
 
-    def get_round_leaderboard(self, round_id: int) -> List[Dict[str, Any]]:
+    def get_round_leaderboard(self, round_id: int, track: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Get leaderboard (rankings) for a specific round.
         
         If final_evaluation is True in forecasts.scores, use pre-calculated scores.
         Otherwise, calculate MASE on-the-fly from forecasts.
+
+        Args:
+            round_id: The round
+            track: 'reference' or 'open' to keep one track only; None keeps both.
+                Filtering drops rows only: ``rank`` stays the per-series rank across
+                both tracks, ``track_rank`` is the per-series rank within the track.
         
         Returns:
             List of dicts with model rankings, sorted by avg_mase ascending.
@@ -335,27 +343,34 @@ class RoundRepository:
             has_final_evaluation = result['has_final_evaluation'] if result else False
             
             if has_final_evaluation:
-                return self._get_leaderboard_from_scores(round_id)
+                rows = self._get_leaderboard_from_scores(round_id)
             else:
                 logger.info(
                     "Round not yet completely evaluated: %s. Calculating mase for leaderboard "
                     "on-the-fly from forecasts.",
                     round_id,
                 )
-                return self._calculate_leaderboard_on_the_fly(round_id)
+                rows = self._calculate_leaderboard_on_the_fly(round_id)
+
+        # Filtered after ranking, so `rank` keeps its meaning across both tracks.
+        if track is not None:
+            rows = [row for row in rows if row['track'] == track]
+        return rows
 
     def _get_leaderboard_from_scores(self, round_id: int) -> List[Dict[str, Any]]:
         """
         Get leaderboard from pre-calculated scores in forecasts.scores table.
-        Returns one row per model-series combination, ranked per series.
+        Returns one row per model-series combination, ranked per series, both across
+        tracks (``rank``) and within the model's own track (``track_rank``).
         """
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                """
+                f"""
                 SELECT
                     mi.id as model_id,
                     mi.readable_id,
                     mi.name as model_name,
+                    {track_sql('mi')} as track,
                     cs.series_id,
                     ts.name as series_name,
                     cs.forecast_count,
@@ -367,7 +382,11 @@ class RoundRepository:
                     -- and blank the latter rather than invite a comparison it doesn't support.
                     cs.sql_score,
                     cs.has_quantiles,
-                    RANK() OVER (PARTITION BY cs.series_id ORDER BY cs.mase ASC NULLS LAST) as rank
+                    RANK() OVER (PARTITION BY cs.series_id ORDER BY cs.mase ASC NULLS LAST) as rank,
+                    RANK() OVER (
+                        PARTITION BY cs.series_id, {track_sql('mi')}
+                        ORDER BY cs.mase ASC NULLS LAST
+                    ) as track_rank
                 FROM forecasts.scores cs
                 JOIN challenges.rounds cr ON cr.id = cs.round_id
                 JOIN models.model_info mi ON mi.id = cs.model_id
@@ -424,6 +443,7 @@ class RoundRepository:
                     mi.id as model_id,
                     mi.readable_id,
                     mi.name as model_name,
+                    mi.user_id,
                     f.series_id,
                     ts.name as series_name,
                     f.predicted_value,
@@ -456,6 +476,7 @@ class RoundRepository:
                         'model_id': model_id,
                         'readable_id': r['readable_id'],
                         'model_name': r['model_name'],
+                        'track': track_for_user_id(r['user_id']),
                         'series_id': series_id,
                         'series_name': r['series_name'],
                         'mae_model_sum': 0.0,
@@ -483,6 +504,7 @@ class RoundRepository:
                     'model_id': data['model_id'],
                     'readable_id': data['readable_id'],
                     'model_name': data['model_name'],
+                    'track': data['track'],
                     'series_id': data['series_id'],
                     'series_name': data['series_name'],
                     'forecast_count': data['count'],
@@ -525,9 +547,12 @@ class RoundRepository:
                     )
                     continue
                 
-                # Add rank per series
+                # Add rank per series, across tracks and within each track
+                track_counters: Dict[str, int] = {}
                 for rank, item in enumerate(series_items, start=1):
                     item['rank'] = rank
+                    track_counters[item['track']] = track_counters.get(item['track'], 0) + 1
+                    item['track_rank'] = track_counters[item['track']]
                     filtered_leaderboard.append(item)
             
             return filtered_leaderboard

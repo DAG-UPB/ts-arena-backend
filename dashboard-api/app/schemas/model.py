@@ -2,6 +2,7 @@ from datetime import datetime
 from pydantic import BaseModel
 from typing import List, Optional
 
+from app.core.tracks import Track
 from app.schemas.common import ModelFieldsSchema
 
 class ModelSchema(ModelFieldsSchema):
@@ -19,6 +20,8 @@ class ModelSchema(ModelFieldsSchema):
     website_url: str | None = None
     description: str | None = None
     arxiv_id: str | None = None
+    # 'reference' (implemented in ts-arena-models, run by TS-Arena) or 'open'.
+    track: Track | None = None
 
 
 class ModelListItemSchema(ModelFieldsSchema):
@@ -33,6 +36,7 @@ class ModelListItemSchema(ModelFieldsSchema):
     repo_url: str | None = None
     website_url: str | None = None
     arxiv_id: str | None = None
+    track: Track | None = None
 
 
 class ModelDetailSchema(ModelSchema):
