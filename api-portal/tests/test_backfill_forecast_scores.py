@@ -1,7 +1,9 @@
 """The backfill's own bookkeeping: its drift checks must catch what they claim to."""
 import argparse
 
-from app.scripts.backfill_forecast_scores import Summary, _parse_args
+import pytest
+
+from app.scripts.backfill_forecast_scores import Summary, _parse_args, parallel_workers_sql
 
 
 def _row(model_id, series_id, mase, sql, scale=2.0, has_quantiles=False, status="complete"):
@@ -35,3 +37,13 @@ def test_arguments():
     args = _parse_args(["--dry-run", "--sample", "5", "--check-served"])
     assert isinstance(args, argparse.Namespace)
     assert args.dry_run and args.sample == 5 and args.check_served and not args.refresh
+    assert args.max_parallel_workers == 2
+
+
+def test_parallel_worker_cap():
+    assert _parse_args(["--max-parallel-workers", "0"]).max_parallel_workers == 0
+    with pytest.raises(SystemExit):
+        _parse_args(["--max-parallel-workers", "-1"])
+    assert parallel_workers_sql(2) == "SET LOCAL max_parallel_workers_per_gather = 2"
+    with pytest.raises(ValueError):
+        parallel_workers_sql("2; DROP TABLE x")
