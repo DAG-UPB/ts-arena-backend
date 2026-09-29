@@ -5,6 +5,7 @@ import psycopg2.extras
 import math
 import isodate
 
+from app.core.tracks import track_sql
 from app.schemas.model import ModelSchema
 
 logger = logging.getLogger(__name__)
@@ -28,9 +29,10 @@ class ModelRepository:
         """Get detailed model info and stats."""
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                """
+                f"""
                 SELECT
                     mi.*,
+                    {track_sql('mi')} AS track,
                     (SELECT COUNT(DISTINCT round_id) FROM forecasts.scores WHERE model_id = mi.id) as challenges_participated,
                     (SELECT COALESCE(SUM(forecast_count), 0) FROM forecasts.scores WHERE model_id = mi.id) as forecasts_made
                 FROM models.model_info mi
@@ -50,7 +52,7 @@ class ModelRepository:
         """
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                """
+                f"""
                 SELECT
                     mi.id,
                     mi.readable_id,
@@ -61,7 +63,8 @@ class ModelRepository:
                     mi.paper_url,
                     mi.repo_url,
                     mi.website_url,
-                    mi.arxiv_id
+                    mi.arxiv_id,
+                    {track_sql('mi')} AS track
                 FROM models.model_info mi
                 ORDER BY mi.model_family NULLS LAST, mi.name
                 """
@@ -148,7 +151,8 @@ class ModelRepository:
         scope_id: Optional[str] = None,
         calculation_date = None,
         limit: int = 100,
-        metric: str = "mase"
+        metric: str = "mase",
+        track: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Get model rankings from v_monthly_and_latest_rankings view.
@@ -162,9 +166,14 @@ class ModelRepository:
             calculation_date: Date object for specific date, or None for latest rankings
             limit: Max. number of results
             metric: Ranking metric — 'mase' (point, default) or 'sql' (probabilistic)
+            track: 'reference' or 'open' to keep one track only; None keeps both
 
         Returns:
-            List of dicts with ranking information from the view
+            List of dicts with ranking information from the view. Every row carries
+            its ``track`` and ``track_rank_position``, the model's position among
+            the models of its own track in the same scope. ELO is fitted once over
+            both tracks, so ``track_rank_position`` is that combined order
+            restricted to the track, not a separate per-track fit.
         """
         # Bulk mode: a scope_type with no scope_id returns every scope of that
         # type in one round trip. The limit then has to apply per scope rather
@@ -172,57 +181,69 @@ class ModelRepository:
         # afterwards.
         bulk = scope_type not in (None, "global") and not scope_id
 
-        # Build the base query
-        query = """
+        # Build the base query. model_info is joined for the owner, which is what
+        # decides the track. The window runs after WHERE, so the track rank is
+        # taken within the requested metric, date and scope only.
+        query = f"""
             SELECT
-                model_id,
-                model_name,
-                architecture,
-                model_size,
-                organization_name,
-                metric,
-                elo_rating_median,
-                elo_ci_lower,
-                elo_ci_upper,
-                matches_played,
-                n_bootstraps,
-                rank_position,
-                avg_mase,
-                mase_std,
-                avg_sql,
-                sql_std,
-                evaluated_count,
-                calculation_date,
-                scope_id,
-                definition_id
-            FROM forecasts.v_monthly_and_latest_rankings
+                r.model_id,
+                r.model_name,
+                r.architecture,
+                r.model_size,
+                r.organization_name,
+                r.metric,
+                r.elo_rating_median,
+                r.elo_ci_lower,
+                r.elo_ci_upper,
+                r.matches_played,
+                r.n_bootstraps,
+                r.rank_position,
+                r.avg_mase,
+                r.mase_std,
+                r.avg_sql,
+                r.sql_std,
+                r.evaluated_count,
+                r.calculation_date,
+                r.scope_id,
+                r.definition_id,
+                {track_sql('mi')} AS track,
+                RANK() OVER (
+                    PARTITION BY r.scope_type, r.scope_id, r.calculation_date, {track_sql('mi')}
+                    ORDER BY r.rank_position
+                ) AS track_rank_position
+            FROM forecasts.v_monthly_and_latest_rankings r
+            JOIN models.model_info mi ON mi.id = r.model_id
             WHERE 1=1
         """
         params = []
 
         # Filter by ranking metric (defaults to 'mase' for backwards compatibility)
-        query += " AND metric = %s"
+        query += " AND r.metric = %s"
         params.append(metric)
 
         # Filter by calculation date or get latest
         if calculation_date is None:
-            query += " AND is_latest = TRUE"
+            query += " AND r.is_latest = TRUE"
         else:
-            query += " AND calculation_date = %s"
+            query += " AND r.calculation_date = %s"
             params.append(calculation_date)
 
         # Filter by scope type
-        query += " AND scope_type = %s"
+        query += " AND r.scope_type = %s"
         params.append(scope_type)
         
         # Filter by scope_id based on scope_type
         if scope_type == "definition" and scope_id:
-            query += " AND definition_id = %s"
+            query += " AND r.definition_id = %s"
             params.append(scope_id)
         elif scope_type == "frequency_horizon" and scope_id:
-            query += " AND scope_id = %s"
+            query += " AND r.scope_id = %s"
             params.append(scope_id)
         # For 'global', no additional scope_id filter needed
+
+        if track is not None:
+            query += f" AND {track_sql('mi')} = %s"
+            params.append(track)
         
         # Order by rank position (and scope for multi-scope results)
         if bulk:
@@ -370,22 +391,24 @@ class ModelRepository:
         
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             # Get all rankings for the model from the last 30 days
-            query = """ 
+            query = f"""
             SELECT 
-                model_id,
-                model_name,
-                definition_id,
-                definition_name,
-                calculation_date,
-                elo_rating_median,
-                elo_ci_lower,
-                elo_ci_upper,
-                rank_position,
-                scope_type,
-                scope_id
-            FROM forecasts.v_monthly_and_latest_rankings
-            WHERE model_id = %s
-              AND metric = 'mase'
+                r.model_id,
+                r.model_name,
+                r.definition_id,
+                r.definition_name,
+                r.calculation_date,
+                r.elo_rating_median,
+                r.elo_ci_lower,
+                r.elo_ci_upper,
+                r.rank_position,
+                r.scope_type,
+                r.scope_id,
+                {track_sql('mi')} AS track
+            FROM forecasts.v_monthly_and_latest_rankings r
+            JOIN models.model_info mi ON mi.id = r.model_id
+            WHERE r.model_id = %s
+              AND r.metric = 'mase'
             """
             cur.execute(query, (model_id,))
             rows = [dict(r) for r in cur.fetchall()]
@@ -397,6 +420,7 @@ class ModelRepository:
             # Group by scope (using scope_type and scope_id as composite key)
             model_id = rows[0]['model_id']
             model_name = rows[0]['model_name']
+            track = rows[0]['track']
             
             scopes_dict = {}
             for row in rows:
@@ -428,6 +452,7 @@ class ModelRepository:
             return {
                 'model_id': model_id,
                 'model_name': model_name,
+                'track': track,
                 'definition_rankings': list(scopes_dict.values())
             } 
 

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from typing import List, Optional
 
 from app.core.dependencies import get_api_key
+from app.core.tracks import validate_track
 from app.database.connection import get_db_connection
 from app.repositories.model_repository import ModelRepository
 from app.repositories.forecast_repository import ForecastRepository
@@ -62,6 +63,15 @@ def get_filtered_rankings(
         description="Maximum number of results",
         example=100
     ),
+    track: Optional[str] = Query(
+        None,
+        description=(
+            "Keep one track only: 'reference' (models implemented in ts-arena-models) or "
+            "'open' (every other model). Omit for the combined board. ELO is fitted over "
+            "both tracks together; the filter only drops rows, it does not refit."
+        ),
+        example="reference"
+    ),
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
 ):
@@ -109,13 +119,17 @@ def get_filtered_rankings(
           "avg_mase": 0.85,
           "mase_std": 0.12,
           "evaluated_count": 156,
-          "calculation_date": "2025-12-31"
+          "calculation_date": "2025-12-31",
+          "track": "reference",
+          "track_rank_position": 1
         }
       ],
       "scope": {
         "type": "global",
         "id": null
-      }
+      },
+      "metric": "mase",
+      "track": null
     }
     ```
     
@@ -134,7 +148,13 @@ def get_filtered_rankings(
     - `elo_ci_upper`: Upper bound of ELO confidence interval
     - `matches_played`: Number of matches/comparisons used for ELO calculation
     - `n_bootstraps`: Number of bootstrap iterations performed
-    - `rank_position`: Rank position within the scope (1 = best)
+    - `rank_position`: Rank position within the scope across both tracks (1 = best)
+
+    *Track:*
+    - `track`: `reference` for models implemented in ts-arena-models and run by TS-Arena
+      on exactly the registration context, `open` for every other model
+    - `track_rank_position`: Rank position among the models of the same track in this
+      scope. It is `rank_position` restricted to the track, not a separate ELO fit
     
     *MASE Metrics:*
     - `avg_mase`: Average MASE score across all evaluations in the month
@@ -153,6 +173,8 @@ def get_filtered_rankings(
             status_code=400,
             detail="Invalid metric. Use 'mase' (point) or 'sql' (probabilistic)."
         )
+
+    track = validate_track(track)
 
     # Validate that only one scope filter is provided
     if definition_id is not None and frequency_horizon is not None:
@@ -206,7 +228,8 @@ def get_filtered_rankings(
         scope_id=scope_id,
         calculation_date=calc_date,
         limit=limit,
-        metric=metric
+        metric=metric,
+        track=track
     )
 
     return {
@@ -215,7 +238,8 @@ def get_filtered_rankings(
             "type": scope_type,
             "id": scope_id
         },
-        "metric": metric
+        "metric": metric,
+        "track": track
     }
 
 
@@ -268,6 +292,9 @@ def list_all_models(
     is intentionally thin — no parameters blob, no aggregate stats — and
     is intended to back the frontend's Models tab so it no longer has to
     derive `readable_id → model_id` from the rankings endpoint.
+
+    Each row carries its ``track``: ``reference`` for models implemented in
+    ts-arena-models, ``open`` for every other model.
     """
     repo = ModelRepository(conn)
     return repo.list_models()
@@ -280,7 +307,8 @@ def get_model_details(
     conn = Depends(get_db_connection)
 ):
     """
-    Get detailed information about a model.
+    Get detailed information about a model, including its ``track``
+    (``reference`` or ``open``).
     """
     repo = ModelRepository(conn)
     model = repo.get_model_details(model_id)
@@ -312,6 +340,7 @@ def get_model_rankings(
     {
       "model_id": 123,
       "model_name": "ExampleModel",
+      "track": "reference",
       "definition_rankings": [
         {
           "definition_id": 1,
