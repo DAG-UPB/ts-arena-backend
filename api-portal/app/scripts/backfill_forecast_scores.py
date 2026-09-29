@@ -10,9 +10,11 @@ revisions. Actuals are the ones available when the backfill runs, late ones incl
 Scales missing from `forecasts.series_scale` are rebuilt from SCD2 as of
 `rounds.created_at` and stored once. `forecasts.scores` is neither read nor written.
 
-Candidates are rounds that ended more than the grace period ago, are not cancelled, have
-participants and have no `forecasts.forecast_scores` row yet, so an interrupted run resumes
-where it stopped. One transaction per round: a failing round is rolled back, reported and
+Candidates are rounds that ended more than the grace period ago, are not cancelled and have
+no `forecasts.forecast_scores` row yet, so an interrupted run resumes where it stopped. They
+are not filtered on `challenges.participants`: the backtest rounds (ended before 2026-04)
+have forecasts and arena scores but no participant rows. A round without forecasts writes
+nothing and is reported as empty. One transaction per round: a failing round is rolled back, reported and
 skipped. Rounds the scheduled job is scoring at the same moment are skipped as well.
 
 Usage (inside the api-portal container, or locally with DATABASE_URL set):
@@ -176,7 +178,6 @@ async def candidate_rounds(
     clauses = [
         "r.end_time < now() - CAST(:grace AS interval)",
         "NOT COALESCE(r.is_cancelled, FALSE)",
-        "EXISTS (SELECT 1 FROM challenges.participants p WHERE p.round_id = r.id)",
     ]
     params: Dict[str, Any] = {"grace": EVALUATION_TIMEOUT}
     if tables_exist and not refresh:
