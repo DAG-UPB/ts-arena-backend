@@ -3,6 +3,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from app.core.dependencies import get_api_key
+from app.core.tracks import validate_track
 from app.core.utils import parse_comma_separated
 from app.database.connection import get_db_connection
 from app.repositories.challenge_repository import ChallengeRepository
@@ -174,13 +175,26 @@ def get_round_series(
 @router.get("/{round_id}/leaderboard", response_model=List)
 def get_round_leaderboard(
     round_id: int,
+    track: Optional[str] = Query(
+        None,
+        description=(
+            "Keep one track only: 'reference' (models implemented in ts-arena-models) or "
+            "'open' (every other model). Omit for both tracks."
+        ),
+        example="reference"
+    ),
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
 ):
     """
     Get leaderboard (rankings) for a specific round.
     Returns empty list if round is in registration status.
+
+    One row per model and series. `rank` is the per-series MASE rank across both
+    tracks, `track_rank` the per-series rank among the models of the same `track`
+    (`reference` or `open`). The `track` filter drops rows; it does not change `rank`.
     """
+    track = validate_track(track)
     repo = RoundRepository(conn)
     
     # Check if round is in registration status - no data should be returned
@@ -188,7 +202,7 @@ def get_round_leaderboard(
     if status == "registration":
         return []
     
-    leaderboard = repo.get_round_leaderboard(round_id)
+    leaderboard = repo.get_round_leaderboard(round_id, track=track)
     return leaderboard
 
 
