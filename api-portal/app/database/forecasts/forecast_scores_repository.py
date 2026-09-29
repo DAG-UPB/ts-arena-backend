@@ -1,8 +1,4 @@
-"""Reads and writes for `ForecastScoringService`: `forecasts.series_scale` and
-`forecasts.forecast_scores`, and the rounds the service works on.
-
-Nothing here reads `forecasts.scores`: the service picks its rounds by its own table.
-"""
+"""Reads and writes for `forecasts.series_scale` and `forecasts.forecast_scores`."""
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -16,8 +12,7 @@ from app.database.forecasts.models import ForecastScore, SeriesScale
 
 _UPSERT_CHUNK = 1000
 
-# First key of the per-round advisory lock, so the scheduled job and the backfill never
-# score the same round at once. The arena scorer locks its rounds under 42.
+# Advisory lock namespace per round; the arena scorer uses 42.
 ROUND_LOCK_NAMESPACE = 43
 
 
@@ -26,7 +21,6 @@ class ForecastScoresRepository:
         self.session = session
 
     async def tables_exist(self) -> bool:
-        """Both tables are present, i.e. the migration has been applied to this database."""
         result = await self.session.execute(
             text(
                 "SELECT to_regclass('forecasts.series_scale') IS NOT NULL "
@@ -36,20 +30,13 @@ class ForecastScoresRepository:
         return bool(result.scalar())
 
     async def try_lock_round(self, round_id: int) -> bool:
-        """Take the round's advisory lock for the current transaction, without waiting."""
         result = await self.session.execute(
             select(func.pg_try_advisory_xact_lock(ROUND_LOCK_NAMESPACE, round_id))
         )
         return bool(result.scalar())
 
     async def rounds_awaiting_capture(self, lookback: timedelta) -> List[Tuple[int, Optional[timedelta]]]:
-        """`(round_id, frequency)` of rounds whose context was served but has no scale yet.
-
-        The context is written together with `series_pseudo` in one transaction, so a round
-        with `series_pseudo` rows has its complete served context in `context_data`. Only
-        rounds whose registration started within `lookback` qualify: `context_data` is a
-        serving cache and is not kept, so later rounds are rebuilt from SCD2 instead.
-        """
+        """`(round_id, frequency)` of rounds with served context but no scale yet."""
         result = await self.session.execute(
             text("""
                 SELECT r.id, r.frequency
@@ -66,14 +53,7 @@ class ForecastScoresRepository:
         return [(row[0], row[1]) for row in result.fetchall()]
 
     async def rounds_to_score(self, lookback: timedelta) -> List[int]:
-        """Active or completed rounds with participants that are not final yet.
-
-        A round is final once it has `forecast_scores` rows and none of them is pending.
-        Rounds that ended more than `lookback` ago are left out, so a round that never gets
-        a row (every forecast outside its window) drops out on its own; the backfill covers
-        anything older. The status comes from `v_rounds_with_status`, so cancelled rounds
-        are never scored.
-        """
+        """Active or completed rounds with participants, not final yet, ended within `lookback`."""
         result = await self.session.execute(
             text("""
                 SELECT r.id
@@ -95,7 +75,6 @@ class ForecastScoresRepository:
         return [row[0] for row in result.fetchall()]
 
     async def get_scales(self, round_id: int) -> Dict[int, Dict[str, Any]]:
-        """`series_id -> stored scale row` for one round."""
         result = await self.session.execute(
             select(SeriesScale).where(SeriesScale.round_id == round_id)
         )
@@ -113,11 +92,7 @@ class ForecastScoresRepository:
         }
 
     async def get_context_windows(self, round_id: int) -> Dict[int, Tuple[datetime, datetime]]:
-        """`series_id -> (min_ts, max_ts)` of each series' context, from `series_pseudo`.
-
-        `series_pseudo` keeps these for every round. Series without both bounds are left out:
-        there is no context window to read.
-        """
+        """`series_id -> (min_ts, max_ts)` of each series' context; series missing a bound are left out."""
         result = await self.session.execute(
             select(
                 ChallengeSeriesPseudo.series_id,
@@ -132,12 +107,7 @@ class ForecastScoresRepository:
         }
 
     async def read_served_context(self, round_id: int) -> List[Dict[str, Any]]:
-        """The context exactly as served for a round, from `challenges.context_data`.
-
-        Only reliable while the round is in registration: the table is a serving cache and
-        is not kept, so a later read may find nothing or only part of it. Everything after
-        that uses `read_context_as_of`.
-        """
+        """The context as served; only complete while the round is in registration."""
         result = await self.session.execute(
             select(
                 ChallengeContextData.series_id,
@@ -155,21 +125,10 @@ class ForecastScoresRepository:
         lo: datetime,
         hi: datetime,
     ) -> List[Dict[str, Any]]:
-        """Rebuild a round's context from SCD2 history, as the data stood at `as_of`.
+        """Rebuild a round's bucketed context from SCD2 as it stood at `as_of`.
 
-        With `as_of = rounds.created_at` this reproduces the served context, which was read
-        from the resolution aggregate over `time_series_data`. What that table held at a
-        point in time is, per (series, ts), the newest SCD2 version with a value written by
-        then. NULL gap markers never reach `time_series_data` (its `value` is NOT NULL), so
-        they never remove a value there, even where SCD2 records them as the version that
-        superseded it. The fuel-price series do exactly that minutes after every point,
-        which is why "the version valid at `as_of`" would lose most of their context.
-        Values are bucketed to the round resolution over each series' `[min_ts, max_ts]`
-        from `series_pseudo`.
-
-        `lo`/`hi` must span every series' window. They have to be literal bounds on `d.ts`:
-        per-series bounds arriving through the join do not let TimescaleDB exclude chunks,
-        which costs tens of seconds per round.
+        Takes the newest non-NULL version per (series, ts): NULL versions never overwrite a value.
+        `lo`/`hi` must span every series' window; only literal bounds let TimescaleDB exclude chunks.
         """
         query = text("""
             SELECT series_id,
@@ -198,7 +157,6 @@ class ForecastScoresRepository:
         return [{"series_id": s, "ts": ts, "value": v} for s, ts, v in result.fetchall()]
 
     async def insert_scales(self, rows: List[Dict[str, Any]]) -> None:
-        """Store scales. An existing (round, series) scale is never overwritten."""
         if not rows:
             return
         stmt = insert(SeriesScale).values(rows).on_conflict_do_nothing(
@@ -207,7 +165,7 @@ class ForecastScoresRepository:
         await self.session.execute(stmt)
 
     async def upsert_forecast_scores(self, rows: List[Dict[str, Any]]) -> int:
-        """Insert or refresh `forecasts.forecast_scores` rows. Does not commit."""
+        """Does not commit."""
         keys = ("round_id", "model_id", "series_id")
         written = 0
         # asyncpg caps a statement at 32767 bind parameters; a row has 20.

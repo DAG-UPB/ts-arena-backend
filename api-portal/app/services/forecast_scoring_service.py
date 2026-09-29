@@ -1,23 +1,6 @@
-"""
-Scores forecasts into `forecasts.forecast_scores`, on a schedule of its own.
+"""Scores forecasts per (round, model, series) into `forecasts.forecast_scores`.
 
-Per (round, model, series) it stores the model's MAE and RMSE over the evaluated timestamps,
-MASE and SQL against the (round, series) context scale in `forecasts.series_scale`
-(Hyndman & Koehler 2006: the in-sample naive error of the context as served, the same for
-every model), and `naive_mae`, the persistence forecast's MAE on the same timestamps, so that
-`mae / naive_mae` is the relative MAE the arena score stores as `mase`.
-
-This runs next to `ScoreEvaluationService`, which keeps writing `forecasts.scores` until
-every reader has moved here. Nothing in this module reads `forecasts.scores` or imports the
-arena scorer, so that one can be switched off and deleted without touching this. Which
-points count and when a score is final follow the arena scorer's rules, copied below.
-
-A run of `periodic_forecast_scoring_job`:
-
-1. `capture_served_scales`: rounds whose context was just served get their scales from
-   `challenges.context_data`, the only time that exact context is available.
-2. `rounds_to_score` and `score_round`: active and completed rounds that are not final yet,
-   one transaction each. Scales the capture missed are rebuilt from SCD2.
+Independent of `forecasts.scores` and the arena scorer, so that one can be deleted.
 """
 import logging
 from dataclasses import dataclass
@@ -37,7 +20,6 @@ from app.services.series_scale_service import SeriesScaleService
 logger = logging.getLogger(__name__)
 
 
-# --- The arena scorer's rules ------------------------------------------------------------
 # Copied from ScoreEvaluationService rather than imported, so that it can be deleted.
 
 FREQUENCY_TO_RESOLUTION: Dict[timedelta, str] = {
@@ -46,26 +28,20 @@ FREQUENCY_TO_RESOLUTION: Dict[timedelta, str] = {
     timedelta(days=1): "1d",
 }
 
-EVALUATION_TIMEOUT = timedelta(days=1)  # Grace period after round end for ground truth
-MIN_COVERAGE_FOR_FINAL = 0.95           # Coverage a pair needs after it to keep its score
+EVALUATION_TIMEOUT = timedelta(days=1)
+MIN_COVERAGE_FOR_FINAL = 0.95
 
-# A forecast and an actual join when their minute-truncated timestamps are equal, so padding
-# the actuals fetch by one minute keeps the ts-bounded query lossless.
+# Forecasts and actuals join on minute-truncated ts, so the actuals window is padded by a minute.
 _ACTUALS_TS_MARGIN = timedelta(minutes=1)
 
 
-# --- This service's own settings ----------------------------------------------------------
-
-# Rounds that ended longer ago are left to the backfill. Well above the grace period, so a
-# job that was down for a few days still catches up on its own.
+# Rounds that ended longer ago are left to the backfill.
 SCORING_LOOKBACK = timedelta(days=7)
 
-# How far back the capture looks for rounds whose context has been served.
 CAPTURE_LOOKBACK = timedelta(hours=6)
 
 
 def _as_utc(value: datetime) -> datetime:
-    """Normalise to UTC so naive DB timestamps compare against tz-aware ones."""
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
@@ -77,7 +53,7 @@ def _finite(value: Any) -> bool:
 
 
 def timedelta_to_resolution(frequency: Optional[timedelta]) -> str:
-    """Resolution view ("15min", "1h", "1d") of a round frequency; "1h" when unknown."""
+    """Resolution view of a round frequency; "1h" when unknown."""
     resolution = FREQUENCY_TO_RESOLUTION.get(frequency) if frequency is not None else None
     if resolution is None:
         logger.warning(f"Unknown frequency {frequency}, defaulting to '1h' resolution")
@@ -90,12 +66,7 @@ def series_forecast_windows(
     frequency: Optional[timedelta],
     horizon: Optional[timedelta],
 ) -> Dict[int, Tuple[datetime, datetime]]:
-    """`series_id -> (first_ts, last_ts)`: the timestamps a forecast for that series may carry.
-
-    `context_edge + frequency` through `context_edge + horizon`, per series, the range uploads
-    are validated against. Points outside it are not scored. Series without a context edge
-    are left out, and their points are not filtered.
-    """
+    """`series_id -> (edge + frequency, edge + horizon)`; series without a context edge are left out."""
     if not frequency or not horizon:
         return {}
     return {
@@ -106,22 +77,13 @@ def series_forecast_windows(
 
 
 def evaluation_timeout_passed(round_end_time: Optional[datetime]) -> bool:
-    """Has the grace period for ground truth after the round's end elapsed?
-
-    A round without an end time never times out.
-    """
     if round_end_time is None:
         return False
     return datetime.now(timezone.utc) > _as_utc(round_end_time) + EVALUATION_TIMEOUT
 
 
 def coverage_verdict(data_coverage: float, timeout_passed: bool) -> Tuple[str, bool]:
-    """`(evaluation_status, final_evaluation)` of a pair with at least one evaluated point.
-
-    Complete coverage is final at once. After the grace period a pair is final either way:
-    with at least `MIN_COVERAGE_FOR_FINAL` it is a valid `partial` score, below that it is
-    `insufficient_data` and carries no score. Before it, a partial pair waits for more data.
-    """
+    """`(evaluation_status, final_evaluation)` of a pair with at least one evaluated point."""
     if data_coverage >= 1.0:
         return "complete", True
     if timeout_passed:
@@ -140,14 +102,7 @@ def build_score_row(
     scale_row: Optional[Dict[str, Any]],
     timeout_passed: bool,
 ) -> Dict[str, Any]:
-    """One `forecasts.forecast_scores` row for a pair with in-window forecasts.
-
-    `evaluation_data` are the pair's forecasts joined to the actuals. A point whose forecast
-    or actual is not a finite number is not evaluated, so it counts against coverage like a
-    missing one (the arena scorer stores NaN or Infinity instead). `scale_row` is the
-    (round, series) row of `forecasts.series_scale`, the same for every model; when it is
-    missing, NULL or 0 the pair gets `undefined_scale` and no MASE, for every model alike.
-    """
+    """One `forecast_scores` row. Non-finite points count as missing; no usable scale gives `undefined_scale`."""
     points = [
         p for p in evaluation_data
         if _finite(p["predicted_value"]) and _finite(p["actual_value"])
@@ -211,13 +166,7 @@ def build_score_row(
 
 
 class _SeriesActualsCache:
-    """Per-series actuals for one round, keyed by minute-truncated ts, one query per series.
-
-    Every model on a series is scored against the same actuals. The ts window is the widest
-    range any model forecast for the series, padded by `_ACTUALS_TS_MARGIN`. With
-    `raw_fallback` (backfill only), a series the continuous aggregate has nothing for is read
-    from raw data, bucketed alike: dev restores lack old aggregate periods.
-    """
+    """Per-series actuals of one round by minute-truncated ts; `raw_fallback` reads raw data if the aggregate is empty."""
 
     def __init__(
         self,
@@ -273,11 +222,7 @@ class ForecastScoringService:
         return await self.repo.tables_exist()
 
     async def capture_served_scales(self) -> int:
-        """Store the scales of rounds whose context was just served. Commits per round.
-
-        Returns the number of (round, series) scales stored. A round that fails is rolled
-        back and logged; its scales are rebuilt from SCD2 when it is scored.
-        """
+        """Store the scales of rounds whose context was just served. Commits per round."""
         stored = 0
         for round_id, frequency in await self.repo.rounds_awaiting_capture(CAPTURE_LOOKBACK):
             try:
@@ -296,10 +241,7 @@ class ForecastScoringService:
         return await self.repo.rounds_to_score(SCORING_LOOKBACK)
 
     async def score_round(self, round_id: int) -> Optional[int]:
-        """Score one round into `forecasts.forecast_scores`, in one transaction.
-
-        Returns the number of rows written, or None when another process holds the round.
-        """
+        """Score one round in one transaction; None when another process holds the round."""
         try:
             if not await self.repo.try_lock_round(round_id):
                 await self.db_session.rollback()
@@ -315,11 +257,7 @@ class ForecastScoringService:
             raise
 
     async def compute_round(self, round_id: int) -> Optional[List[Dict[str, Any]]]:
-        """`forecasts.forecast_scores` rows for one round, without writing them.
-
-        Stores any scale it has to rebuild (not committed). None when the round has no
-        in-window forecasts.
-        """
+        """Rows for one round, not written; rebuilt scales are stored uncommitted."""
         inputs = await self._load_round_inputs(round_id)
         if inputs is None:
             return None
@@ -349,7 +287,6 @@ class ForecastScoringService:
         return rows
 
     async def _load_round_inputs(self, round_id: int) -> Optional[_RoundInputs]:
-        """The round's in-window forecasts, grouped by pair, and its actuals source."""
         round_info = await self.round_repo.get_by_id(round_id)
         if round_info is None:
             logger.warning(f"Round {round_id} not found")

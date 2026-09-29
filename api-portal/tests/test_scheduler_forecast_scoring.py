@@ -1,13 +1,4 @@
-"""The forecast scoring job next to the arena scorer: bounded, isolated, never in the way.
-
-It runs under the same hang guard as the arena scorer (a hung run is cancelled so its
-``max_running_jobs=1`` slot frees), scores each round in its own session so one failing round
-does not stop the rest, does nothing before its tables exist, and its schedule can fail
-without taking the scheduler's start down with it.
-
-``SessionLocal`` and ``ForecastScoringService`` are faked; no database is touched. Coroutines
-are driven with ``asyncio.run``, as in test_scheduler_eval_timeout.
-"""
+"""The forecast scoring job and its schedule, with ``SessionLocal`` and the service faked."""
 from __future__ import annotations
 
 import asyncio

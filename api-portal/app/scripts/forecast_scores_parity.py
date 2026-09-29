@@ -1,26 +1,9 @@
-"""
-Compare `forecasts.forecast_scores` with the arena scores in `forecasts.scores`, read-only.
+"""Read-only comparison of `forecasts.forecast_scores` with the arena scores in `forecasts.scores`.
 
-For the time both scorers run side by side. Per (round, model, series) of rounds past the
-grace period it reports:
+    python -m app.scripts.forecast_scores_parity [flags]
 
-- pairs final in only one of the two tables,
-- whether the status and the number of evaluated points agree,
-- whether RMSE agrees. Both scorers take it over the same points against the same actuals,
-  so it matches exactly unless an actual was revised between their runs (they run 15
-  minutes apart). This is the check that the two compute the same thing.
-- whether `mae / naive_mae` reproduces the arena `mase`. Both are the model's MAE over the
-  persistence forecast's MAE on the same points, but the arena scorer reads the persistence
-  value when it scores and this one keeps it as served, so series whose last context value
-  gets revised after registration differ by design. Informative only.
-
-Mismatches are listed by series, where revisions cluster.
-
-Delete together with the arena scorer.
-
-Usage (inside the api-portal container, or locally with DATABASE_URL set):
-
-    python -m app.scripts.forecast_scores_parity [--days N] [--round-id X]
+    --days N      rounds that ended within the last N days (default 14)
+    --round-id X  only round X
 """
 from __future__ import annotations
 
