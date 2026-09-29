@@ -1,43 +1,17 @@
-"""
-Backfill `forecasts.forecast_scores` for every round past its grace period.
+"""Backfill `forecasts.forecast_scores` for rounds past their grace period, one transaction per round.
 
-Runs exactly the scheduled job's path (`ForecastScoringService.compute_round`): the same
-forecast fetch, per-series window, actuals and coverage rules, then MAE, RMSE, MASE, SQL and
-the persistence baseline against the (round, series) context scale. MAE is computed from the
-forecasts, not backed out of the stored arena score, which is not reliable across data
-revisions. Actuals are the ones available when the backfill runs, late ones included.
+    python -m app.scripts.backfill_forecast_scores [flags]
 
-Scales missing from `forecasts.series_scale` are rebuilt from SCD2 as of
-`rounds.created_at` and stored once. `forecasts.scores` is neither read nor written.
-
-Candidates are rounds that ended more than the grace period ago, are not cancelled and have
-no `forecasts.forecast_scores` row yet, so an interrupted run resumes where it stopped. They
-are not filtered on `challenges.participants`: the backtest rounds (ended before 2026-04)
-have forecasts and arena scores but no participant rows. A round without forecasts writes
-nothing and is reported as empty. One transaction per round: a failing round is rolled back, reported and
-skipped. Rounds the scheduled job is scoring at the same moment are skipped as well.
-
-Usage (inside the api-portal container, or locally with DATABASE_URL set):
-
-    python -m app.scripts.backfill_forecast_scores [--dry-run] [--limit N] [--round-id X]
-        [--sample N] [--refresh] [--check-served] [--no-raw-fallback] [--dump rows.csv]
-        [--max-parallel-workers N]
-
-    --dry-run          Compute and report in read-only transactions. Works before the
-                       migration is applied (every scale is then rebuilt, none stored).
-    --limit N          Process at most N rounds.
-    --round-id X       Process only round X.
-    --sample N         Process N candidates spread over the whole history (spot check).
-    --refresh          Also recompute rounds that already have forecast_scores rows.
-    --check-served     Where a round's served context still exists in context_data,
-                       compare the scale used against the one computed from it.
-    --no-raw-fallback  Read actuals from the continuous aggregate only. By default a series
-                       the aggregate has nothing for is read from raw data, bucketed alike
-                       (dev restores lack old aggregate periods).
-    --dump PATH        Write every computed row to a CSV for inspection.
-    --max-parallel-workers N
-                       Parallel workers per query, default 2 (0 = none). Uncapped, the
-                       reads fan out to about 10 workers each and compete with the site.
+    --dry-run                 compute in read-only transactions, write nothing
+    --limit N                 at most N rounds
+    --round-id X              only round X
+    --sample N                N candidates spread over the history
+    --refresh                 also recompute rounds that already have rows
+    --check-served            compare scales with the served context where it survives
+    --no-raw-fallback         read actuals from the continuous aggregate only
+    --dump PATH               write computed rows to a CSV
+    --progress-every N        log progress every N rounds
+    --max-parallel-workers N  parallel workers per query (default 2, 0 = none)
 """
 from __future__ import annotations
 
@@ -52,9 +26,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import text
 
-# Register every mapper the relationship graph reaches (ChallengeParticipant → ModelInfo
-# → User/Organization/ApiKey). The database package __init__s are empty, so a bare script
-# context must import these explicitly or mapper configuration fails at first query.
+# A bare script must import every mapper the relationships reach, or mapper configuration fails.
 from app.database.models.model_info import ModelInfo  # noqa: F401
 from app.database.auth.user import User  # noqa: F401
 from app.database.auth.organization import Organization  # noqa: F401
@@ -72,16 +44,13 @@ logger = logging.getLogger("backfill-forecast-scores")
 
 DEFAULT_PROGRESS_EVERY = 25
 
-# Parallel workers per query for the backfill's transactions. Its forecast and actuals reads
-# otherwise fan out to about 10 workers each; a small cap leaves the cores to the live site.
 DEFAULT_MAX_PARALLEL_WORKERS = 2
 
-# Relative tolerance for "the same number" in the identity and served-scale checks.
 TOLERANCE = 1e-9
 
 
 class _ReadOnlyRepository(ForecastScoresRepository):
-    """Reads like the real repository and writes nothing, with or without the tables."""
+    """Writes nothing; works before the tables exist."""
 
     def __init__(self, session, tables_exist: bool):
         super().__init__(session)
@@ -182,7 +151,7 @@ async def candidate_rounds(
     limit: Optional[int],
     sample: Optional[int] = None,
 ) -> List[int]:
-    """Rounds past the grace period, optionally only those not backfilled yet."""
+    """Rounds past the grace period; not filtered on participants, as backtest rounds have none."""
     clauses = [
         "r.end_time < now() - CAST(:grace AS interval)",
         "NOT COALESCE(r.is_cancelled, FALSE)",
@@ -242,7 +211,6 @@ async def process_round(round_id: int, args: argparse.Namespace, tables_exist: b
             svc = ForecastScoringService(session, raw_actuals_fallback=not args.no_raw_fallback)
             if args.dry_run:
                 await session.execute(text("SET TRANSACTION READ ONLY"))
-            # SET LOCAL: the cap ends with this round's transaction, on commit and rollback.
             await session.execute(text(parallel_workers_sql(args.max_parallel_workers)))
             if args.dry_run:
                 svc.scale_service.repo = _ReadOnlyRepository(session, tables_exist)

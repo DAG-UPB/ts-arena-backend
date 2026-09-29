@@ -39,13 +39,10 @@ EVAL_JOB_HARD_TIMEOUT_SECONDS = 480  # 8 minutes
 EVAL_STATEMENT_TIMEOUT_MS = 240_000  # 4 minutes
 EVAL_LOCK_TIMEOUT_MS = 30_000        # 30 seconds
 
-# The forecast scoring job (forecasts.forecast_scores) fires on the same 30-minute cadence,
-# offset by 15 minutes, and gets the same outer bound and the same per-session guards.
-FORECAST_SCORING_JOB_HARD_TIMEOUT_SECONDS = 480  # 8 minutes
+FORECAST_SCORING_JOB_HARD_TIMEOUT_SECONDS = 480
 
-# It starts no new round after this long and leaves the rest to the next run. Its first
-# runs catch up on a week of rounds at once, which would otherwise hit the hard timeout.
-FORECAST_SCORING_RUN_BUDGET_SECONDS = 300  # 5 minutes
+# No new round is started after this long; the rest is left to the next run.
+FORECAST_SCORING_RUN_BUDGET_SECONDS = 300
 
 
 async def _apply_eval_session_timeouts(session: AsyncSession) -> None:
@@ -207,17 +204,7 @@ async def periodic_challenge_scores_evaluation_job() -> None:
 
 @job_error_handler
 async def periodic_forecast_scoring_job() -> None:
-    """
-    Periodic job that writes forecasts.forecast_scores, next to the arena scorer.
-
-    This job runs every 30 minutes (:15, :45) and:
-    1. Stores the MASE scale of rounds whose context was just served
-    2. Scores active and completed rounds that are not final in forecast_scores yet,
-       one transaction per round
-
-    It does nothing until the migration creating the tables has been applied, and it never
-    touches forecasts.scores.
-    """
+    """Capture served scales, then score open rounds into forecasts.forecast_scores. No-op until its tables exist."""
     logger = logging.getLogger("challenge-scheduler")
     logger.info("Starting periodic forecast scoring job")
 
@@ -225,8 +212,7 @@ async def periodic_forecast_scoring_job() -> None:
         async with asyncio.timeout(FORECAST_SCORING_JOB_HARD_TIMEOUT_SECONDS):
             async with SessionLocal() as session:
                 await _apply_eval_session_timeouts(session)
-                # A SET is undone when its transaction rolls back, and the capture rolls
-                # back a round that fails. Commit first so the guards hold for the session.
+                # Commit so the SETs survive the capture's per-round rollbacks.
                 await session.commit()
                 service = ForecastScoringService(session)
                 if not await service.tables_exist():
@@ -252,7 +238,6 @@ async def periodic_forecast_scoring_job() -> None:
                             scored += 1
                 except Exception as e:
                     logger.error(f"Error scoring round {round_id} into forecast_scores: {e}")
-                    # Continue with next round instead of failing the whole job
 
             logger.info(
                 f"Forecast scoring complete: {captured} scale(s) captured, "
@@ -267,10 +252,10 @@ async def periodic_forecast_scoring_job() -> None:
             FORECAST_SCORING_JOB_HARD_TIMEOUT_SECONDS,
             exc_info=True,
         )
-        raise  # Re-raise to let decorator handle it
+        raise
     except Exception as e:
         logger.exception(f"Failed to run periodic forecast scoring: {e}")
-        raise  # Re-raise to let decorator handle it
+        raise
 
 
 @job_error_handler

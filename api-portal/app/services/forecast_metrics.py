@@ -18,12 +18,8 @@ Key identity (regression anchor): a degenerate distribution where all nine decil
 point forecast scores exactly the same as the arena MASE of that point forecast, because the
 deciles are symmetric about 0.5 and ``mean_q |1(y≤ŷ) − q| = 0.5``.
 
-Naming caveat: the value stored as ``forecasts.scores.mase`` is not MASE in the sense of
-Hyndman & Koehler (2006). Its denominator is out-of-sample (the evaluated window), so it is a
-relative MAE against persistence. Real MASE scales by the in-sample naive error of the
-**context**, ``mean |y_t − y_{t−m}|``. ``context_scale`` and ``compute_score_fields``
-below compute it, into the separate ``forecasts.forecast_scores`` table, with ``m = 1``. There,
-SQL uses the context scale as well, which is fev-bench's definition up to the choice of ``m``.
+``forecasts.scores.mase`` is a relative MAE against persistence, not Hyndman & Koehler MASE;
+``context_scale`` and ``compute_score_fields`` compute the latter for ``forecasts.forecast_scores``.
 
 These functions are intentionally free of any database or framework dependency so they can be
 unit-tested in isolation and reused by the scoring service.
@@ -313,11 +309,9 @@ def compute_sql_fields(
         y_pred: point forecasts, shape (T,).
         probabilistic_values: per-timestamp ``probabilistic_values`` dicts (or None),
             aligned with ``y_true``/``y_pred``.
-        mae_naive: the SQL scale. For ``forecasts.scores`` it is the MAE of the flat
-            last-context-value naive over the evaluated timestamps (same denominator as
-            arena MASE); ``compute_score_fields`` passes the context scale instead.
-            ``0`` means the SQL scale is undefined -> ``sql_score``/``sql_per_quantile``
-            come back ``None``.
+        mae_naive: the SQL scale (the naive MAE, or the context scale from
+            ``compute_score_fields``). ``0`` means the SQL scale is undefined ->
+            ``sql_score``/``sql_per_quantile`` come back ``None``.
 
     Returns:
         Dict with keys ``sql_score, sql_per_quantile, has_quantiles,
@@ -342,16 +336,8 @@ def compute_sql_fields(
     }
 
 
-# ---------------------------------------------------------------------------
-# Real MASE (Hyndman & Koehler 2006): scaled by the in-sample naive error on the context.
-# ---------------------------------------------------------------------------
-
-# Seasonal lag `m` of the MASE scale. 1 is Hyndman & Koehler's non-seasonal MASE: it assumes
-# no seasonality, which the platform cannot know per series. Stored with every scale, so a
-# different choice later is visible in the data rather than implied.
 MASE_SEASONAL_LAG = 1
 
-# Identifies how a `forecasts.forecast_scores` row was computed.
 MASE_METHOD = "hk2006_context_m1"
 
 
@@ -361,29 +347,9 @@ def context_scale(
     frequency: timedelta,
     m: int = MASE_SEASONAL_LAG,
 ) -> Tuple[Optional[float], int, int, int]:
-    """In-sample naive scale of one series' context: ``mean |y_t − y_{t−m}|``.
+    """In-sample naive scale ``mean |y_t − y_{t−m}|`` of a context, lagged by timestamp so gaps are skipped.
 
-    This is the MASE denominator of Hyndman & Koehler (2006) and GluonTS ``MASE()``, taken
-    over the context the forecast was made from, not over the evaluated window. It is a
-    property of (round, series), so every model is scored against the same value.
-
-    The lag is taken by **timestamp**: ``y_{t−m}`` is the point at ``t − m·frequency``. A
-    pair whose lagged point is missing (a gap in the context) is skipped, rather than
-    differencing across the gap as a positional lag would. Missing or non-finite values
-    count as gaps.
-
-    When the context has ``<= m`` points, ``m`` falls back to 1. GluonTS uses ``>`` there,
-    so a context exactly ``m`` long would give it no pairs at all.
-
-    Args:
-        timestamps: context timestamps, one per bucket at the round resolution.
-        values: context values aligned with ``timestamps``.
-        frequency: the round frequency (bucket width).
-        m: seasonal lag in steps of ``frequency``.
-
-    Returns:
-        ``(scale, m_used, n_points, n_pairs)``. ``scale`` is ``None`` when no pair exists and
-        ``0.0`` for a constant context; both mean MASE is undefined for this series.
+    Returns ``(scale, m_used, n_points, n_pairs)``; ``m`` falls back to 1 when there are ``<= m`` points.
     """
     series: Dict[datetime, float] = {}
     for ts, value in zip(timestamps, values):
@@ -404,7 +370,6 @@ def context_scale(
 
 
 def mase_scale_defined(scale: Optional[float]) -> bool:
-    """A scale MASE can divide by: present, finite and positive."""
     return scale is not None and bool(np.isfinite(scale)) and scale > 0
 
 
@@ -415,23 +380,7 @@ def compute_score_fields(
     scale: Optional[float],
     naive_value: Optional[float],
 ) -> Dict[str, object]:
-    """Point and probabilistic scores of one (model, series) evaluation.
-
-    MAE and RMSE are taken over the evaluated timestamps. MASE divides the MAE by the context
-    scale of the (round, series), the same for every model; ``mae`` is returned alongside, so
-    a later change of the scale is a single division over stored rows. SQL uses the same
-    scale via ``compute_sql_fields``, which keeps the regression anchor: a point-only
-    forecast scores ``sql_score == mase``.
-
-    ``naive_mae`` is the MAE of the persistence forecast, ``naive_value`` (the last context
-    value), on the same timestamps. ``mae / naive_mae`` is the relative MAE the arena score
-    stores as ``mase``, so it stays available without a scorer of its own. ``None`` when
-    there is no context value.
-
-    An undefined scale (see ``mase_scale_defined``) gives ``mase`` and ``sql_score`` of
-    ``None``, never ``inf``. The caller excludes the series for every model. Inputs must be
-    finite.
-    """
+    """Scores of one (model, series); ``mase``/``sql_score`` are None for an undefined scale. Inputs must be finite."""
     y_true = np.asarray(y_true, dtype=float)
     y_pred = np.asarray(y_pred, dtype=float)
     errors = y_true - y_pred

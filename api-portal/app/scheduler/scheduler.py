@@ -111,8 +111,7 @@ class ChallengeScheduler:
                 # Schedule the daily participation check (backend #92)
                 await self.schedule_periodic_participation_check()
 
-                # Schedule forecast scoring (forecasts.forecast_scores), next to the arena
-                # scorer. Never raises: a failure here must not stop the scheduler.
+                # Schedule forecast scoring (never raises)
                 await self.schedule_periodic_forecast_scoring()
 
                 # Run startup ELO check in background (don't block startup!)
@@ -498,25 +497,14 @@ class ChallengeScheduler:
             raise
 
     async def schedule_periodic_forecast_scoring(self) -> None:
-        """
-        Schedules forecast scoring into forecasts.forecast_scores at :15 and :45, between
-        the arena scorer's :00 and :30 runs, so the two never start together.
-
-        Unlike the other schedules this one does not raise: the arena scorer and round
-        creation must not depend on it, and start() fails as a whole if a schedule raises.
-        """
-        # Note: _ensure_started() is not called here to avoid recursion
-        # This method is only called from start() after the scheduler is already started
-
+        """Runs at :15 and :45, between the arena scorer's runs. Logs instead of raising."""
         try:
             await self.scheduler.configure_task(
                 periodic_forecast_scoring_job,
                 max_running_jobs=1,
                 misfire_grace_time=300,
             )
-            # Same reasoning as the eval schedule: misfire_grace_time on the SCHEDULE so a
-            # queued fire expires instead of piling up, and conflict_policy=replace so the
-            # persisted row picks up changes to this configuration (backend-48).
+            # replace, so the persisted schedule picks up changes to this configuration
             await self.scheduler.add_schedule(
                 func_or_task_id=periodic_forecast_scoring_job,
                 trigger=CronTrigger(minute="15,45"),

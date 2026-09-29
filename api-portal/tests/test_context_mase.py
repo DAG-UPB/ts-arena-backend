@@ -1,10 +1,4 @@
-"""MASE (Hyndman & Koehler 2006): context scale and per-evaluation score fields.
-
-Reference values marked "GluonTS" were produced with gluonts 0.16
-(`gluonts.evaluation.metrics.calculate_seasonal_error` + `mase`, past data passed through
-`np.ma.masked_invalid` as its `Evaluator` does) on exactly these fixtures. GluonTS is not a
-service dependency, so the numbers are pinned here instead of recomputed.
-"""
+"""MASE context scale and score fields; values marked "GluonTS" are pinned from gluonts 0.16."""
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
@@ -22,12 +16,10 @@ T0 = datetime(2026, 1, 5, tzinfo=timezone.utc)
 
 
 def _grid(values, freq=HOUR, start=T0):
-    """Context on a regular grid; `None`/NaN entries are dropped (a gap, not a value)."""
     return [start + i * freq for i in range(len(values))], list(values)
 
 
 def hyndman_koehler_mase(past, actual, forecast, m=1):
-    """Textbook MASE on a gap-free positional series (the definition, written out)."""
     past = np.asarray(past, dtype=float)
     scale = np.mean(np.abs(past[m:] - past[:-m]))
     return np.mean(np.abs(np.asarray(actual) - np.asarray(forecast))) / scale
@@ -39,16 +31,11 @@ def _hourly_fixture():
     return y[:168], y[168:]
 
 
-# ---------------------------------------------------------------------------------------
-# context_scale
-# ---------------------------------------------------------------------------------------
-
 def test_default_lag_is_non_seasonal():
     assert MASE_SEASONAL_LAG == 1
 
 
 def test_issue_example_matches_hand_written_and_gluonts():
-    # Context 10,12,11,13,15; actuals 14,16; forecast 15,14 -> standard MASE 0.857.
     ts, vals = _grid([10, 12, 11, 13, 15])
     scale, m_used, n_points, n_pairs = context_scale(ts, vals, HOUR)
     assert (scale, m_used, n_points, n_pairs) == (1.75, 1, 5, 4)
@@ -122,7 +109,7 @@ def test_fifteen_minute_frequency():
     q = timedelta(minutes=15)
     ts, vals = _grid([1.0, 2.0, 4.0, 7.0], freq=q)
     assert context_scale(ts, vals, q)[0] == pytest.approx(2.0)
-    # The wrong frequency finds no neighbours at all (the grid spans only 45 minutes).
+    # At the wrong frequency no point has a lag partner.
     assert context_scale(ts, vals, HOUR)[0] is None
 
 
@@ -143,7 +130,7 @@ def test_constant_context_gives_zero_scale_and_no_mase():
 
     fields = compute_score_fields(np.array([5.0, 6.0]), np.array([5.0, 5.0]), [None, None], scale, None)
     assert fields["mase"] is None and fields["sql_score"] is None
-    assert fields["mae"] == pytest.approx(0.5)  # raw MAE kept for later rescaling
+    assert fields["mae"] == pytest.approx(0.5)
 
 
 @pytest.mark.parametrize("values", [[], [7.0], [None, 3.0, None]])
@@ -161,10 +148,6 @@ def test_undefined_scales_never_yield_inf(scale):
     assert fields["mase"] is None
     assert fields["sql_score"] is None
 
-
-# ---------------------------------------------------------------------------------------
-# compute_score_fields: SQL against the same scale
-# ---------------------------------------------------------------------------------------
 
 def test_point_only_sql_equals_mase():
     y_true = np.array([14.0, 16.0, 13.0])
@@ -210,12 +193,8 @@ def test_fields_carry_rmse():
     assert fields["rmse"] == pytest.approx(np.sqrt(14 / 4))
 
 
-# ---------------------------------------------------------------------------------------
-# naive_mae: the arena score's relative MAE stays one division away
-# ---------------------------------------------------------------------------------------
-
 def test_naive_mae_reproduces_the_arena_relative_mae():
-    """Issue example: context 10, 12, 11, 13, 15, actuals 14, 16, forecast 15, 14."""
+    # Context 10, 12, 11, 13, 15 (scale 1.75, last value 15).
     y_true = np.array([14.0, 16.0])
     y_pred = np.array([15.0, 14.0])
     fields = compute_score_fields(y_true, y_pred, [None, None], 1.75, 15.0)

@@ -1,12 +1,4 @@
-"""`ForecastScoringService`: `forecasts.forecast_scores`, scored on its own.
-
-These tests pin the row semantics (the arena scorer's window, coverage and finalisation
-rules, with the context scale as the MASE denominator), that every model on a series is
-divided by the same scale, how a scheduled run handles its transaction and lock, and that
-nothing here depends on the arena scorer or its table, so that one can be deleted.
-
-Repositories are faked; there is no DB in this suite.
-"""
+"""`ForecastScoringService` and its scale rows, on faked repositories."""
 import ast
 import inspect
 import re
@@ -59,10 +51,6 @@ def _by_pair(rows):
     return {(r["model_id"], r["series_id"]): r for r in rows}
 
 
-# ---------------------------------------------------------------------------------------
-# The arena scorer's rules
-# ---------------------------------------------------------------------------------------
-
 @pytest.mark.parametrize(
     "coverage, timeout, expected",
     [
@@ -82,10 +70,6 @@ def test_forecast_window_is_per_series():
     assert windows == {10: (_ts(1), _ts(3)), 11: (_ts(0), _ts(2))}
     assert series_forecast_windows({10: _ts(0)}, None, 3 * HOUR) == {}
 
-
-# ---------------------------------------------------------------------------------------
-# build_score_row
-# ---------------------------------------------------------------------------------------
 
 def test_row_for_a_complete_pair():
     row = build_score_row(1, 2, 3, 2, _aligned([(10.0, 12.0), (20.0, 18.0)]), _scale(4.0, 15.0), False)
@@ -155,10 +139,6 @@ def test_rows_share_one_key_set_matching_the_table():
     assert set(rows[0]) == columns
 
 
-# ---------------------------------------------------------------------------------------
-# Scale rows
-# ---------------------------------------------------------------------------------------
-
 def test_scale_rows_use_the_context_window_and_keep_its_last_value():
     windows = {10: (_ts(0), _ts(3)), 11: (_ts(0), _ts(3)), 12: (_ts(0), _ts(3))}
     context = (
@@ -179,10 +159,6 @@ def test_scale_rows_use_the_context_window_and_keep_its_last_value():
     assert rows[11]["scale"] is None and rows[11]["n_pairs"] == 0
     assert rows[11]["last_value"] == 2.0
 
-
-# ---------------------------------------------------------------------------------------
-# The service end to end, on fakes
-# ---------------------------------------------------------------------------------------
 
 class _FakeForecastRepo:
     def __init__(self, forecasts, actuals):
@@ -225,8 +201,6 @@ class _FakeRoundRepo:
 
 
 class _FakeScoresRepo:
-    """Stands in for ForecastScoresRepository."""
-
     def __init__(self, stored=None, lock=True, fail_on_upsert=False, capture=(), served=None):
         self.stored = dict(stored or {})
         self.lock = lock
@@ -320,16 +294,12 @@ async def test_every_model_on_a_series_is_divided_by_the_same_context_scale():
     assert rows[(2, 10)]["mase"] == pytest.approx(2.0 / 2.5)
     # The persistence forecast is the last context value, 11.
     assert rows[(2, 10)]["naive_mae"] == pytest.approx(1.0)
-    # A constant context is excluded for every model alike.
     for model_id in (1, 2):
         assert rows[(model_id, 11)]["evaluation_status"] == "undefined_scale"
         assert rows[(model_id, 11)]["mase"] is None
-    # The round ended long ago: every row is final.
     assert all(r["final_evaluation"] for r in rows.values())
-    # The scale was rebuilt as of round creation and stored once.
     assert repo.as_of_reads[0][1] == _ts(0) + timedelta(minutes=5)
     assert repo.stored[10]["source"] == SOURCE_REBUILT
-    # One actuals read per series, not per pair.
     assert sorted(svc.forecast_repo.actual_reads) == [10, 11]
     assert (svc.db_session.commits, svc.db_session.rollbacks) == (1, 0)
 
@@ -407,10 +377,6 @@ async def test_capture_stores_the_served_scale_and_survives_a_failing_round():
     assert repo.stored[10]["last_value"] == 6.0
     assert (svc.db_session.commits, svc.db_session.rollbacks) == (1, 1)
 
-
-# ---------------------------------------------------------------------------------------
-# Independence from the arena scorer
-# ---------------------------------------------------------------------------------------
 
 def _imports(module):
     tree = ast.parse(inspect.getsource(module))
