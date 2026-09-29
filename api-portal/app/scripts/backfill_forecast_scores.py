@@ -21,6 +21,7 @@ Usage (inside the api-portal container, or locally with DATABASE_URL set):
 
     python -m app.scripts.backfill_forecast_scores [--dry-run] [--limit N] [--round-id X]
         [--sample N] [--refresh] [--check-served] [--no-raw-fallback] [--dump rows.csv]
+        [--max-parallel-workers N]
 
     --dry-run          Compute and report in read-only transactions. Works before the
                        migration is applied (every scale is then rebuilt, none stored).
@@ -34,6 +35,9 @@ Usage (inside the api-portal container, or locally with DATABASE_URL set):
                        the aggregate has nothing for is read from raw data, bucketed alike
                        (dev restores lack old aggregate periods).
     --dump PATH        Write every computed row to a CSV for inspection.
+    --max-parallel-workers N
+                       Parallel workers per query, default 2 (0 = none). Uncapped, the
+                       reads fan out to about 10 workers each and compete with the site.
 """
 from __future__ import annotations
 
@@ -67,6 +71,10 @@ from app.services.series_scale_service import SOURCE_SERVED, build_scale_rows, r
 logger = logging.getLogger("backfill-forecast-scores")
 
 DEFAULT_PROGRESS_EVERY = 25
+
+# Parallel workers per query for the backfill's transactions. Its forecast and actuals reads
+# otherwise fan out to about 10 workers each; a small cap leaves the cores to the live site.
+DEFAULT_MAX_PARALLEL_WORKERS = 2
 
 # Relative tolerance for "the same number" in the identity and served-scale checks.
 TOLERANCE = 1e-9
@@ -220,6 +228,13 @@ async def _check_served(svc: ForecastScoringService, round_id: int, rows, summar
             summary.served_over_1pct.append((round_id, sid, used[sid], served_scale))
 
 
+def parallel_workers_sql(n: int) -> str:
+    """SET LOCAL takes no bind parameters, so the value is validated and inlined."""
+    if not isinstance(n, int) or n < 0:
+        raise ValueError(f"max parallel workers must be a non-negative integer, got {n!r}")
+    return f"SET LOCAL max_parallel_workers_per_gather = {n}"
+
+
 async def process_round(round_id: int, args: argparse.Namespace, tables_exist: bool, summary: Summary) -> None:
     started = time.monotonic()
     async with SessionLocal() as session:
@@ -227,6 +242,9 @@ async def process_round(round_id: int, args: argparse.Namespace, tables_exist: b
             svc = ForecastScoringService(session, raw_actuals_fallback=not args.no_raw_fallback)
             if args.dry_run:
                 await session.execute(text("SET TRANSACTION READ ONLY"))
+            # SET LOCAL: the cap ends with this round's transaction, on commit and rollback.
+            await session.execute(text(parallel_workers_sql(args.max_parallel_workers)))
+            if args.dry_run:
                 svc.scale_service.repo = _ReadOnlyRepository(session, tables_exist)
             elif not await svc.repo.try_lock_round(round_id):
                 summary.rounds_locked += 1
@@ -283,7 +301,14 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--no-raw-fallback", action="store_true", help="Actuals from the aggregate only.")
     parser.add_argument("--dump", default=None, help="Write computed rows to this CSV.")
     parser.add_argument("--progress-every", type=int, default=DEFAULT_PROGRESS_EVERY)
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--max-parallel-workers", type=int, default=DEFAULT_MAX_PARALLEL_WORKERS,
+        help="Parallel workers per query (0 = none).",
+    )
+    args = parser.parse_args(argv)
+    if args.max_parallel_workers < 0:
+        parser.error("--max-parallel-workers must be >= 0")
+    return args
 
 
 async def main(argv: Optional[List[str]] = None) -> Summary:
