@@ -19,6 +19,7 @@ from app.scheduler.jobs import (
     create_round_from_definition_job,
     prepare_round_context_data_job,
     periodic_challenge_scores_evaluation_job,
+    periodic_forecast_scoring_job,
     periodic_elo_ranking_calculation_job,
     periodic_participation_check_job,
     startup_elo_check_job
@@ -109,6 +110,9 @@ class ChallengeScheduler:
 
                 # Schedule the daily participation check (backend #92)
                 await self.schedule_periodic_participation_check()
+
+                # Schedule forecast scoring (never raises)
+                await self.schedule_periodic_forecast_scoring()
 
                 # Run startup ELO check in background (don't block startup!)
                 # This allows the application to become healthy before calculation starts
@@ -492,6 +496,29 @@ class ChallengeScheduler:
             self.logger.exception(f"Failed to schedule participation check job: {e}")
             raise
 
+    async def schedule_periodic_forecast_scoring(self) -> None:
+        """Runs at :15 and :45, between the arena scorer's runs. Logs instead of raising."""
+        try:
+            await self.scheduler.configure_task(
+                periodic_forecast_scoring_job,
+                max_running_jobs=1,
+                misfire_grace_time=300,
+            )
+            # replace, so the persisted schedule picks up changes to this configuration
+            await self.scheduler.add_schedule(
+                func_or_task_id=periodic_forecast_scoring_job,
+                trigger=CronTrigger(minute="15,45"),
+                id="periodic_forecast_scoring",
+                coalesce=CoalescePolicy.latest,
+                misfire_grace_time=300,
+                conflict_policy=ConflictPolicy.replace,
+            )
+            self.logger.info(
+                "Scheduled periodic forecast scoring job (runs at :15, :45 of every hour)"
+            )
+        except Exception as e:
+            self.logger.exception(f"Failed to schedule forecast scoring job: {e}")
+
     async def _ensure_started(self) -> None:
         if not self._started:
             await self.start()
@@ -649,6 +676,9 @@ class ChallengeScheduler:
 
             # Reschedule periodic evaluation
             await self.schedule_periodic_scores_evaluation()
+
+            # Reschedule forecast scoring (never raises)
+            await self.schedule_periodic_forecast_scoring()
 
             # Reschedule ELO calculation
             await self.schedule_periodic_elo_calculation()

@@ -484,6 +484,51 @@ CREATE TABLE forecasts.scores (
 CREATE INDEX idx_scores_round ON forecasts.scores(round_id);
 
 -- ==========================================================
+-- Forecast scores: MASE scaled on the forecast context.
+-- Keep in sync with scripts/migrations/2026_forecast_scores.sql.
+-- ==========================================================
+
+CREATE TABLE forecasts.series_scale (
+    round_id INTEGER NOT NULL REFERENCES challenges.rounds(id) ON DELETE CASCADE,
+    series_id INTEGER NOT NULL REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
+    m SMALLINT NOT NULL,
+    scale DOUBLE PRECISION,
+    last_value DOUBLE PRECISION,
+    n_points INTEGER NOT NULL,
+    n_pairs INTEGER NOT NULL,
+    context_start TIMESTAMPTZ,
+    context_end TIMESTAMPTZ,
+    source TEXT NOT NULL CHECK (source IN ('context_data', 'scd2_as_of_round_creation')),
+    computed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (round_id, series_id)
+);
+
+CREATE TABLE forecasts.forecast_scores (
+    round_id INTEGER NOT NULL REFERENCES challenges.rounds(id) ON DELETE CASCADE,
+    model_id INTEGER NOT NULL REFERENCES models.model_info(id) ON DELETE CASCADE,
+    series_id INTEGER NOT NULL REFERENCES data_portal.time_series(series_id) ON DELETE CASCADE,
+    mae DOUBLE PRECISION CHECK (mae IS NULL OR (mae >= 0 AND mae < 'Infinity'::float8)),
+    rmse DOUBLE PRECISION CHECK (rmse IS NULL OR (rmse >= 0 AND rmse < 'Infinity'::float8)),
+    naive_mae DOUBLE PRECISION CHECK (naive_mae IS NULL OR (naive_mae >= 0 AND naive_mae < 'Infinity'::float8)),
+    n_points INTEGER,
+    scale DOUBLE PRECISION,
+    mase DOUBLE PRECISION CHECK (mase IS NULL OR (mase >= 0 AND mase < 'Infinity'::float8)),
+    sql_score DOUBLE PRECISION CHECK (sql_score IS NULL OR (sql_score >= 0 AND sql_score < 'Infinity'::float8)),
+    sql_per_quantile JSONB,
+    has_quantiles BOOLEAN,
+    quantile_levels_count INTEGER,
+    quantile_crossing_count INTEGER,
+    forecast_count INTEGER,
+    data_coverage DOUBLE PRECISION,
+    final_evaluation BOOLEAN NOT NULL DEFAULT FALSE,
+    evaluation_status TEXT NOT NULL,
+    error_message TEXT,
+    method TEXT NOT NULL,
+    calculated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (round_id, model_id, series_id)
+);
+
+-- ==========================================================
 -- View: Challenge Round Status (computed from timestamps)
 -- ==========================================================
 CREATE OR REPLACE VIEW challenges.v_rounds_with_status AS
@@ -778,6 +823,45 @@ ON data_portal.time_series_data(series_id, ts DESC);
 -- ==========================================================
 -- 10) Continuous Aggregates for Multi-Granularity Time Series
 -- ==========================================================
+--
+-- A NOTE ON `end_offset` AND FUTURE-DATED DATA (backend-87) — read before changing either.
+--
+-- A continuous aggregate cannot return a bucket newer than its materialization watermark
+-- unless real-time aggregation is on, and `end_offset` holds that watermark at ~now. So the
+-- view's `max(ts)` can never exceed ~now, however far ahead the raw data actually extends.
+-- That matters because a challenge round's forecast window is derived from exactly that value
+-- (`start_time = max_ts + frequency`, in ChallengeService._prepare_context_data). For a source
+-- that publishes ahead of delivery — SMARD day-ahead prices are public from ~12:45 CET on D-1
+-- — the window therefore opened inside data that was already public, and definitions 1 and 4
+-- were a lookup rather than a forecast from 2026-04-28.
+--
+-- The obvious fix is `timescaledb.materialized_only = false`. It is NOT set here because it
+-- cannot be applied on the dev database, and dev is where changes are validated.
+--
+-- On dev, TimescaleDB intercepts no DDL at all: `ALTER MATERIALIZED VIEW` fails with "is not a
+-- materialized view" (a cagg is relkind 'v', so that syntax only works when TimescaleDB
+-- rewrites it), while `ALTER VIEW` and even `CREATE MATERIALIZED VIEW ... WITH
+-- (timescaledb.continuous, ...)` fail with "unrecognized parameter namespace timescaledb" —
+-- from psql, as superuser and owner. Ruled out: client, licence (`timescale`, not apache),
+-- ownership, and extension version (2.24.0 on disk and installed). Dev's cagg refresh policies
+-- have never run either, which is the same fault from the other side. Consequence worth
+-- knowing: **this file cannot currently be run against the dev database** — the three
+-- CREATE MATERIALIZED VIEW statements below would fail.
+--
+-- Prod is healthy (refresh policies have run 50k+ times), so the option would very likely be
+-- accepted there. It is still left unset, because a setting that only works on prod cannot be
+-- verified before it reaches prod.
+--
+-- Instead the *read* does the union that real-time aggregation would have done — see
+-- `_read_aggregate_with_live_tail` in
+-- api-portal/app/database/data_portal/time_series_repository.py. It is correct whether or not
+-- real-time aggregation is ever enabled (the two branches are split at the watermark, so they
+-- are disjoint either way). If a future TimescaleDB does accept the ALTER, enabling it is a
+-- safe simplification, not a behaviour change.
+--
+-- `end_offset` below is therefore kept as-is: it still stops a filling bucket being
+-- materialised, which is useful. What must no longer depend on it is the visibility of future
+-- rows.
 
 -- Quarter-hourly aggregation (15 minutes)
 -- Contains all series with frequency <= 15 minutes

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.alerts import send_alert_async
 from app.database.connection import SessionLocal
 from app.services.challenge_service import ChallengeService
+from app.services.forecast_scoring_service import ForecastScoringService
 from app.services.score_evaluation_service import ScoreEvaluationService
 from app.services.elo_ranking_service import EloRankingService
 from app.services.monitoring_service import (
@@ -37,6 +38,11 @@ EVAL_JOB_HARD_TIMEOUT_SECONDS = 480  # 8 minutes
 # the asyncio backstop above ever trips. Both sit below the hard timeout.
 EVAL_STATEMENT_TIMEOUT_MS = 240_000  # 4 minutes
 EVAL_LOCK_TIMEOUT_MS = 30_000        # 30 seconds
+
+FORECAST_SCORING_JOB_HARD_TIMEOUT_SECONDS = 480
+
+# No new round is started after this long; the rest is left to the next run.
+FORECAST_SCORING_RUN_BUDGET_SECONDS = 300
 
 
 async def _apply_eval_session_timeouts(session: AsyncSession) -> None:
@@ -194,6 +200,62 @@ async def periodic_challenge_scores_evaluation_job() -> None:
     except Exception as e:
         logger.exception(f"Failed to run periodic challenge scores evaluation: {e}")
         raise  # Re-raise to let decorator handle it
+
+
+@job_error_handler
+async def periodic_forecast_scoring_job() -> None:
+    """Capture served scales, then score open rounds into forecasts.forecast_scores. No-op until its tables exist."""
+    logger = logging.getLogger("challenge-scheduler")
+    logger.info("Starting periodic forecast scoring job")
+
+    try:
+        async with asyncio.timeout(FORECAST_SCORING_JOB_HARD_TIMEOUT_SECONDS):
+            async with SessionLocal() as session:
+                await _apply_eval_session_timeouts(session)
+                # Commit so the SETs survive the capture's per-round rollbacks.
+                await session.commit()
+                service = ForecastScoringService(session)
+                if not await service.tables_exist():
+                    logger.info("Forecast scoring skipped: its tables do not exist yet.")
+                    return
+                captured = await service.capture_served_scales()
+                round_ids = await service.rounds_to_score()
+
+            deadline = time.monotonic() + FORECAST_SCORING_RUN_BUDGET_SECONDS
+            scored = 0
+            for position, round_id in enumerate(round_ids):
+                if time.monotonic() >= deadline:
+                    logger.info(
+                        f"Forecast scoring: time budget used, {len(round_ids) - position} "
+                        f"round(s) left for the next run"
+                    )
+                    break
+                try:
+                    async with SessionLocal() as session:
+                        await _apply_eval_session_timeouts(session)
+                        written = await ForecastScoringService(session).score_round(round_id)
+                        if written is not None:
+                            scored += 1
+                except Exception as e:
+                    logger.error(f"Error scoring round {round_id} into forecast_scores: {e}")
+
+            logger.info(
+                f"Forecast scoring complete: {captured} scale(s) captured, "
+                f"{scored} of {len(round_ids)} round(s) scored"
+            )
+
+    except TimeoutError:
+        logger.critical(
+            "periodic_forecast_scoring_job exceeded its %ss hard timeout and was cancelled "
+            "to free its max_running_jobs=1 slot. A run this slow means a hung DB session "
+            "or lock; investigate.",
+            FORECAST_SCORING_JOB_HARD_TIMEOUT_SECONDS,
+            exc_info=True,
+        )
+        raise
+    except Exception as e:
+        logger.exception(f"Failed to run periodic forecast scoring: {e}")
+        raise
 
 
 @job_error_handler
