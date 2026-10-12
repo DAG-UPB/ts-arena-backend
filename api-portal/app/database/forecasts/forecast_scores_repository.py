@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import func
@@ -34,6 +34,10 @@ class ForecastScoresRepository:
             select(func.pg_try_advisory_xact_lock(ROUND_LOCK_NAMESPACE, round_id))
         )
         return bool(result.scalar())
+
+    async def lock_round(self, round_id: int) -> None:
+        """Waits for the round's scorer lock; released at the end of the transaction."""
+        await self.session.execute(select(func.pg_advisory_xact_lock(ROUND_LOCK_NAMESPACE, round_id)))
 
     async def rounds_awaiting_capture(self, lookback: timedelta) -> List[Tuple[int, Optional[timedelta]]]:
         """`(round_id, frequency)` of rounds with served context but no scale yet."""
@@ -163,6 +167,55 @@ class ForecastScoresRepository:
             index_elements=["round_id", "series_id"]
         )
         await self.session.execute(stmt)
+
+    async def replace_scales(self, rows: List[Dict[str, Any]]) -> None:
+        """Insert or overwrite scale rows. Does not commit."""
+        keys = ("round_id", "series_id")
+        for i in range(0, len(rows), _UPSERT_CHUNK):
+            chunk = rows[i:i + _UPSERT_CHUNK]
+            stmt = insert(SeriesScale).values(chunk)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=list(keys),
+                set_={
+                    **{c: stmt.excluded[c] for c in chunk[0] if c not in keys},
+                    "computed_at": func.now(),
+                },
+            )
+            await self.session.execute(stmt)
+
+    async def delete_scales(self, round_id: int, series_ids: List[int]) -> None:
+        if series_ids:
+            await self.session.execute(
+                delete(SeriesScale).where(
+                    SeriesScale.round_id == round_id, SeriesScale.series_id.in_(series_ids)
+                )
+            )
+
+    async def get_score_rows(self, round_id: int) -> List[Dict[str, Any]]:
+        result = await self.session.execute(
+            select(
+                ForecastScore.round_id,
+                ForecastScore.model_id,
+                ForecastScore.series_id,
+                ForecastScore.mae,
+                ForecastScore.scale,
+                ForecastScore.mase,
+                ForecastScore.sql_score,
+                ForecastScore.sql_per_quantile,
+                ForecastScore.has_quantiles,
+                ForecastScore.data_coverage,
+                ForecastScore.final_evaluation,
+                ForecastScore.evaluation_status,
+                ForecastScore.error_message,
+                ForecastScore.method,
+            ).where(ForecastScore.round_id == round_id)
+        )
+        return [dict(row._mapping) for row in result]
+
+    async def update_forecast_scores(self, rows: List[Dict[str, Any]]) -> None:
+        """Update rows by primary key; every dict carries the same keys. Does not commit."""
+        for i in range(0, len(rows), _UPSERT_CHUNK):
+            await self.session.execute(update(ForecastScore), rows[i:i + _UPSERT_CHUNK])
 
     async def upsert_forecast_scores(self, rows: List[Dict[str, Any]]) -> int:
         """Does not commit."""

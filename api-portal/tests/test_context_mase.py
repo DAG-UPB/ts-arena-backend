@@ -5,10 +5,11 @@ import numpy as np
 import pytest
 
 from app.services.forecast_metrics import (
-    MASE_SEASONAL_LAG,
+    SEASONAL_LAG_BY_BUCKET,
     compute_score_fields,
     context_scale,
     mase_scale_defined,
+    seasonal_lag,
 )
 
 HOUR = timedelta(hours=1)
@@ -31,13 +32,18 @@ def _hourly_fixture():
     return y[:168], y[168:]
 
 
-def test_default_lag_is_non_seasonal():
-    assert MASE_SEASONAL_LAG == 1
+def test_seasonal_lag_is_one_day_of_steps():
+    assert seasonal_lag(timedelta(minutes=15)) == 96
+    assert seasonal_lag(HOUR) == 24
+    assert seasonal_lag(timedelta(days=1)) == 7
+    assert set(SEASONAL_LAG_BY_BUCKET) == {timedelta(minutes=15), HOUR, timedelta(days=1)}
+    with pytest.raises(KeyError):
+        seasonal_lag(timedelta(minutes=30))
 
 
 def test_issue_example_matches_hand_written_and_gluonts():
     ts, vals = _grid([10, 12, 11, 13, 15])
-    scale, m_used, n_points, n_pairs = context_scale(ts, vals, HOUR)
+    scale, m_used, n_points, n_pairs = context_scale(ts, vals, HOUR, m=1)
     assert (scale, m_used, n_points, n_pairs) == (1.75, 1, 5, 4)
 
     fields = compute_score_fields(np.array([14.0, 16.0]), np.array([15.0, 14.0]), [None, None], scale, None)
@@ -55,7 +61,7 @@ def test_hourly_daily_cycle_matches_gluonts(forecast_kind, expected):
     forecast = np.full(24, past[-1]) if forecast_kind == "flat" else past[-24:] + 10.0
     ts, vals = _grid(past)
 
-    scale, _, n_points, n_pairs = context_scale(ts, vals, HOUR)
+    scale, _, n_points, n_pairs = context_scale(ts, vals, HOUR, m=1)
     assert scale == pytest.approx(3.3193031083709568)  # GluonTS seasonal_error, m=1
     assert (n_points, n_pairs) == (168, 167)
 
@@ -84,7 +90,7 @@ def test_gap_pairs_are_skipped_like_gluonts_masked(gap):
     elif gap == "nan_value":
         vals[2] = float("nan")
 
-    scale, m_used, n_points, n_pairs = context_scale(ts, vals, HOUR)
+    scale, m_used, n_points, n_pairs = context_scale(ts, vals, HOUR, m=1)
     assert (m_used, n_points, n_pairs) == (1, 5, 3)
     assert scale == pytest.approx(1.6666666666666667)  # GluonTS, masked
     fields = compute_score_fields(np.array([14.0, 16.0]), np.array([15.0, 14.0]), [None, None], scale, None)
@@ -94,7 +100,7 @@ def test_gap_pairs_are_skipped_like_gluonts_masked(gap):
 def test_lag_is_by_timestamp_not_position():
     # A positional lag would difference 12 and 30 across the missing 3-hour stretch.
     ts = [T0, T0 + HOUR, T0 + 5 * HOUR, T0 + 6 * HOUR]
-    scale, _, n_points, n_pairs = context_scale(ts, [10.0, 12.0, 30.0, 31.0], HOUR)
+    scale, _, n_points, n_pairs = context_scale(ts, [10.0, 12.0, 30.0, 31.0], HOUR, m=1)
     assert (n_points, n_pairs) == (4, 2)
     assert scale == pytest.approx(1.5)
 
@@ -102,29 +108,34 @@ def test_lag_is_by_timestamp_not_position():
 def test_input_order_does_not_matter():
     ts, vals = _grid([10, 12, 11, 13, 15])
     order = [3, 0, 4, 1, 2]
-    assert context_scale([ts[i] for i in order], [vals[i] for i in order], HOUR) == context_scale(ts, vals, HOUR)
+    assert context_scale([ts[i] for i in order], [vals[i] for i in order], HOUR, m=1) == context_scale(ts, vals, HOUR, m=1)
 
 
 def test_fifteen_minute_frequency():
     q = timedelta(minutes=15)
     ts, vals = _grid([1.0, 2.0, 4.0, 7.0], freq=q)
-    assert context_scale(ts, vals, q)[0] == pytest.approx(2.0)
+    assert context_scale(ts, vals, q, m=1)[0] == pytest.approx(2.0)
     # At the wrong frequency no point has a lag partner.
-    assert context_scale(ts, vals, HOUR)[0] is None
+    assert context_scale(ts, vals, HOUR, m=1)[0] is None
 
 
-@pytest.mark.parametrize("n, expected_m", [(24, 1), (25, 24)])
-def test_short_context_falls_back_to_lag_one(n, expected_m):
-    # `len(context) <= m` -> m = 1 (GluonTS gives scale 1.0 for 0..23 with m=24).
+@pytest.mark.parametrize("n, expected", [(24, None), (25, 24.0)])
+def test_short_context_has_no_scale(n, expected):
+    # No fallback to m = 1 for `len(context) <= m`, unlike GluonTS.
     ts, vals = _grid(np.arange(float(n)))
-    scale, m_used, _, _ = context_scale(ts, vals, HOUR, m=24)
-    assert m_used == expected_m
-    assert scale == pytest.approx(1.0 if expected_m == 1 else 24.0)
+    scale, m_used, n_points, n_pairs = context_scale(ts, vals, HOUR, m=24)
+    assert (m_used, n_points) == (24, n)
+    assert scale == expected and n_pairs == (0 if expected is None else 1)
+
+
+def test_short_context_has_no_scale_even_with_a_lag_pair():
+    scale, _, n_points, n_pairs = context_scale([T0, T0 + 24 * HOUR], [1.0, 5.0], HOUR, m=24)
+    assert scale is None and (n_points, n_pairs) == (2, 0)
 
 
 def test_constant_context_gives_zero_scale_and_no_mase():
     ts, vals = _grid([5.0] * 10)
-    scale, _, _, n_pairs = context_scale(ts, vals, HOUR)
+    scale, _, _, n_pairs = context_scale(ts, vals, HOUR, m=1)
     assert scale == 0.0 and n_pairs == 9
     assert not mase_scale_defined(scale)
 
@@ -136,7 +147,7 @@ def test_constant_context_gives_zero_scale_and_no_mase():
 @pytest.mark.parametrize("values", [[], [7.0], [None, 3.0, None]])
 def test_no_lag_pair_gives_undefined_scale(values):
     ts, vals = _grid(values)
-    scale, _, _, n_pairs = context_scale(ts, vals, HOUR)
+    scale, _, _, n_pairs = context_scale(ts, vals, HOUR, m=1)
     assert scale is None and n_pairs == 0
     fields = compute_score_fields(np.array([1.0]), np.array([2.0]), [None], scale, None)
     assert fields["mase"] is None and fields["sql_score"] is None
