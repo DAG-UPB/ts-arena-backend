@@ -47,6 +47,12 @@ def _scale(value, last_value=5.0):
     }
 
 
+@pytest.fixture
+def lag_one(monkeypatch):
+    """Lag 1 instead of a day, so the plumbing tests get by with a few points."""
+    monkeypatch.setattr(scale_module, "seasonal_lag", lambda bucket: 1)
+
+
 def _by_pair(rows):
     return {(r["model_id"], r["series_id"]): r for r in rows}
 
@@ -139,6 +145,7 @@ def test_rows_share_one_key_set_matching_the_table():
     assert set(rows[0]) == columns
 
 
+@pytest.mark.usefixtures("lag_one")
 def test_scale_rows_use_the_context_window_and_keep_its_last_value():
     windows = {10: (_ts(0), _ts(3)), 11: (_ts(0), _ts(3)), 12: (_ts(0), _ts(3))}
     context = (
@@ -158,6 +165,24 @@ def test_scale_rows_use_the_context_window_and_keep_its_last_value():
     assert rows[10]["source"] == SOURCE_SERVED
     assert rows[11]["scale"] is None and rows[11]["n_pairs"] == 0
     assert rows[11]["last_value"] == 2.0
+
+
+def test_scale_rows_lag_by_one_day_of_the_bucket():
+    windows = {10: (_ts(0), _ts(24)), 11: (_ts(0), _ts(23))}
+    context = [
+        {"series_id": sid, "ts": _ts(h), "value": float(h * h)}
+        for sid, hours in [(10, range(25)), (11, range(24))]
+        for h in hours
+    ]
+    rows = {r["series_id"]: r for r in build_scale_rows(7, context, windows, HOUR, SOURCE_SERVED)}
+
+    assert rows[10]["scale"] == pytest.approx(24.0 * 24.0)
+    assert (rows[10]["m"], rows[10]["n_points"], rows[10]["n_pairs"]) == (24, 25, 1)
+    # 24 points do not reach past one lag: no scale, no fallback to lag 1.
+    assert rows[11]["scale"] is None
+    assert (rows[11]["m"], rows[11]["n_points"], rows[11]["n_pairs"]) == (24, 24, 0)
+    quarter = timedelta(minutes=15)
+    assert build_scale_rows(7, context, windows, quarter, SOURCE_SERVED)[0]["m"] == 96
 
 
 class _FakeForecastRepo:
@@ -281,6 +306,7 @@ def _service(scores_repo, forecasts=_FORECASTS, actuals=_ACTUALS, end_time=None)
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("lag_one")
 async def test_every_model_on_a_series_is_divided_by_the_same_context_scale():
     repo = _FakeScoresRepo()
     svc = _service(repo)
@@ -365,6 +391,7 @@ async def test_a_round_without_forecasts_writes_nothing():
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("lag_one")
 async def test_capture_stores_the_served_scale_and_survives_a_failing_round():
     served = [{"series_id": 10, "ts": _ts(h), "value": v} for h, v in zip(range(-4, 1), [1.0, 3.0, 2.0, 4.0, 6.0])]
     repo = _FakeScoresRepo(capture=[(98, HOUR), (99, HOUR)], served={99: served})
@@ -376,6 +403,24 @@ async def test_capture_stores_the_served_scale_and_survives_a_failing_round():
     assert repo.stored[10]["scale"] == pytest.approx((2 + 1 + 2 + 2) / 4)
     assert repo.stored[10]["last_value"] == 6.0
     assert (svc.db_session.commits, svc.db_session.rollbacks) == (1, 1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("lag_one")
+async def test_rebuild_takes_the_served_context_where_it_survives_and_scd2_elsewhere():
+    served = [{"series_id": 10, "ts": _ts(h), "value": v} for h, v in zip(range(-4, 1), [1.0, 3.0, 2.0, 4.0, 6.0])]
+    repo = _FakeScoresRepo(stored={10: _scale(9.0), 11: _scale(9.0)}, served={99: served})
+    scale_service = SeriesScaleService.__new__(SeriesScaleService)
+    scale_service.repo = repo
+
+    rows = {r["series_id"]: r for r in await scale_service.rebuild_scales(99, "1h", _ts(0))}
+
+    assert rows[10]["source"] == SOURCE_SERVED
+    assert rows[10]["scale"] == pytest.approx((2 + 1 + 2 + 2) / 4)
+    assert rows[11]["source"] == SOURCE_REBUILT and rows[11]["scale"] == 0.0
+    assert repo.as_of_reads == [(HOUR, _ts(0), _ts(-4), _ts(0))]
+    # Nothing is written, and the stored rows are ignored.
+    assert repo.stored[10]["scale"] == repo.stored[11]["scale"] == 9.0
 
 
 def _imports(module):
