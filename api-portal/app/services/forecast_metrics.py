@@ -336,20 +336,29 @@ def compute_sql_fields(
     }
 
 
-MASE_SEASONAL_LAG = 1
+# Seasonal naive lag m per bucket: one day of steps, one week for daily data.
+SEASONAL_LAG_BY_BUCKET: Dict[timedelta, int] = {
+    timedelta(minutes=15): 96,
+    timedelta(hours=1): 24,
+    timedelta(days=1): 7,
+}
 
-MASE_METHOD = "hk2006_context_m1"
+MASE_METHOD = "hk2006_context_daily"
+
+
+def seasonal_lag(bucket: timedelta) -> int:
+    return SEASONAL_LAG_BY_BUCKET[bucket]
 
 
 def context_scale(
     timestamps: Sequence[datetime],
     values: Sequence[Optional[float]],
     frequency: timedelta,
-    m: int = MASE_SEASONAL_LAG,
+    m: int,
 ) -> Tuple[Optional[float], int, int, int]:
     """In-sample naive scale ``mean |y_t − y_{t−m}|`` of a context, lagged by timestamp so gaps are skipped.
 
-    Returns ``(scale, m_used, n_points, n_pairs)``; ``m`` falls back to 1 when there are ``<= m`` points.
+    Returns ``(scale, m, n_points, n_pairs)``; the scale is None when there are ``<= m`` points.
     """
     series: Dict[datetime, float] = {}
     for ts, value in zip(timestamps, values):
@@ -360,13 +369,14 @@ def context_scale(
             series[ts] = value
 
     n_points = len(series)
-    m_used = m if n_points > m else 1
-    lag = m_used * frequency
+    if n_points <= m:
+        return None, m, n_points, 0
+    lag = m * frequency
 
     diffs = [abs(value - series[ts - lag]) for ts, value in series.items() if ts - lag in series]
     if not diffs:
-        return None, m_used, n_points, 0
-    return float(np.mean(diffs)), m_used, n_points, len(diffs)
+        return None, m, n_points, 0
+    return float(np.mean(diffs)), m, n_points, len(diffs)
 
 
 def mase_scale_defined(scale: Optional[float]) -> bool:

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.data_portal.time_series_repository import RESOLUTION_TO_BUCKET_INTERVAL
 from app.database.forecasts.forecast_scores_repository import ForecastScoresRepository
-from app.services.forecast_metrics import MASE_SEASONAL_LAG, context_scale
+from app.services.forecast_metrics import context_scale, seasonal_lag
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +35,9 @@ def build_scale_rows(
     windows: Dict[int, Tuple[datetime, datetime]],
     bucket: timedelta,
     source: str,
-    m: int = MASE_SEASONAL_LAG,
 ) -> List[Dict[str, Any]]:
     """One row per series with context points in its window; a series without any gets none, so it is retried."""
+    m = seasonal_lag(bucket)
     by_series: Dict[int, List[Tuple[datetime, Optional[float]]]] = defaultdict(list)
     for row in context_rows:
         window = windows.get(row["series_id"])
@@ -49,7 +49,7 @@ def build_scale_rows(
         points = by_series.get(series_id)
         if not points:
             continue
-        scale, m_used, n_points, n_pairs = context_scale(
+        scale, _, n_points, n_pairs = context_scale(
             [ts for ts, _ in points], [v for _, v in points], bucket, m
         )
         if n_points == 0:
@@ -57,7 +57,7 @@ def build_scale_rows(
         rows.append({
             "round_id": round_id,
             "series_id": series_id,
-            "m": m_used,
+            "m": m,
             "scale": scale,
             "last_value": _last_value(points),
             "n_points": n_points,
@@ -87,6 +87,31 @@ class SeriesScaleService:
         )
         await self.repo.insert_scales(rows)
         return len(rows)
+
+    async def rebuild_scales(
+        self, round_id: int, resolution: str, round_created_at: datetime
+    ) -> List[Dict[str, Any]]:
+        """Every series' scale anew: from the served context where it survives, else SCD2. Writes nothing."""
+        windows = await self.repo.get_context_windows(round_id)
+        if not windows:
+            return []
+        bucket = resolution_bucket(resolution)
+        rows = build_scale_rows(
+            round_id, await self.repo.read_served_context(round_id), windows, bucket, SOURCE_SERVED
+        )
+        served = {row["series_id"] for row in rows}
+        missing = {sid: w for sid, w in windows.items() if sid not in served}
+        if missing:
+            lo = min(start for start, _ in missing.values())
+            hi = max(end for _, end in missing.values())
+            rows += build_scale_rows(
+                round_id,
+                await self.repo.read_context_as_of(round_id, bucket, round_created_at, lo, hi),
+                missing,
+                bucket,
+                SOURCE_REBUILT,
+            )
+        return rows
 
     async def ensure_scales(
         self, round_id: int, resolution: str, round_created_at: datetime

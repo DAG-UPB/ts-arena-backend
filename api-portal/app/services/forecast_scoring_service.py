@@ -35,6 +35,9 @@ MIN_COVERAGE_FOR_FINAL = 0.95
 _ACTUALS_TS_MARGIN = timedelta(minutes=1)
 
 
+NO_CONTEXT_MESSAGE = "No context as of round creation to scale by"
+UNDEFINED_SCALE_MESSAGE = "Context too short for lag m, without a lag pair, or without variation at lag m"
+
 # Rounds that ended longer ago are left to the backfill.
 SCORING_LOOKBACK = timedelta(days=7)
 
@@ -158,10 +161,7 @@ def build_score_row(
     ))
     if not mase_scale_defined(row["scale"]):
         row["evaluation_status"] = "undefined_scale"
-        row["error_message"] = (
-            "No context as of round creation to scale by" if scale_row is None
-            else "Context has no variation at lag m (scale 0) or no lag pair"
-        )
+        row["error_message"] = NO_CONTEXT_MESSAGE if scale_row is None else UNDEFINED_SCALE_MESSAGE
     return row
 
 
