@@ -235,3 +235,52 @@ class ForecastScoresRepository:
             result = await self.session.execute(stmt)
             written += result.rowcount or 0
         return written
+
+    async def window_aggregates(
+        self, start: datetime, end: datetime, method: str
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Scored final rows of rounds ended in [start, end): task counts per definition and
+        log sums per (definition, model) for MASE and, on rows with quantiles, SQL."""
+        result = await self.session.execute(
+            text("""
+                WITH scored AS (
+                    SELECT f.round_id, f.series_id, f.model_id, r.definition_id,
+                           d.frequency::text AS frequency, d.horizon::text AS horizon,
+                           f.mase,
+                           CASE WHEN f.has_quantiles THEN f.sql_score END AS sql_score
+                    FROM forecasts.forecast_scores f
+                    JOIN challenges.rounds r ON r.id = f.round_id
+                    JOIN challenges.definitions d ON d.id = r.definition_id
+                    WHERE f.final_evaluation
+                      AND f.evaluation_status IN ('complete', 'partial')
+                      AND f.mase IS NOT NULL
+                      AND f.method = :method
+                      AND NOT COALESCE(r.is_cancelled, FALSE)
+                      AND r.end_time >= :start AND r.end_time < :end
+                      AND NOT EXISTS (
+                          SELECT 1 FROM challenges.definition_series_scd2 ds
+                          WHERE ds.definition_id = r.definition_id
+                            AND ds.series_id = f.series_id
+                            AND ds.is_excluded
+                      )
+                )
+                SELECT definition_id, frequency, horizon, model_id,
+                       GROUPING(model_id) = 1 AS is_total,
+                       count(DISTINCT (round_id, series_id)) AS tasks,
+                       count(*) FILTER (WHERE mase > 0) AS mase_positive,
+                       sum(ln(mase)) FILTER (WHERE mase > 0) AS mase_log_sum,
+                       count(sql_score) AS sql_tasks,
+                       count(*) FILTER (WHERE sql_score > 0) AS sql_positive,
+                       sum(ln(sql_score)) FILTER (WHERE sql_score > 0) AS sql_log_sum
+                FROM scored
+                GROUP BY GROUPING SETS (
+                    (definition_id, frequency, horizon),
+                    (definition_id, frequency, horizon, model_id)
+                )
+            """),
+            {"start": start, "end": end, "method": method},
+        )
+        definitions, models = [], []
+        for row in result.mappings():
+            (definitions if row["is_total"] else models).append(dict(row))
+        return definitions, models
