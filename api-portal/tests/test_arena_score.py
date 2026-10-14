@@ -121,7 +121,7 @@ def test_toy_scores_weeks_and_evidence():
     rows, method = rate(TOY)
     assert [rows[m].theta for m in (A, B, C)] == pytest.approx([-0.0216, -0.1386, 0.1602], abs=5e-5)
     assert sum(rows[m].theta for m in (A, B, C)) == pytest.approx(0.0, abs=1e-9)
-    assert [round(rows[m].score) for m in (A, B, C)] == [996, 976, 1028]
+    assert [round(rows[m].score) for m in (A, B, C)] == [-2, -14, 16]
     assert [rows[m].weeks for m in (A, B, C)] == [5, 5, 2]
     assert [rows[m].evidence for m in (A, B, C)] == pytest.approx([10.0, 10.0, 4.0])
     assert method["fit_max_grad"] <= arena.GTOL and method["refit_max_grad"] <= arena.GTOL
@@ -130,7 +130,7 @@ def test_toy_scores_weeks_and_evidence():
 def test_toy_pooled_sigma_rho_and_anchor():
     _, method = rate(TOY)
     assert method["sigma_week"] == pytest.approx(0.411, abs=5e-4)
-    assert method["sigma_week_points"] == pytest.approx(71, abs=0.5)
+    assert method["sigma_week_points"] == pytest.approx(41, abs=0.5)
     assert method["rho"] == 0.0
     assert (method["pool_size"], method["pool_min_weeks"]) == (3, 2)
     assert (method["anchor_size"], method["anchor_min_weeks"]) == (2, 5)
@@ -146,18 +146,18 @@ def test_toy_weekly_strengths():
     pairs = build(TOY)
     i, j = pairs.i - 1, pairs.j - 1
     model, _, resid = arena._week_strengths(i, j, (pairs.day + 3) // 7, pairs.w, pairs.wy, theta, 3)
-    shown = np.round(1000 + POINTS_PER_UNIT * (resid + theta[model])).astype(int)
-    assert shown[model == 0].tolist() == [958, 958, 1122, 948, 1003]
-    assert shown[model == 1].tolist() == [1015, 1014, 851, 977, 1016]
-    assert shown[model == 2].tolist() == [1077, 981]
+    shown = np.round(POINTS_PER_UNIT * (resid + theta[model])).astype(int)
+    assert shown[model == 0].tolist() == [-24, -24, 70, -30, 2]
+    assert shown[model == 1].tolist() == [8, 8, -86, -13, 9]
+    assert shown[model == 2].tolist() == [44, -11]
 
 
 def test_toy_floor_and_combined_interval():
     rows, _ = rate(TOY)
-    assert [round(rows[m].floor) for m in (A, B, C)] == [63, 63, 99]
-    assert (round(rows[C].ci_lower), round(rows[C].ci_upper)) == (929, 1127)
-    assert (round(rows[A].ci_lower), round(rows[A].ci_upper)) == (934, 1059)
-    assert (round(rows[B].ci_lower), round(rows[B].ci_upper)) == (913, 1039)
+    assert [round(rows[m].floor) for m in (A, B, C)] == [36, 36, 57]
+    assert (round(rows[C].ci_lower), round(rows[C].ci_upper)) == (-41, 73)
+    assert (round(rows[A].ci_lower), round(rows[A].ci_upper)) == (-38, 34)
+    assert (round(rows[B].ci_lower), round(rows[B].ci_upper)) == (-50, 22)
     for row in rows.values():
         assert row.ci_lower == pytest.approx(min(row.boot_lower, row.score - row.floor))
         assert row.ci_upper == pytest.approx(max(row.boot_upper, row.score + row.floor))
@@ -165,13 +165,13 @@ def test_toy_floor_and_combined_interval():
 
 def test_toy_bootstrap_bounds():
     rows, _ = rate(TOY)
-    for m, (lo, hi) in {A: (978, 1032), B: (940, 994), C: (980, 1078)}.items():
-        assert rows[m].boot_lower == pytest.approx(lo, abs=5)
-        assert rows[m].boot_upper == pytest.approx(hi, abs=5)
-    rows, _ = rate(TOY, n_boot=2000)
-    for m, (lo, hi) in {A: (978, 1028), B: (944, 995), C: (980, 1077)}.items():
+    for m, (lo, hi) in {A: (-13, 18), B: (-34, -3), C: (-11, 44)}.items():
         assert rows[m].boot_lower == pytest.approx(lo, abs=3)
         assert rows[m].boot_upper == pytest.approx(hi, abs=3)
+    rows, _ = rate(TOY, n_boot=2000)
+    for m, (lo, hi) in {A: (-13, 16), B: (-32, -3), C: (-11, 44)}.items():
+        assert rows[m].boot_lower == pytest.approx(lo, abs=2)
+        assert rows[m].boot_upper == pytest.approx(hi, abs=2)
 
 
 def test_toy_models_are_absent_from_refits_without_their_rounds():
@@ -193,7 +193,7 @@ def test_toy_bikes_scaled_by_1000_leaves_everything_unchanged():
     scaled = [(r, s, {m: e * 1000 if s == BIKES else e for m, e in errs.items()}) for r, s, errs in TOY]
     rows, _ = rate(TOY)
     rows_scaled, _ = rate(scaled)
-    assert [round(rows_scaled[m].score) for m in (A, B, C)] == [996, 976, 1028]
+    assert [round(rows_scaled[m].score) for m in (A, B, C)] == [-2, -14, 16]
     for m in (A, B, C):
         assert rows_scaled[m].score == pytest.approx(rows[m].score, abs=1e-4)
         assert rows_scaled[m].ci_lower == pytest.approx(rows[m].ci_lower, abs=1e-4)
@@ -206,14 +206,14 @@ def test_toy_blow_up_is_bounded():
         rows, _ = rate(replace_task(TOY, 3, LOAD, {A: 95, B: blow_up}), n_boot=0)
         return round(rows[A].score), round(rows[B].score)
 
-    assert scores(90) == (980, 992)
-    assert scores(950) == (996, 976)
-    assert scores(95000) == (1000, 972)
+    assert scores(90) == (-12, -4)
+    assert scores(950) == (-2, -14)
+    assert scores(95000) == (0, -16)
 
 
 def test_toy_missing_forecast_is_no_comparison():
     rows, _ = rate(replace_task(TOY, 5, BIKES, {A: 3.0, B: 3.2}), n_boot=0)
-    assert round(rows[C].score) == 1040
+    assert round(rows[C].score) == 23
 
 
 def test_toy_is_deterministic_and_the_seed_is_recorded():
@@ -235,7 +235,7 @@ def test_toy_row_order_does_not_matter():
 def test_two_models_differ_by_points_per_unit_times_the_log_error_ratio():
     rows, _ = rate([(r, s, {1: 50.0, 2: 100.0}) for r in range(3) for s in (1, 2)], n_boot=0)
     assert rows[1].score - rows[2].score == pytest.approx(POINTS_PER_UNIT * math.log(2), abs=1e-4)
-    assert rows[1].score == pytest.approx(1000 + POINTS_PER_UNIT * math.log(2) / 2, abs=1e-4)
+    assert rows[1].score == pytest.approx(POINTS_PER_UNIT * math.log(2) / 2, abs=1e-4)
 
 
 # ---------------------------------------------------------------- fit properties
@@ -323,7 +323,7 @@ def test_beta_scales_every_quantity_on_the_strength_axis():
     scaled, method = rate(tasks, day_of=monday, beta=2.0)
     for m in base:
         for field in ("score", "ci_lower", "ci_upper", "boot_lower", "boot_upper"):
-            got, want = getattr(scaled[m], field) - 1000, (getattr(base[m], field) - 1000) / 2
+            got, want = getattr(scaled[m], field), getattr(base[m], field) / 2
             assert got == pytest.approx(want, abs=1e-6)
         assert scaled[m].theta == pytest.approx(base[m].theta / 2)
         assert scaled[m].floor == pytest.approx(base[m].floor / 2)
@@ -771,7 +771,7 @@ def test_combining_definitions_equals_one_call_on_all_rows():
 def test_models_outside_the_largest_group_get_null_rows(caplog):
     with caplog.at_level(logging.WARNING, logger="app.services.arena_score"):
         rows, method = rate(TOY + [(6, LOAD, {5: 50, 6: 100})], scope="point/definition/7")
-    assert [round(rows[m].score) for m in (A, B, C)] == [996, 976, 1028]
+    assert [round(rows[m].score) for m in (A, B, C)] == [-2, -14, 16]
     for m in (5, 6):
         row = rows[m]
         assert row.unranked_disconnected and not row.provisional
@@ -786,7 +786,7 @@ def test_a_model_without_any_kept_pair_gets_a_null_row():
     rows, _ = rate(TOY + [(5, 3, {9: 1.0})])
     assert rows[9].unranked_disconnected and rows[9].score is None
     assert rows[9].weeks == 0 and rows[9].evidence == 0.0
-    assert round(rows[C].score) == 1028
+    assert round(rows[C].score) == 16
 
 
 def test_the_larger_group_wins_and_ties_go_to_more_evidence():
@@ -917,3 +917,64 @@ def test_rate_scope_checks_its_inputs():
         arena.rate_scope(pairs, [A, B], all_covered([A, B, C]))
     with pytest.raises(ValueError):
         arena.rate_scope(pairs, [A, B, C], all_covered([A, B]))
+
+
+# ---------------------------------------------------------------- reference
+
+
+NAIVE = -1
+
+
+def toy_with_naive():
+    """The toy with a naive forecast in every task, a little worse than A."""
+    return [(r, s, {**errs, NAIVE: errs[A] * (1.3 if s == LOAD else 1.1) * (1 + 0.05 * r)})
+            for r, s, errs in TOY]
+
+
+def rate_ref(tasks, day_of=toy_day, **kwargs):
+    models = sorted({m for _, _, errs in tasks for m in errs} - {NAIVE})
+    result = arena.rate_scope(build(tasks, day_of), models, all_covered(models), reference=NAIVE, **kwargs)
+    return {row.model_id: row for row in result.models}, result.method
+
+
+def test_scores_are_points_per_unit_times_the_log_error_ratio_to_the_reference():
+    rng = np.random.default_rng(1)
+    truth = np.array([0.8, 0.1, -0.2, -0.5, 0.3])  # the last one becomes the reference
+    tasks = [(r, s, {NAIVE if m == 4 else m: e for m, e in errs.items()})
+             for r, s, errs in synthetic(rng, truth, weeks=12, series=9, miss=0.0)]
+    rows, method = rate_ref(tasks, day_of=monday, n_boot=0)
+    assert NAIVE not in rows
+    assert [rows[m].score for m in range(4)] == pytest.approx(POINTS_PER_UNIT * (truth[:4] - truth[4]), abs=1e-4)
+    assert [rows[m].theta for m in range(4)] == pytest.approx(truth[:4] - truth[4], abs=1e-6)
+    assert method["zero_point"] == "reference" and method["n_models"] == 4 and method["n_fitted"] == 5
+
+
+def test_the_reference_shifts_scores_and_bounds_alike():
+    rows, _ = rate_ref(toy_with_naive())
+    for row in rows.values():
+        assert row.ci_lower == pytest.approx(min(row.boot_lower, row.score - row.floor))
+        assert row.ci_upper == pytest.approx(max(row.boot_upper, row.score + row.floor))
+    assert rows[A].score > 0  # the naive forecast is worse than A everywhere
+
+
+def test_the_reference_is_not_in_the_anchor_set_the_pool_or_the_ranks():
+    rows, method = rate_ref(toy_with_naive())
+    assert (method["anchor_size"], method["anchor_min_weeks"]) == (2, 5)
+    assert (method["pool_size"], method["pool_min_weeks"]) == (3, 2)
+    assert (rows[A].rank_best, rows[A].rank_worst, rows[B].rank_best, rows[B].rank_worst) == (1, 2, 1, 2)
+    assert rows[C].provisional and rows[C].rank_best is None
+
+
+def test_without_a_reference_the_zero_point_is_the_mean():
+    rows, method = rate(TOY)
+    assert method["zero_point"] == "mean"
+    assert sum(rows[m].score for m in (A, B, C)) == pytest.approx(0.0, abs=1e-9)
+
+
+def test_a_reference_missing_from_the_fitted_group_fails_the_scope():
+    with pytest.raises(ArenaScoreFitError):
+        rate_ref(TOY)
+    with pytest.raises(ArenaScoreFitError):
+        rate_ref(TOY + [(6, LOAD, {5: 50, NAIVE: 100})])
+    with pytest.raises(ValueError):
+        arena.rate_scope(build(toy_with_naive()), [NAIVE, A, B, C], all_covered([NAIVE, A, B, C]), reference=NAIVE)

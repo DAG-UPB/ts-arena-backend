@@ -3,6 +3,10 @@
 Each definition is read once and reduced to pair sums and coverage tables. Its own scope is
 rated at once; the global and frequency-horizon scopes fold the sums of their definitions in
 as they come, so neither the rows nor the sums of all definitions are in memory together.
+
+The naive forecast (the context's last value, flat over the horizon) joins every task as an
+extra model and is the zero point of every score. Its SQL is its MAE over the scale: a point
+forecast scores all quantile levels at the point.
 """
 import asyncio
 import logging
@@ -21,6 +25,7 @@ from app.services.mase_window import WindowScore, compute_window_scores, definit
 logger = logging.getLogger(__name__)
 
 ERROR_COLUMN = {"point": "mae", "probabilistic": "sql_score"}
+NAIVE_MODEL_ID = -1  # the internal naive forecast in the fit; never a stored row
 WINDOW_COLUMNS = ("mase_30d", "participation_30d", "sql_30d", "sql_participation_30d", "tasks_30d")
 
 GroupKey = Tuple[str, Optional[str], str]  # scope type, scope id, metric
@@ -42,6 +47,24 @@ def _count_pairs(a: np.ndarray, b: np.ndarray) -> Tuple[np.ndarray, np.ndarray, 
     return key // base, key % base, count
 
 
+def naive_error(metric: str, rows: Mapping[str, np.ndarray]) -> np.ndarray:
+    """The naive forecast's error on each row's points; NaN where it is not known."""
+    with np.errstate(divide="ignore", invalid="ignore"):
+        err = rows["naive_mae"] if metric == "point" else rows["naive_mae"] / rows["scale"]
+        return np.where(np.isfinite(err) & (err >= 0), err, np.nan)
+
+
+def naive_rows(rnd, series, err, n_points, day):
+    """One naive row per task, from the task's row with the most points and a known naive error."""
+    known = ~np.isnan(err)
+    rnd, series, err, n_points, day = rnd[known], series[known], err[known], n_points[known], day[known]
+    if not len(rnd):
+        return rnd, series, err, n_points, day
+    order = np.lexsort((-n_points, series, rnd))
+    first = order[np.r_[True, (rnd[order][1:] != rnd[order][:-1]) | (series[order][1:] != series[order][:-1])]]
+    return rnd[first], series[first], err[first], n_points[first], day[first]
+
+
 def summarize_definition(definition_id: int, rows: Mapping[str, np.ndarray]) -> Dict[str, ScopeSums]:
     """Pair sums and coverage tables of one definition, for each metric it has a kept row in."""
     out: Dict[str, ScopeSums] = {}
@@ -50,7 +73,12 @@ def summarize_definition(definition_id: int, rows: Mapping[str, np.ndarray]) -> 
         if not use.any():
             continue
         rnd, series, model = (rows[k][use] for k in ("round_id", "series_id", "model_id"))
-        pairs = arena.pair_sums(rnd, series, model, rows[column][use], rows["n_points"][use], rows["day"][use])
+        n_r, n_s, n_e, n_n, n_d = naive_rows(rnd, series, naive_error(metric, rows)[use],
+                                             rows["n_points"][use], rows["day"][use])
+        pairs = arena.pair_sums(
+            np.r_[rnd, n_r], np.r_[series, n_s], np.r_[model, np.full(len(n_r), NAIVE_MODEL_ID)],
+            np.r_[rows[column][use], n_e], np.r_[rows["n_points"][use], n_n], np.r_[rows["day"][use], n_d],
+        )
         task_round, _, _ = _count_pairs(rnd, series)
         round_ids, round_tasks = np.unique(task_round, return_counts=True)
         registered = rows["registered"][use][np.unique(rnd, return_index=True)[1]]
@@ -109,7 +137,7 @@ def rate_group(
     scope_type, scope_id, metric = key
     label = _label(*key)
     covered = arena.coverage(sums.rounds, sums.model_tasks)
-    rating = arena.rate_scope(sums.pairs, list(covered), covered, scope=label)
+    rating = arena.rate_scope(sums.pairs, list(covered), covered, scope=label, reference=NAIVE_MODEL_ID)
     logger.info(
         "Arena Score %s: %d models, %d pairs; skipped %d for unequal point counts, %d with exactly one zero error",
         label, len(rating.models), sums.pairs.n_pairs, sums.pairs.skipped_points, len(sums.pairs.skipped_zero),

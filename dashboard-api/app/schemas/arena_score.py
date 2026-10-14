@@ -33,7 +33,7 @@ class ArenaScoreRowSchema(ModelFieldsSchema):
 
     score: Optional[float] = Field(
         None,
-        description="Arena Score, 1000 = mean of the compared models, higher is better. Null for a model that is not comparable with the rest of the scope",
+        description="Arena Score, 0 = the naive forecast (last observed value repeated), higher is better, 1 point is about 1 % lower error. Null for a model that is not comparable with the rest of the scope",
     )
     ci_lower: Optional[float] = Field(
         None, description="Lower bound of the 95 % confidence interval of the score. Null if no interval could be computed"

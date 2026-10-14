@@ -77,9 +77,10 @@ def get_arena_scores(
     Arena Score Leaderboard with Scope-Based Filtering.
 
     The Arena Score rates every model from pairwise comparisons of its errors with the
-    errors of the other models on the same series. A score of 1000 is the mean of the
-    compared models and higher is better. A difference in points is a typical ratio of
-    errors, not a win probability: 100 points is a factor of about 1.8.
+    errors of the other models on the same series. A score of 0 is the naive forecast,
+    which repeats the last observed value, and higher is better. A difference in points is
+    100 times the log of a typical ratio of errors, not a win probability: 10 points is
+    about 10 % lower error, 69 points a factor of 2.
 
     **Scope Types:**
     - **Global** (default): No filter parameters - ranks all models together
