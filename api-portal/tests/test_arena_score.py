@@ -62,9 +62,9 @@ def all_covered(models):
     return {m: Coverage(True, 1.0) for m in models}
 
 
-def rate(tasks, day_of=toy_day, covered=None, **kwargs):
+def rate(tasks, day_of=toy_day, covered=None, beta=1.0, **kwargs):
     models = sorted({m for _, _, errs in tasks for m in errs})
-    pairs = build(tasks, day_of, kwargs.get("beta", 1.0))
+    pairs = build(tasks, day_of, beta)
     result = arena.rate_scope(pairs, models, covered or all_covered(models), **kwargs)
     return {row.model_id: row for row in result.models}, result.method
 
@@ -241,8 +241,8 @@ def test_two_models_differ_by_points_per_unit_times_the_log_error_ratio():
 # ---------------------------------------------------------------- fit properties
 
 
-def test_fit_recovers_the_strengths_from_per_pair_sums():
-    theta = np.array([0.5, -0.2, -0.3])
+def test_fit_recovers_the_centred_strengths_from_per_pair_sums():
+    theta = np.array([0.9, 0.1, -0.2])  # mean 0.27: the fit returns the strengths minus their mean
     i, j = np.array([0, 0, 1]), np.array([1, 2, 2])
     w = np.array([3.0, 2.0, 5.0])
     wy = w / (1.0 + np.exp(-(theta[i] - theta[j])))
@@ -311,8 +311,6 @@ def test_beta_divides_the_fitted_strengths():
         theta = np.array([rows[m].theta for m in range(len(truth))])
         assert theta == pytest.approx(truth - truth.mean(), abs=1e-6)
         assert method["beta"] == beta
-    with pytest.raises(ValueError):
-        arena.rate_scope(build(tasks, monday), range(4), all_covered(range(4)), beta=2.0)
     with pytest.raises(ValueError):
         build(tasks, monday, beta=0.0)
 
@@ -502,13 +500,19 @@ def test_days_in_one_block_are_drawn_together_far_days_are_not():
     assert np.corrcoef(counts[:, 10], counts[:, 80])[0, 1] < 0.1
 
 
-def test_rounds_inside_one_block_are_always_drawn_together():
-    tasks = TOY[:6]
-    rows, method = rate(tasks, day_of=lambda r: 10 * (r - 1))  # 21 days: one block covers the circle
-    assert method["circle_days"] == 28
-    for row in rows.values():
-        assert row.boot_lower == pytest.approx(row.score, abs=1e-6)
-        assert row.boot_upper == pytest.approx(row.score, abs=1e-6)
+def test_rounds_on_adjacent_days_are_drawn_together_unless_a_block_edge_falls_between():
+    day_of = {1: 0, 2: 28, 3: 56, 4: 111, 5: 112}.get  # rounds 4 and 5 on adjacent days, 140-day circle
+    rows, method = rate(TOY, day_of=day_of, seed=4)
+    assert method["circle_days"] == 140
+    starts = np.random.default_rng(4).integers(0, 140, size=(200, 5))
+    counts = arena._block_counts(starts, 140)
+    # only a block that ends on day 111 (start 84) or begins on day 112 separates the two days
+    edge = ((starts == 84) | (starts == 112)).any(axis=1)
+    assert edge.any() and not edge.all()
+    assert (counts[~edge, 111] == counts[~edge, 112]).all()
+    assert (counts[:, 111] - counts[:, 112] == (starts == 84).sum(axis=1) - (starts == 112).sum(axis=1)).all()
+    assert (counts[edge, 111] != counts[edge, 112]).any()
+    assert rows[C].boot_refits == int(((counts[:, 111] > 0) | (counts[:, 112] > 0)).sum()) < 200
 
 
 def test_circle_is_the_scope_days_rounded_up_to_whole_blocks():
@@ -643,12 +647,34 @@ def test_both_errors_zero_is_a_draw():
     assert (pairs.n_pairs, pairs.w.tolist(), pairs.wy.tolist()) == (1, [1.0], [0.5])
 
 
-def test_exactly_one_zero_error_skips_the_pair_and_reports_it():
+def test_exactly_one_zero_error_skips_the_pair_and_reports_it(caplog):
     pairs = build([(7, LOAD, {A: 0.0, B: 1.0, C: 2.0})])
     assert pairs.skipped_zero == ((7, LOAD, A, B), (7, LOAD, A, C))
     assert pairs.n_pairs == 1 and (pairs.i.tolist(), pairs.j.tolist()) == ([B], [C])
     assert pairs.w.tolist() == [0.5]  # k = 3 stays, the weight is not recomputed
     assert pairs.wy.tolist() == pytest.approx([0.5 * 2 / 3])
+    with caplog.at_level(logging.WARNING, logger="app.services.arena_score"):
+        rows, method = rate(TOY + [(6, LOAD, {A: 0.0, B: 1.0, C: 2.0})], scope="point/definition/7")
+    assert method["skipped_zero"] == 2 and method["n_pairs"] == 19  # the task's other pair still counts
+    warning = [r.getMessage() for r in caplog.records if "exactly one error is zero" in r.getMessage()]
+    assert len(warning) == 1
+    assert "point/definition/7" in warning[0] and "2 pair(s)" in warning[0]
+    assert f"(6, {LOAD}, {A}, {B}), (6, {LOAD}, {A}, {C})" in warning[0]
+
+
+def test_the_zero_error_warning_names_at_most_20_pairs(caplog):
+    zero_and_many = {0: 0.0, **{m: 1.0 + m for m in range(1, 26)}}
+    with caplog.at_level(logging.WARNING, logger="app.services.arena_score"):
+        rate([(1, LOAD, zero_and_many)], n_boot=0, scope="global")
+    warning = [r.getMessage() for r in caplog.records if "exactly one error is zero" in r.getMessage()]
+    assert len(warning) == 1 and "25 pair(s)" in warning[0] and "first 20" in warning[0]
+    assert f"(1, {LOAD}, 0, 20)" in warning[0] and f"(1, {LOAD}, 0, 21)" not in warning[0]
+
+
+def test_no_zero_error_warning_without_skipped_pairs(caplog):
+    with caplog.at_level(logging.WARNING, logger="app.services.arena_score"):
+        rate(TOY)
+    assert "exactly one error is zero" not in caplog.text
 
 
 def test_unequal_point_counts_skip_only_that_pair():
