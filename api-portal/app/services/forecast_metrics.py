@@ -248,44 +248,74 @@ def repair_crossing(
     return repaired, crossing_count
 
 
+_LEVELS = np.array(QUANTILE_LEVELS)
+_LEVEL_ROW = {level: row for row, level in enumerate(QUANTILE_LEVELS)}
+
+
+def _complete_deciles(column: np.ndarray) -> Tuple[np.ndarray, bool]:
+    """Fill the missing deciles (NaN) of one timestamp that carries at least two.
+
+    The submitted values are sorted across levels first. A missing decile between two submitted
+    levels is interpolated linearly in the level, one beyond the outermost submitted levels is
+    extrapolated along the line through the two outermost. Returns the nine values and whether
+    the submitted ones had to be sorted.
+    """
+    known = ~np.isnan(column)
+    levels, submitted = _LEVELS[known], column[known]
+    values = np.sort(submitted)
+    filled = np.interp(_LEVELS, levels, values)
+    below, above = _LEVELS < levels[0], _LEVELS > levels[-1]
+    filled[below] = values[0] + (_LEVELS[below] - levels[0]) * (values[1] - values[0]) / (levels[1] - levels[0])
+    filled[above] = values[-1] + (_LEVELS[above] - levels[-1]) * (values[-1] - values[-2]) / (levels[-1] - levels[-2])
+    return filled, bool(np.any(values != submitted))
+
+
 def assemble_quantile_forecasts(
     predicted_values: np.ndarray,
     probabilistic_values: List[Optional[Dict[str, object]]],
 ) -> Tuple[Dict[float, np.ndarray], bool, int, int]:
-    """Build per-level forecast arrays for a (model, series) evaluation.
+    """Build the nine per-decile forecast arrays for a (model, series) evaluation.
 
     Given the aligned point forecasts and their per-timestamp ``probabilistic_values``,
     returns ``(quantile_forecasts, has_quantiles, levels_count, crossing_count)``:
 
-    - ``has_quantiles``: whether any timestamp carried at least one valid quantile.
-    - Point-only (no quantiles anywhere): a degenerate distribution — all nine deciles set
-      to the point forecast (``levels_count == 0``). This scores identically to the arena
-      MASE of the point forecast.
-    - Partial / full quantile sets: only the levels actually submitted (union across
-      timestamps) are scored; a level missing at a given timestamp falls back to that
-      timestamp's point forecast. Values are sorted across levels per timestamp to guarantee
-      monotonicity, and the number of timestamps repaired is returned as ``crossing_count``.
+    - A timestamp with at least two valid deciles is completed to all nine (see
+      ``_complete_deciles``). The pinball loss is proper, so in expectation a filled-in decile
+      cannot beat the model's own: sending fewer deciles does not score better.
+    - A timestamp with fewer than two deciles takes the point forecast for each missing one.
+    - ``has_quantiles``: whether any timestamp carried at least two valid deciles. Otherwise
+      the row is point-only: a degenerate distribution, all nine deciles set to the point
+      forecast, which scores identically to the arena MASE of the point forecast.
+    - ``levels_count``: the number of distinct levels submitted (union across timestamps), so
+      partial submissions stay visible.
+    - Values are sorted across levels per timestamp to guarantee monotonicity;
+      ``crossing_count`` is the number of timestamps that needed it.
     """
     predicted_values = np.asarray(predicted_values, dtype=float)
     n = len(predicted_values)
     parsed = [parse_probabilistic_values(pv) for pv in probabilistic_values]
-    submitted_levels = sorted({level for p in parsed for level in p})
+    levels_count = len({level for p in parsed for level in p})
 
-    if not submitted_levels:
-        # Degenerate: all nine deciles == point forecast.
+    if not any(len(p) >= 2 for p in parsed):
         forecasts = {level: predicted_values.copy() for level in QUANTILE_LEVELS}
-        return forecasts, False, 0, 0
+        return forecasts, False, levels_count, 0
 
-    forecasts: Dict[float, np.ndarray] = {}
-    for level in submitted_levels:
-        col = np.array(
-            [parsed[t].get(level, predicted_values[t]) for t in range(n)],
-            dtype=float,
-        )
-        forecasts[level] = col
+    grid = np.full((len(QUANTILE_LEVELS), n), np.nan)
+    for t, p in enumerate(parsed):
+        for level, value in p.items():
+            grid[_LEVEL_ROW[level], t] = value
 
-    forecasts, crossing_count = repair_crossing(forecasts)
-    return forecasts, True, len(submitted_levels), crossing_count
+    submitted = np.sum(~np.isnan(grid), axis=0)
+    crossing_count = 0
+    for t in np.flatnonzero((submitted >= 2) & (submitted < len(QUANTILE_LEVELS))):
+        grid[:, t], crossed = _complete_deciles(grid[:, t])
+        crossing_count += crossed
+
+    few = submitted < 2
+    grid[:, few] = np.where(np.isnan(grid[:, few]), predicted_values[few], grid[:, few])
+
+    forecasts, repaired = repair_crossing({level: grid[row] for row, level in enumerate(QUANTILE_LEVELS)})
+    return forecasts, True, levels_count, crossing_count + repaired
 
 
 def compute_sql_fields(

@@ -1,10 +1,13 @@
 """Golden-value and edge-case tests for the pure SQL metric module."""
+from statistics import NormalDist
+
 import numpy as np
 import pytest
 
 from app.services.forecast_metrics import (
     QUANTILE_LEVELS,
     assemble_quantile_forecasts,
+    compute_sql_fields,
     naive_scale,
     parse_probabilistic_values,
     quantile_loss,
@@ -173,13 +176,101 @@ def test_assemble_full_quantiles_and_median_consistency():
     assert np.allclose(qf[0.5], [15.0, 25.0])
 
 
-def test_assemble_missing_level_falls_back_to_point():
-    y_pred = np.array([10.0, 20.0])
-    # only q_0.9 submitted; q_0.1 missing -> falls back to point forecast per timestamp
-    pv = [{"q_0.9": 12.0}, {"q_0.9": 25.0}]
+def _column(qf, t):
+    return [float(qf[level][t]) for level in QUANTILE_LEVELS]
+
+
+def test_assemble_interpolates_between_neighbouring_levels():
+    y_pred = np.array([12.0, 4.0])
+    pv = [{"q_0.1": 8.0, "q_0.5": 12.0, "q_0.9": 20.0}, {"q_0.1": 0.0, "q_0.5": 4.0, "q_0.9": 4.0}]
     qf, has_q, levels_count, crossing = assemble_quantile_forecasts(y_pred, pv)
-    assert has_q is True and levels_count == 1
-    assert np.allclose(qf[0.9], [12.0, 25.0])
+    assert has_q is True and levels_count == 3 and crossing == 0
+    assert set(qf) == set(QUANTILE_LEVELS)
+    assert _column(qf, 0) == pytest.approx([8, 9, 10, 11, 12, 14, 16, 18, 20])
+    assert _column(qf, 1) == pytest.approx([0, 1, 2, 3, 4, 4, 4, 4, 4])
+
+
+def test_assemble_extrapolates_from_the_two_outermost_levels():
+    y_pred = np.array([12.0, 10.0])
+    pv = [{"q_0.3": 10.0, "q_0.5": 12.0, "q_0.7": 18.0}, {"q_0.2": 6.0, "q_0.8": 12.0}]
+    qf, *_ = assemble_quantile_forecasts(y_pred, pv)
+    # below 0.3 the line through (0.3, 10) and (0.5, 12); above 0.7 the one through (0.5, 12) and (0.7, 18)
+    assert _column(qf, 0) == pytest.approx([8, 9, 10, 11, 12, 15, 18, 21, 24])
+    assert _column(qf, 1) == pytest.approx([5, 6, 7, 8, 9, 10, 11, 12, 13])
+
+
+def test_assemble_timestamp_with_one_decile_falls_back_to_point():
+    y_pred = np.array([10.0, 10.0, 10.0])
+    pv = [{"q_0.1": 8.0, "q_0.5": 10.0, "q_0.9": 12.0}, {"q_0.1": 8.0}, None]
+    qf, has_q, levels_count, crossing = assemble_quantile_forecasts(y_pred, pv)
+    assert has_q is True and levels_count == 3 and crossing == 0
+    assert _column(qf, 1) == [8.0] + [10.0] * 8
+    assert _column(qf, 2) == [10.0] * 9
+
+
+def test_assemble_without_two_deciles_at_any_timestamp_is_point_only():
+    y_pred = np.array([10.0, 10.0, 10.0])
+    pv = [{"q_0.5": 9.0}, {"q_0.9": 11.0}, None]
+    qf, has_q, levels_count, crossing = assemble_quantile_forecasts(y_pred, pv)
+    assert has_q is False and crossing == 0
+    assert levels_count == 2  # the levels still show that something was sent
+    for t in range(3):
+        assert _column(qf, t) == [10.0] * 9
+
+
+def test_assemble_levels_count_is_the_distinct_levels_submitted():
+    pv = [{"q_0.1": 1.0, "q_0.9": 9.0}, {"q_0.5": 5.0, "q_0.9": 9.0}]
+    *_, levels_count, _ = assemble_quantile_forecasts(np.array([5.0, 5.0]), pv)
+    assert levels_count == 3
+
+
+def test_assemble_full_set_is_unchanged():
+    y_pred = np.array([10.0, 20.0])
+    pv = [{f"q_0.{i}": 10.0 + i ** 2 / 10 for i in range(1, 10)}, {f"0.{i}": 20.0 - 1 / i for i in range(1, 10)}]
+    qf, has_q, levels_count, crossing = assemble_quantile_forecasts(y_pred, pv)
+    assert has_q is True and levels_count == 9 and crossing == 0
+    assert _column(qf, 0) == [10.0 + i ** 2 / 10 for i in range(1, 10)]
+    assert _column(qf, 1) == [20.0 - 1 / i for i in range(1, 10)]
+
+
+def test_assemble_sorts_the_submitted_deciles_before_filling():
+    pv = [{"q_0.1": 5.0, "q_0.5": 3.0, "q_0.9": 9.0}]
+    qf, has_q, levels_count, crossing = assemble_quantile_forecasts(np.array([4.0]), pv)
+    assert has_q is True and levels_count == 3 and crossing == 1
+    assert _column(qf, 0) == pytest.approx([3, 3.5, 4, 4.5, 5, 6, 7, 8, 9])
+
+
+def _bell_sql(submitted_levels):
+    """SQL of a forecast exactly calibrated for standard-normal actuals that sends only `submitted_levels`."""
+    normal = NormalDist()
+    n = 20_000
+    y_true = np.array([normal.inv_cdf((i + 0.5) / n) for i in range(n)])
+    quantiles = {level: normal.inv_cdf(level) for level in submitted_levels}
+    fields = compute_sql_fields(
+        y_true, np.zeros(n), [{f"q_{level}": value for level, value in quantiles.items()}] * n, 1.0
+    )
+    unfilled, _ = sql_score(y_true, {level: np.full(n, value) for level, value in quantiles.items()}, 1.0)
+    return fields["sql_score"], unfilled
+
+
+def test_filling_missing_deciles_costs_a_fraction_of_a_percent_instead_of_gaining_a_fifth():
+    nine, _ = _bell_sql(QUANTILE_LEVELS)
+    three, three_unfilled = _bell_sql((0.1, 0.5, 0.9))
+    assert three / nine - 1 == pytest.approx(0.004, abs=0.002)
+    assert three_unfilled / nine - 1 == pytest.approx(-0.19, abs=0.005)
+
+    two, two_unfilled = _bell_sql((0.1, 0.9))
+    assert two / nine - 1 == pytest.approx(0.004, abs=0.002)
+    assert two_unfilled / nine - 1 == pytest.approx(-0.43, abs=0.005)
+
+
+def test_partial_deciles_are_scored_on_all_nine():
+    fields = compute_sql_fields(
+        np.array([10.0, 12.0]), np.array([11.0, 11.0]), [{"q_0.1": 9.0, "q_0.9": 13.0}] * 2, 2.0
+    )
+    assert fields["has_quantiles"] is True and fields["quantile_levels_count"] == 2
+    assert set(fields["sql_per_quantile"]) == {f"0.{i}" for i in range(1, 10)}
+    assert fields["sql_score"] == pytest.approx(np.mean(list(fields["sql_per_quantile"].values())))
 
 
 def test_assemble_repairs_crossing():
@@ -189,3 +280,13 @@ def test_assemble_repairs_crossing():
     assert crossing == 1
     assert qf[0.8][0] == pytest.approx(3.0)
     assert qf[0.9][0] == pytest.approx(9.0)
+    assert _column(qf, 0) == sorted(_column(qf, 0))
+
+
+def test_assemble_repairs_crossing_in_a_full_set_and_counts_the_timestamp():
+    values = [float(i) for i in range(1, 10)]
+    crossed = dict(zip((f"q_0.{i}" for i in range(1, 10)), [1.0, 2.0, 4.0, 3.0, 5.0, 6.0, 7.0, 8.0, 9.0]))
+    ordered = dict(zip((f"q_0.{i}" for i in range(1, 10)), values))
+    qf, has_q, levels_count, crossing = assemble_quantile_forecasts(np.array([5.0, 5.0]), [crossed, ordered])
+    assert has_q is True and levels_count == 9 and crossing == 1
+    assert _column(qf, 0) == values and _column(qf, 1) == values
