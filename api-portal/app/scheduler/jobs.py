@@ -13,6 +13,7 @@ from app.services.challenge_service import ChallengeService
 from app.services.forecast_scoring_service import ForecastScoringService
 from app.services.score_evaluation_service import ScoreEvaluationService
 from app.services.elo_ranking_service import EloRankingService
+from app.services.arena_score_service import compute_and_store_arena_scores
 from app.services.monitoring_service import (
     MonitoringService,
     ParticipationThresholds,
@@ -377,6 +378,57 @@ async def startup_elo_check_job() -> None:
             f"❌ Startup ELO check FAILED after {duration_seconds:.1f}s: {e}",
             exc_info=True
         )
+        raise  # Re-raise to let decorator handle it
+
+
+async def _arena_score_tables_exist(session: AsyncSession) -> bool:
+    result = await session.execute(
+        text(
+            "SELECT to_regclass('forecasts.daily_arena_scores') IS NOT NULL "
+            "AND to_regclass('forecasts.forecast_scores') IS NOT NULL"
+        )
+    )
+    return bool(result.scalar())
+
+
+def _describe_arena_score_failure(failure: Dict[str, Any]) -> str:
+    scope = failure["scope_type"]
+    if failure["scope_id"] is not None:
+        scope = f"{scope} {failure['scope_id']}"
+    first_line = failure["error"].partition("\n")[0]
+    return f"{scope} [{failure['metric']}]: {first_line}"
+
+
+@job_error_handler
+async def periodic_arena_score_calculation_job() -> None:
+    """Rate every scope and metric into forecasts.daily_arena_scores. No-op until its tables exist."""
+    logger = logging.getLogger("challenge-scheduler")
+    logger.info("Starting periodic Arena Score calculation job")
+
+    try:
+        async with SessionLocal() as session:
+            if not await _arena_score_tables_exist(session):
+                logger.info("Arena Score skipped: its tables do not exist yet.")
+                return
+            summary = await compute_and_store_arena_scores(session, datetime.now(timezone.utc).date())
+
+        rows = ", ".join(
+            f"{scope_type}/{metric}={count}"
+            for scope_type, per_metric in summary["rows"].items()
+            for metric, count in per_metric.items()
+        )
+        failures = summary["failures"]
+        logger.info(
+            "Arena Score job done for %s in %.1f s: rows %s; failed groups: %d",
+            summary["calculation_date"], summary["seconds"], rows or "none", len(failures),
+        )
+        if failures:
+            logger.error(
+                "Arena Score job: %d group(s) failed: %s",
+                len(failures), "; ".join(_describe_arena_score_failure(f) for f in failures),
+            )
+    except Exception as e:
+        logger.error(f"Arena Score calculation FAILED: {e}", exc_info=True)
         raise  # Re-raise to let decorator handle it
 
 
