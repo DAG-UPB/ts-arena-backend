@@ -34,7 +34,7 @@ def window_bounds(ranking_date: date) -> Tuple[datetime, datetime]:
     return end - timedelta(days=WINDOW_DAYS), end
 
 
-def _scopes(definition: Dict[str, Any]) -> List[Scope]:
+def definition_scopes(definition: Dict[str, Any]) -> List[Scope]:
     scopes: List[Scope] = [("global", None), ("definition", str(definition["definition_id"]))]
     if definition["frequency"] is not None and definition["horizon"] is not None:
         scopes.append(("frequency_horizon", f"{definition['frequency']}::{definition['horizon']}"))
@@ -51,7 +51,7 @@ def aggregate_window(
     scope_tasks: Dict[Scope, int] = {}
     scopes_of: Dict[int, List[Scope]] = {}
     for d in definitions:
-        scopes_of[d["definition_id"]] = _scopes(d)
+        scopes_of[d["definition_id"]] = definition_scopes(d)
         for scope in scopes_of[d["definition_id"]]:
             scope_tasks[scope] = scope_tasks.get(scope, 0) + d["tasks"]
 
