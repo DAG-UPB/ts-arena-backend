@@ -35,7 +35,12 @@ MAX_ITER = 1000  # more iterations: the fit fails
 
 _Z95 = 1.96
 _CI_PERCENTILES = (2.5, 97.5)
-_ROOT_BRACKET = 30.0
+_ROOT_BRACKET = 30.0  # weekly strengths are searched this far around the fitted strength
+_ROOT_MAX_ITER = 200
+_ROOT_XTOL = 1e-12
+_LINE_SEARCH_C = 1e-4  # Newton: required decrease of the gradient norm per unit of step
+_LINE_SEARCH_MIN_STEP = 1e-10
+_LOGGED_PAIRS = 20  # skipped zero-error pairs named in the warning
 _CHUNK_PAIRS = 1_000_000
 
 
@@ -277,14 +282,14 @@ def _gradient(theta, i, j, w, wy, n):
 
 
 def _newton(i, j, w, wy, n, theta0):
-    """Damped Newton on the negative log-likelihood: (theta, iterations, max |gradient|)."""
+    """Damped Newton on the negative log-likelihood: (theta, max |gradient|)."""
     theta = np.array(theta0, dtype=np.float64)
     diag = np.arange(n)
     grad, s = _gradient(theta, i, j, w, wy, n)
     for it in range(MAX_ITER + 1):
         gmax = float(np.max(np.abs(grad), initial=0.0))
         if gmax <= GTOL:
-            return theta, it, gmax
+            return theta, gmax
         if it == MAX_ITER or not math.isfinite(gmax):
             break
         a = w * s * (1.0 - s)
@@ -296,7 +301,7 @@ def _newton(i, j, w, wy, n, theta0):
         while True:
             cand = theta + t * step
             cand_grad, cand_s = _gradient(cand, i, j, w, wy, n)
-            if np.linalg.norm(cand_grad) <= (1.0 - 1e-4 * t) * norm or t < 1e-10:
+            if np.linalg.norm(cand_grad) <= (1.0 - _LINE_SEARCH_C * t) * norm or t < _LINE_SEARCH_MIN_STEP:
                 break
             t *= 0.5
         theta, grad, s = cand, cand_grad, cand_s
@@ -352,13 +357,13 @@ def _week_strengths(i, j, week, w, wy, theta, n):
     if np.any(score(lo)[0] <= 0) or np.any(score(hi)[0] >= 0):
         raise ArenaScoreFitError("weekly strength outside the root bracket")
     t = centre.copy()
-    for _ in range(200):
+    for _ in range(_ROOT_MAX_ITER):
         f, df = score(t)
         lo, hi = np.where(f > 0, t, lo), np.where(f < 0, t, hi)
         with np.errstate(divide="ignore", invalid="ignore"):
             nxt = t - f / df
         nxt = np.where((nxt > lo) & (nxt < hi), nxt, 0.5 * (lo + hi))
-        done = np.max(np.abs(nxt - t)) < 1e-12
+        done = np.max(np.abs(nxt - t)) < _ROOT_XTOL
         t = nxt
         if done:
             return group_model, group_week, t - centre
@@ -414,7 +419,7 @@ def _bootstrap(rows, pairs, theta, anchor, n, n_boot, seed, n_days):
         yb = np.bincount(row_pair, c * row_wy, len(pair_i))
         keep = wb > 0
         i, j = pair_i[keep], pair_j[keep]
-        refit, _, g = _newton(i, j, wb[keep], yb[keep], n, theta)
+        refit, g = _newton(i, j, wb[keep], yb[keep], n, theta)
         max_grad = max(max_grad, g)
         present = (np.bincount(i, minlength=n) + np.bincount(j, minlength=n)) > 0
         split += len(np.unique(_components(n, i, j)[present])) > 1
@@ -438,7 +443,6 @@ def rate_scope(
     pairs: PairSums,
     models: Iterable[Any],
     covered: Mapping[Any, Coverage],
-    beta: float = 1.0,
     n_boot: int = N_BOOT,
     seed: int = SEED,
     scope: str = "",
@@ -449,10 +453,7 @@ def rate_scope(
     covered: coverage per model, from `coverage()`
     scope:   label for log messages
     """
-    if beta <= 0:
-        raise ValueError("beta must be positive")
-    if pairs.beta != beta:
-        raise ValueError("pair sums were built with a different beta")
+    beta = pairs.beta
     model_list = sorted({m.item() if hasattr(m, "item") else m for m in models})
     ids = np.unique(np.concatenate([pairs.i, pairs.j]))
     if not set(ids.tolist()) <= set(model_list):
@@ -484,22 +485,26 @@ def rate_scope(
     if left_out:
         logger.warning("Arena Score scope %s: %d model(s) not connected to the largest group, "
                        "left out: %s", scope, len(left_out), left_out)
+    if pairs.skipped_zero:
+        logger.warning("Arena Score scope %s: %d pair(s) skipped because exactly one error is zero, "
+                       "first %d as (round, series, model, model): %s", scope, len(pairs.skipped_zero),
+                       min(len(pairs.skipped_zero), _LOGGED_PAIRS), list(pairs.skipped_zero[:_LOGGED_PAIRS]))
 
     n = len(fitted_ids)
     theta = np.zeros(n)
     lo_boot, hi_boot = np.full(n, np.nan), np.full(n, np.nan)
     n_present = np.zeros(n, dtype=np.int64)
     sigma = rho = half = pool_weeks = None
-    pool_size = anchor_size = anchor_weeks = fit_iterations = 0
+    pool_size = anchor_size = anchor_weeks = 0
     fit_max_grad = 0.0
     diag: Dict[str, Any] = dict(circle_days=0, refits_split=0, refits_unanchored=0, refit_max_grad=0.0)
     if n:
         new = np.cumsum(fitted) - 1
         pair_in = fitted[pair_i]
         fi, fj = new[pair_i[pair_in]], new[pair_j[pair_in]]
-        theta, fit_iterations, fit_max_grad = _newton(
-            fi, fj, pair_w[pair_in], pair_wy[pair_in], n, np.zeros(n))
-        theta = theta - theta.mean()
+        fw, fy = pair_w[pair_in], pair_wy[pair_in]
+        theta = fit(fi, fj, fw, fy, n)
+        fit_max_grad = float(np.max(np.abs(_gradient(theta, fi, fj, fw, fy, n)[0])))
 
         row_in = fitted[ii]
         ri, rj, rweek = new[ii[row_in]], new[jj[row_in]], week[row_in]
@@ -511,13 +516,9 @@ def rate_scope(
         anchor_weeks = min(LONG_RECORD_WEEKS, int(weeks.max()))
         anchor = weeks >= anchor_weeks
         anchor_size = int(anchor.sum())
-        first = pairs.first_day if pairs.first_day is not None else int(pairs.day.min())
-        last = pairs.last_day if pairs.last_day is not None else int(pairs.day.max())
-        if rday.min() < first or rday.max() > last:
-            raise ValueError("pair sums lie outside the day range of the scope")
         row_pair = (np.cumsum(pair_in) - 1)[pair_of_row[row_in]]
-        draws, diag = _bootstrap((row_pair, rday - first, rw, rwy), (fi, fj), theta, anchor, n,
-                                 n_boot, seed, last - first + 1)
+        draws, diag = _bootstrap((row_pair, rday - pairs.first_day, rw, rwy), (fi, fj), theta, anchor,
+                                 n, n_boot, seed, pairs.last_day - pairs.first_day + 1)
         n_present = np.sum(~np.isnan(draws), axis=0)
         enough = n_present >= MIN_PRESENT_REFITS
         if enough.any():
@@ -578,6 +579,6 @@ def rate_scope(
         anchor_size=anchor_size, anchor_min_weeks=anchor_weeks or None,
         n_models=len(model_list), n_fitted=n, n_pairs=pairs.n_pairs,
         skipped_points=pairs.skipped_points, skipped_zero=len(pairs.skipped_zero),
-        fit_iterations=fit_iterations, fit_max_grad=fit_max_grad, **diag,
+        fit_max_grad=fit_max_grad, **diag,
     )
     return ScopeRating(models=rows, method=method)
