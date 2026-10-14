@@ -7,7 +7,7 @@ NaN/Inf sanitisation MASE gets (a NaN reaching the JSON encoder is a 500), and
 point-forecast substitution is not comparable to one scored from a real distribution
 and the UI blanks it instead of showing it.
 
-Ranking is unchanged and stays MASE-driven: SQL rides along as a reported column only.
+Ranking stays error-driven: SQL rides along as a reported column only.
 """
 import psycopg2.extras
 import pytest
@@ -56,6 +56,7 @@ def _row(**overrides):
         "rmse": 120.5,
         "sql_score": 0.71,
         "has_quantiles": True,
+        "is_final": True,
         "rank": 1,
     }
     row.update(overrides)
@@ -91,12 +92,12 @@ def test_non_finite_sql_score_is_sanitised(bad):
     assert result[0]["sql_score"] is None
 
 
-def test_ranking_still_orders_by_mase_only():
+def test_ranking_never_orders_by_sql():
     repo = RoundRepository(FakeConn([_row()]))
 
     repo._get_leaderboard_from_scores(round_id=42)
 
     query = repo.conn.cursor_obj.executed
-    assert "ORDER BY cs.mase ASC NULLS LAST" in query
-    assert "cs.sql_score" in query
-    assert "ORDER BY cs.sql_score" not in query
+    assert "PARTITION BY fs.series_id ORDER BY fs.mae ASC" in query
+    assert "fs.sql_score" in query
+    assert "ORDER BY fs.sql_score" not in query
