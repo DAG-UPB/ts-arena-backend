@@ -160,47 +160,21 @@ def _final_board():
     ]
 
 
-def test_final_board_ranks_per_series_across_and_within_tracks():
-    conn = FakeConn([{"has_final_evaluation": True}, _final_board()])
+def test_board_ranks_per_series_across_and_within_tracks():
+    conn = FakeConn([_final_board()])
     rows = RoundRepository(conn).get_round_leaderboard(round_id=42)
 
-    query, _ = conn.cursor_obj.executed[1]
-    assert "PARTITION BY cs.series_id ORDER BY cs.mase" in query
-    assert f"PARTITION BY cs.series_id, {track_sql('mi')}" in query
+    query, _ = conn.cursor_obj.executed[0]
+    assert "PARTITION BY fs.series_id ORDER BY fs.mae" in query
+    assert f"PARTITION BY fs.series_id, {track_sql('mi')}" in query
     assert len(rows) == 3
 
 
-def test_final_board_track_filter_keeps_the_combined_rank():
-    conn = FakeConn([{"has_final_evaluation": True}, _final_board()])
+def test_board_track_filter_keeps_the_combined_rank():
+    conn = FakeConn([_final_board()])
     rows = RoundRepository(conn).get_round_leaderboard(round_id=42, track="reference")
 
     assert [(r["model_id"], r["rank"], r["track_rank"]) for r in rows] == [
         (1, 1, 1),
         (2, 3, 2),
-    ]
-
-
-def test_on_the_fly_board_carries_track_and_track_rank(monkeypatch):
-    repo = RoundRepository(FakeConn([
-        {"has_final_evaluation": False},
-        [
-            # Latest observed value 10, actual 12 → naive error 2.
-            {"model_id": 1, "readable_id": "a", "model_name": "A", "user_id": 1,
-             "series_id": 7, "series_name": "s", "predicted_value": 12.5,
-             "actual_value": 12.0, "latest_observed_value": 10.0},
-            {"model_id": 9, "readable_id": "e", "model_name": "E", "user_id": 5,
-             "series_id": 7, "series_name": "s", "predicted_value": 12.2,
-             "actual_value": 12.0, "latest_observed_value": 10.0},
-            {"model_id": 2, "readable_id": "b", "model_name": "B", "user_id": 1,
-             "series_id": 7, "series_name": "s", "predicted_value": 13.0,
-             "actual_value": 12.0, "latest_observed_value": 10.0},
-        ],
-    ]))
-    monkeypatch.setattr(repo, "_get_round_resolution", lambda round_id: "1h")
-
-    rows = repo.get_round_leaderboard(round_id=42)
-    assert [(r["model_id"], r["track"], r["rank"], r["track_rank"]) for r in rows] == [
-        (9, "open", 1, 1),
-        (1, "reference", 2, 1),
-        (2, "reference", 3, 2),
     ]
