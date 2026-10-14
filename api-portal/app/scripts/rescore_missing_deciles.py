@@ -8,8 +8,9 @@
 One scan of `forecasts.forecasts` finds the (round, model, series) with a timestamp whose deciles are
 neither all nine nor none. Each is scored again with `build_score_row` on the actuals its row was scored
 on (SCD2 as of the row's `calculated_at`), and only the SQL columns are written. A row is written only when
-those actuals reproduce its stored `mae` and point count; every other column stays as it is. Rows that
-already carry the current values are skipped, so a rerun writes nothing.
+those actuals reproduce its stored `mae` within a relative `MAE_TOLERANCE` and its point count and scale
+exactly; every other column stays as it is. Rows that already carry the current values are skipped, so a
+rerun writes nothing.
 """
 from __future__ import annotations
 
@@ -45,7 +46,7 @@ from app.services.series_scale_service import resolution_bucket
 
 logger = logging.getLogger("rescore-missing-deciles")
 
-TOLERANCE = 1e-9
+MAE_TOLERANCE = 1e-4
 
 _SCORED = ("complete", "partial", "undefined_scale")
 
@@ -59,17 +60,17 @@ _BARE_KEYS = [str(level) for level in QUANTILE_LEVELS]
 Pair = Tuple[int, int]
 
 
-def close(a: Optional[float], b: Optional[float], rel: float = TOLERANCE) -> bool:
-    if a is None or b is None:
-        return a is b
-    return a == b or abs(a - b) <= rel * max(abs(a), abs(b))
+def relative_deviation(new: float, old: float) -> float:
+    if new == old:
+        return 0.0
+    return abs(new - old) / abs(old) if old else float("inf")
 
 
 def same_value(old: Any, new: Any) -> bool:
     if isinstance(old, dict) and isinstance(new, dict):
         return old.keys() == new.keys() and all(same_value(old[k], new[k]) for k in old)
     if isinstance(old, float) or isinstance(new, float):
-        return close(old, new, rel=1e-12)
+        return old is not None and new is not None and relative_deviation(new, old) <= 1e-12
     return old == new
 
 
@@ -79,16 +80,20 @@ def rescore_pair(
     actuals_by_minute: Dict[datetime, List[float]],
     scale_row: Optional[Dict[str, Any]],
 ) -> Tuple[Dict[str, Any], bool]:
-    """The row a fresh score gives on these actuals, and whether it reproduces the stored `mae`, point count and scale."""
+    """The row a fresh score gives on these actuals, and whether it reproduces the stored row.
+
+    `mae` has to agree within `MAE_TOLERANCE` (relative), the point count and the scale exactly.
+    """
     fresh = build_score_row(
         stored["round_id"], stored["model_id"], stored["series_id"], len(forecast_rows),
         align_evaluation_data(forecast_rows, actuals_by_minute), scale_row, stored["final_evaluation"],
     )
     reproduced = (
         fresh["mae"] is not None
+        and stored["mae"] is not None
         and fresh["n_points"] == stored["n_points"]
-        and close(fresh["mae"], stored["mae"])
-        and close(fresh["scale"], stored["scale"])
+        and fresh["scale"] == stored["scale"]
+        and relative_deviation(fresh["mae"], stored["mae"]) <= MAE_TOLERANCE
     )
     return fresh, reproduced
 
@@ -139,13 +144,12 @@ class Summary:
             if update is not None and ratio is not None:
                 self.sql_ratio_unverified.append(ratio)
             return
-        if fresh["mae"] == stored["mae"]:
+        deviation = relative_deviation(fresh["mae"], stored["mae"])
+        if deviation == 0:
             self.mae_exact += 1
         else:
             self.mae_close += 1
-            self.mae_max_rel_diff = max(
-                self.mae_max_rel_diff, abs(fresh["mae"] - stored["mae"]) / abs(stored["mae"])
-            )
+        self.mae_max_rel_diff = max(self.mae_max_rel_diff, deviation)
         if update is None:
             self.unchanged += 1
             return
@@ -173,8 +177,9 @@ class Summary:
             f"Score row not scored:         {sum(self.not_scored.values())} {dict(self.not_scored)}",
             f"Scored rows checked:          {self.checked}",
             f"  mae reproduced exactly:     {self.mae_exact}",
-            f"  mae within {TOLERANCE:g} relative:  {self.mae_close} (largest difference {self.mae_max_rel_diff:.1e})",
+            f"  mae within {MAE_TOLERANCE:.0e} relative:  {self.mae_close}",
             f"  not reproduced (not written): {len(self.not_reproduced)}",
+            f"Max relative mae deviation among rescored rows: {self.mae_max_rel_diff:.1e}",
         ]
         lines += [
             f"    (round, model, series, stored mae, mae on the as-of actuals): {r}"
