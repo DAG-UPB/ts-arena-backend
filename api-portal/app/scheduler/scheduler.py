@@ -469,7 +469,7 @@ class ChallengeScheduler:
 
     async def schedule_periodic_arena_score_calculation(self) -> None:
         """
-        Runs the Arena Score job at :40 of 00, 06, 12 and 18 UTC while ARENA_SCORE_JOB_ENABLED
+        Runs the Arena Score job at :40 of 03, 09, 15 and 21 UTC while ARENA_SCORE_JOB_ENABLED
         is on; with the flag off, removes its schedule. Logs instead of raising.
         """
         try:
@@ -482,7 +482,7 @@ class ChallengeScheduler:
                 # replace, so the persisted schedule picks up changes to this configuration
                 await self.scheduler.add_schedule(
                     func_or_task_id=periodic_arena_score_calculation_job,
-                    trigger=CronTrigger(hour="0,6,12,18", minute="40"),
+                    trigger=CronTrigger(hour="3,9,15,21", minute="40"),
                     id=ARENA_SCORE_SCHEDULE_ID,
                     coalesce=CoalescePolicy.latest,
                     misfire_grace_time=3600,
@@ -490,7 +490,7 @@ class ChallengeScheduler:
                 )
                 self.logger.info(
                     "Scheduled periodic Arena Score calculation job "
-                    "(runs at 00:40, 06:40, 12:40, 18:40 UTC)"
+                    "(runs at 03:40, 09:40, 15:40, 21:40 UTC)"
                 )
             else:
                 # The data store keeps schedules across restarts, so drop one left from when the flag was on
