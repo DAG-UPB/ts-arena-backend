@@ -1,0 +1,157 @@
+"""Arena Score read side: request validation and the parts of a leaderboard computed on read."""
+from bisect import bisect_left, bisect_right
+from collections import defaultdict
+from datetime import date
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+from fastapi import HTTPException
+
+METRICS = ("point", "probabilistic")
+SCOPE_TYPES = ("definition", "frequency_horizon")
+
+_SCOPE_GROUP = {"global": 0, "definition": 1, "frequency_horizon": 2}
+
+RankRange = Tuple[Optional[int], Optional[int]]
+
+
+def validate_metric(metric: str) -> str:
+    if metric not in METRICS:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid metric. Use 'point' or 'probabilistic'.",
+        )
+    return metric
+
+
+def resolve_scope(
+    definition_id: Optional[int],
+    frequency_horizon: Optional[str],
+    scope_type: Optional[str],
+) -> Tuple[str, Optional[str]]:
+    """The (scope_type, scope_id) a request asks for; scope_id None means every scope of the type."""
+    if definition_id is not None and frequency_horizon is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Only one scope filter can be applied at a time. Provide either 'definition_id' OR 'frequency_horizon', not both.",
+        )
+
+    if scope_type is not None and (definition_id is not None or frequency_horizon is not None):
+        raise HTTPException(
+            status_code=400,
+            detail="'scope_type' returns all scopes of a type and cannot be combined with 'definition_id' or 'frequency_horizon'.",
+        )
+
+    if scope_type is not None:
+        if scope_type not in SCOPE_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid scope_type. Use 'definition' or 'frequency_horizon'.",
+            )
+        return scope_type, None
+    if definition_id is not None:
+        return "definition", str(definition_id)
+    if frequency_horizon is not None:
+        return "frequency_horizon", frequency_horizon
+    return "global", None
+
+
+def parse_date(value: Optional[str], name: str) -> Optional[date]:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid {name} format. Use YYYY-MM-DD.",
+        )
+
+
+def is_month_end(day: date) -> bool:
+    return date.fromordinal(day.toordinal() + 1).day == 1
+
+
+def _ranges_within(bounds: Sequence[Tuple[float, float]]) -> List[Tuple[int, int]]:
+    n = len(bounds)
+    lowers = sorted(lo for lo, _ in bounds)
+    uppers = sorted(hi for _, hi in bounds)
+    out = []
+    for lo, hi in bounds:
+        above = n - bisect_right(lowers, hi)
+        not_below = n - bisect_left(uppers, lo)
+        # each count includes the model itself exactly when its own comparison holds
+        if lo > hi:
+            above -= 1
+        if hi >= lo:
+            not_below -= 1
+        out.append((1 + above, 1 + not_below))
+    return out
+
+
+def track_rank_ranges(
+    entries: Sequence[Tuple[str, Optional[float], Optional[float], bool]],
+) -> List[RankRange]:
+    """(rank_best, rank_worst) of each (track, ci_lower, ci_upper, ranked) entry within its track.
+
+    best = 1 + others whose lower bound is above this upper bound; worst = 1 + others whose
+    upper bound is at or above this lower bound. Unranked entries get (None, None).
+    """
+    members: Dict[str, List[int]] = defaultdict(list)
+    for k, (track, lo, hi, is_ranked) in enumerate(entries):
+        if is_ranked and lo is not None and hi is not None:
+            members[track].append(k)
+
+    out: List[RankRange] = [(None, None)] * len(entries)
+    for indices in members.values():
+        ranges = _ranges_within([(entries[k][1], entries[k][2]) for k in indices])
+        for k, rank_range in zip(indices, ranges):
+            out[k] = rank_range
+    return out
+
+
+def leaderboard_order(row: Dict[str, Any]) -> Tuple:
+    """Score descending, models without a score last, then model name."""
+    score = row.get("score")
+    return (
+        score is None,
+        0.0 if score is None else -score,
+        (row.get("model_name") or "").casefold(),
+        row.get("model_id") or 0,
+    )
+
+
+def scope_order(scope_type: str, scope_id: Optional[str]) -> Tuple:
+    """Global first, then definitions by id, then frequency-horizon scopes by name."""
+    group = _SCOPE_GROUP.get(scope_type, len(_SCOPE_GROUP))
+    if scope_type == "definition":
+        try:
+            return (group, 0, int(scope_id), "")
+        except (TypeError, ValueError):
+            pass
+    return (group, 1, 0, scope_id or "")
+
+
+def arrange_leaderboard(
+    rows: List[Dict[str, Any]], track: Optional[str], limit: int
+) -> List[Dict[str, Any]]:
+    """Sort each scope, add the track rank range, keep one track, cut to `limit` per scope.
+
+    The ranges are computed before the track filter and the limit, so neither changes them.
+    """
+    by_scope: Dict[Tuple[Any, ...], List[Dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        by_scope[(row["scope_type"], row["scope_id"], row["calculation_date"])].append(row)
+
+    out: List[Dict[str, Any]] = []
+    for key in sorted(by_scope, key=lambda k: scope_order(k[0], k[1]) + (k[2],)):
+        scope_rows = sorted(by_scope[key], key=leaderboard_order)
+        ranges = track_rank_ranges([
+            (r["track"], r["ci_lower"], r["ci_upper"], r["rank_best"] is not None)
+            for r in scope_rows
+        ])
+        for row, (best, worst) in zip(scope_rows, ranges):
+            row["track_rank_best"], row["track_rank_worst"] = best, worst
+        if track is not None:
+            scope_rows = [r for r in scope_rows if r["track"] == track]
+        out.extend(scope_rows[:limit])
+    return out

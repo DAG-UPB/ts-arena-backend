@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from app.core.config import settings  # noqa: E402
 from app.database.connection import db_connection  # noqa: E402
-from app.api.v1 import models, health, definitions, rounds  # noqa: E402
+from app.api.v1 import models, health, definitions, rounds, arena_scores  # noqa: E402
 
 app = FastAPI(
     title=settings.API_TITLE,
@@ -35,6 +35,8 @@ app.include_router(health.router)
 app.include_router(definitions.router)
 app.include_router(rounds.router)
 
+# Before the models router: its "/models/{model_id}" would take "/models/arena-scores".
+app.include_router(arena_scores.router)
 app.include_router(models.router)
 
 # After the routers above: the filter reads the served surface off app.routes.
