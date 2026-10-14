@@ -160,6 +160,40 @@ class ForecastScoresRepository:
         )
         return [{"series_id": s, "ts": ts, "value": v} for s, ts, v in result.fetchall()]
 
+    async def read_actuals_as_of(
+        self,
+        series_ids: List[int],
+        bucket: timedelta,
+        as_of: datetime,
+        lo: datetime,
+        hi: datetime,
+    ) -> List[Dict[str, Any]]:
+        """Bucketed actuals of the series from SCD2 as they stood at `as_of`, for `lo <= ts < hi + bucket`.
+
+        Same rule as `read_context_as_of`: the newest non-NULL version per (series, ts).
+        """
+        query = text("""
+            SELECT series_id,
+                   time_bucket(CAST(:bucket AS interval), ts) AS ts,
+                   avg(value) AS value
+            FROM (
+                SELECT DISTINCT ON (d.series_id, d.ts) d.series_id, d.ts, d.value
+                FROM data_portal.time_series_data_scd2 d
+                WHERE d.series_id = ANY(CAST(:series_ids AS integer[]))
+                  AND d.ts >= CAST(:lo AS timestamptz)
+                  AND d.ts < CAST(:hi AS timestamptz) + CAST(:bucket AS interval)
+                  AND d.valid_from <= CAST(:as_of AS timestamptz)
+                  AND d.value IS NOT NULL
+                ORDER BY d.series_id, d.ts, d.valid_from DESC
+            ) as_of
+            GROUP BY 1, 2
+        """)
+        result = await self.session.execute(
+            query,
+            {"series_ids": series_ids, "bucket": bucket, "as_of": as_of, "lo": lo, "hi": hi},
+        )
+        return [{"series_id": s, "ts": ts, "value": v} for s, ts, v in result.fetchall()]
+
     async def insert_scales(self, rows: List[Dict[str, Any]]) -> None:
         if not rows:
             return
@@ -198,16 +232,20 @@ class ForecastScoresRepository:
                 ForecastScore.model_id,
                 ForecastScore.series_id,
                 ForecastScore.mae,
+                ForecastScore.n_points,
                 ForecastScore.scale,
                 ForecastScore.mase,
                 ForecastScore.sql_score,
                 ForecastScore.sql_per_quantile,
                 ForecastScore.has_quantiles,
+                ForecastScore.quantile_levels_count,
+                ForecastScore.quantile_crossing_count,
                 ForecastScore.data_coverage,
                 ForecastScore.final_evaluation,
                 ForecastScore.evaluation_status,
                 ForecastScore.error_message,
                 ForecastScore.method,
+                ForecastScore.calculated_at,
             ).where(ForecastScore.round_id == round_id)
         )
         return [dict(row._mapping) for row in result]

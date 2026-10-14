@@ -168,10 +168,23 @@ def test_point_only_sql_equals_mase():
     assert fields["sql_score"] == pytest.approx(fields["mase"], abs=1e-12)
 
 
+def test_a_single_decile_per_timestamp_is_scored_as_point_only():
+    y_true = np.array([14.0, 16.0, 13.0])
+    y_pred = np.array([15.0, 14.0, 13.5])
+    pv = [{"q_0.5": 15.0}, {"q_0.9": 17.0}, {"q_0.1": 12.0}]
+    fields = compute_score_fields(y_true, y_pred, pv, 1.75, None)
+    assert fields["has_quantiles"] is False
+    assert fields["quantile_levels_count"] == 3
+    assert fields["sql_score"] == pytest.approx(fields["mase"], abs=1e-12)
+
+
 def test_quantile_sql_uses_context_scale():
     y_true = np.array([10.0, 20.0])
     y_pred = np.array([12.0, 18.0])
-    pv = [{"q_0.1": 8.0, "q_0.5": 12.0, "q_0.9": 16.0}, {"q_0.1": 15.0, "q_0.5": 18.0, "q_0.9": 25.0}]
+    pv = [
+        {f"q_0.{i}": 12.0 + 2 * (i - 5) for i in range(1, 10)},
+        {f"q_0.{i}": 18.0 + 3 * (i - 5) for i in range(1, 10)},
+    ]
     scale = 2.0
     fields = compute_score_fields(y_true, y_pred, pv, scale, None)
 
@@ -179,14 +192,13 @@ def test_quantile_sql_uses_context_scale():
         return 2 * abs((y - q) * ((y <= q) - level))
 
     expected = np.mean([
-        np.mean([ql(10, 8, 0.1), ql(20, 15, 0.1)]) / scale,
-        np.mean([ql(10, 12, 0.5), ql(20, 18, 0.5)]) / scale,
-        np.mean([ql(10, 16, 0.9), ql(20, 25, 0.9)]) / scale,
+        np.mean([ql(10, 12 + 2 * (i - 5), i / 10), ql(20, 18 + 3 * (i - 5), i / 10)]) / scale
+        for i in range(1, 10)
     ])
     assert fields["has_quantiles"] is True
-    assert fields["quantile_levels_count"] == 3
+    assert fields["quantile_levels_count"] == 9
     assert fields["sql_score"] == pytest.approx(expected)
-    assert set(fields["sql_per_quantile"]) == {"0.1", "0.5", "0.9"}
+    assert set(fields["sql_per_quantile"]) == {f"0.{i}" for i in range(1, 10)}
     assert fields["mase"] == pytest.approx(2.0 / scale)
 
 
