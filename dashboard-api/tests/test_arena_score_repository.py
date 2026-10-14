@@ -150,6 +150,7 @@ def test_rows_come_back_sorted_with_track_ranges_and_cut_per_scope():
 
     assert [r["model_id"] for r in out] == [3, 1]
     assert [(r["track_rank_best"], r["track_rank_worst"]) for r in out] == [(1, 1), (2, 2)]
+    assert [(r["rank"], r["track_rank"]) for r in out] == [(1, 1), (2, 2)]
 
 
 def test_non_finite_numbers_become_null():
@@ -223,7 +224,7 @@ def history_row(scope_type, scope_id, day, definition_id=None, definition_name=N
         "definition_name": definition_name, "calculation_date": day, "score": 1010.0,
         "ci_lower": 1000.0, "ci_upper": 1020.0, "rank_best": 3, "rank_worst": 5,
         "provisional": False, "low_coverage": False, "unranked_disconnected": False,
-        "coverage": 1.0, "weeks_played": 12,
+        "coverage": 1.0, "weeks_played": 12, "rank": 4,
     }
     row.update(overrides)
     return row
@@ -270,7 +271,7 @@ def test_a_history_entry_has_the_documented_fields_and_fits_the_schema():
     result = ArenaScoreRepository(FakeConn([MODEL, rows])).get_model_history(17)
 
     assert set(result["scopes"][0]["daily_scores"][0]) == {
-        "calculation_date", "score", "ci_lower", "ci_upper", "rank_best", "rank_worst",
+        "calculation_date", "score", "ci_lower", "ci_upper", "rank", "rank_best", "rank_worst",
         "provisional", "low_coverage", "unranked_disconnected", "coverage", "weeks_played",
     }
     assert result["scopes"][0]["daily_scores"][0]["score"] is None
@@ -289,6 +290,24 @@ def test_the_history_query_filters_the_model_and_metric_and_sorts_by_day():
     assert query.rstrip().endswith("ORDER BY a.calculation_date")
     assert params == (17, "probabilistic")
     assert placeholders(query) == len(params)
+
+
+def test_the_history_place_counts_the_ranked_rows_of_the_same_scope_day_and_metric_scoring_higher():
+    conn = FakeConn([MODEL, []])
+    ArenaScoreRepository(conn).get_model_history(17)
+
+    query = " ".join(conn.cursor_obj.executed[1][0].split())
+    assert "CASE WHEN a.rank_best IS NULL OR a.score IS NULL THEN NULL ELSE 1 + (" in query
+    for condition in (
+        "o.calculation_date = a.calculation_date",
+        "o.scope_type = a.scope_type",
+        "COALESCE(o.scope_id, '') = COALESCE(a.scope_id, '')",
+        "o.metric = a.metric",
+        "o.rank_best IS NOT NULL",
+        "o.score > a.score",
+    ):
+        assert condition in query
+    assert ")::int END AS rank" in query
 
 
 def test_the_history_endpoint_answers_404_for_an_unknown_model():

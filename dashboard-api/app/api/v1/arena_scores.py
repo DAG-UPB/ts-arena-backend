@@ -126,8 +126,10 @@ def get_arena_scores(
           "score": 1042.3,
           "ci_lower": 1031.8,
           "ci_upper": 1052.9,
+          "rank": 1,
           "rank_best": 1,
           "rank_worst": 3,
+          "track_rank": 1,
           "track_rank_best": 1,
           "track_rank_worst": 2,
           "provisional": false,
@@ -185,7 +187,10 @@ def get_arena_scores(
     - `provisional_weeks`: Number of weeks a model needs before it gets a rank
     - `coverage_tau`: Minimum coverage a model needs to get a rank
 
-    *Rank Range:*
+    *Rank:*
+    - `rank`: Place by score, 1 + the number of ranked models with a higher score. Models
+      with equal scores share a place. It always lies within the rank range; show it
+      together with the range, since the range says how settled the place is
     - `rank_best`: 1 + the number of ranked models whose interval lies entirely above this
       model's interval (lower bound above this model's upper bound)
     - `rank_worst`: 1 + the number of ranked models whose interval is not entirely below
@@ -194,10 +199,10 @@ def get_arena_scores(
       It says how far up or down the data so far can place the model: with overlapping
       intervals the order of two models is not settled. Models that overlap share the
       best rank, so ranks can skip numbers.
-    - `rank_best` and `rank_worst` are `null` unless the model is ranked. A model is not
+    - `rank`, `rank_best` and `rank_worst` are `null` unless the model is ranked. A model is not
       ranked while `provisional` or `low_coverage` is set, or if it has no score
-    - `track_rank_best`, `track_rank_worst`: The same two numbers computed among the ranked
-      models of the same track only. `null` where `rank_best` is `null`
+    - `track_rank`, `track_rank_best`, `track_rank_worst`: The same three numbers computed
+      among the ranked models of the same track only. `null` where `rank_best` is `null`
 
     *Status:*
     - `provisional`: The model has fewer than `provisional_weeks` weeks played. Score and
@@ -310,7 +315,7 @@ def get_model_arena_scores(
     For each scope (global, definition, frequency/horizon) the response lists the model's
     Arena Score on every calculation date, with:
     - the score and its confidence interval
-    - the rank range (`rank_best` to `rank_worst`)
+    - the place (`rank`) and the rank range (`rank_best` to `rank_worst`)
     - the status (`provisional`, `low_coverage`, `unranked_disconnected`) and coverage
 
     **Response Example:**
@@ -332,6 +337,7 @@ def get_model_arena_scores(
               "score": 1037.5,
               "ci_lower": 1027.2,
               "ci_upper": 1047.8,
+              "rank": 2,
               "rank_best": 1,
               "rank_worst": 4,
               "provisional": false,
@@ -345,6 +351,7 @@ def get_model_arena_scores(
               "score": 1042.1,
               "ci_lower": 1031.9,
               "ci_upper": 1052.3,
+              "rank": 1,
               "rank_best": 1,
               "rank_worst": 3,
               "provisional": false,
@@ -363,7 +370,7 @@ def get_model_arena_scores(
     - Per scope: `scope_type` (`global`, `definition` or `frequency_horizon`), `scope_id`
       (`null` for global, the definition id, or `frequency::horizon`), and for definition
       scopes `definition_id` and `definition_name`
-    - Per day: `score`, `ci_lower`, `ci_upper`, `rank_best`, `rank_worst`, `provisional`,
+    - Per day: `score`, `ci_lower`, `ci_upper`, `rank`, `rank_best`, `rank_worst`, `provisional`,
       `low_coverage`, `unranked_disconnected`, `coverage` and `weeks_played`, as described
       for `/models/arena-scores`
 
@@ -373,7 +380,7 @@ def get_model_arena_scores(
     - Scopes are ordered global, definitions by id, then frequency/horizon combinations
     - Daily scores are sorted by date (ascending)
     - `score`, `ci_lower`, `ci_upper` are `null` on days where the model is not comparable
-      with the rest of the scope; `rank_best` and `rank_worst` are `null` on days where the
+      with the rest of the scope; `rank`, `rank_best` and `rank_worst` are `null` on days where the
       model is not ranked
 
     **Headers:**

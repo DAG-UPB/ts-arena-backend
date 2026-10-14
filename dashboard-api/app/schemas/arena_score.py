@@ -41,6 +41,10 @@ class ArenaScoreRowSchema(ModelFieldsSchema):
     ci_upper: Optional[float] = Field(
         None, description="Upper bound of the 95 % confidence interval of the score. Null if no interval could be computed"
     )
+    rank: Optional[int] = Field(
+        None,
+        description="Place by score: 1 + the number of ranked models with a higher score; equal scores share a place. Lies within rank_best to rank_worst. Null unless ranked",
+    )
     rank_best: Optional[int] = Field(
         None,
         description="Best rank the confidence interval allows: 1 + the number of ranked models clearly above (lower bound above this model's upper bound). Null unless ranked",
@@ -48,6 +52,9 @@ class ArenaScoreRowSchema(ModelFieldsSchema):
     rank_worst: Optional[int] = Field(
         None,
         description="Worst rank the confidence interval allows: 1 + the number of ranked models not clearly below (upper bound at or above this model's lower bound). Null unless ranked",
+    )
+    track_rank: Optional[int] = Field(
+        None, description="rank among the ranked models of the same track. Null unless ranked"
     )
     track_rank_best: Optional[int] = Field(
         None, description="rank_best among the ranked models of the same track. Null unless ranked"
@@ -113,6 +120,7 @@ class ArenaScoreDailySchema(BaseModel):
     score: Optional[float] = None
     ci_lower: Optional[float] = None
     ci_upper: Optional[float] = None
+    rank: Optional[int] = None
     rank_best: Optional[int] = None
     rank_worst: Optional[int] = None
     provisional: bool
