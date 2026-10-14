@@ -174,6 +174,30 @@ def test_global_pair_sums_are_the_sum_of_the_definitions():
     assert glob.w == pytest.approx(2 * parts[0].pairs.w)
 
 
+def test_a_model_missing_from_one_definition_or_late_there_is_low_coverage_where_they_are_joined():
+    first = [(r, LOAD, {A: 100.0, B: 90.0 + 5 * r, C: 80.0 + 7 * r, D: 120.0 - 9 * r}) for r in range(1, 5)]
+    second = [(r, LOAD, {A: 105.0, B: 95.0 + 3 * r, **({D: 110.0} if r == 4 else {})}) for r in range(1, 5)]
+    aggregates, sums = {}, {}
+    for d, tasks, offset in ((definition(1), first, 0), (definition(2), second, 100)):
+        sums[d["definition_id"]] = service.summarize_definition(d["definition_id"], make_rows(tasks, offset))
+        service.fold_definition(aggregates, d, sums[d["definition_id"]])
+
+    # C never plays definition 2: 0 of its 4 tasks since joining. D joins it at the last round: 1 of 4.
+    for key in (("global", None, "point"), ("frequency_horizon", "01:00:00::1 day", "point")):
+        joint = rated(aggregates[key], key)
+        assert [joint[m]["coverage"] for m in (A, B, C, D)] == [1.0, 1.0, 0.0, 0.25]
+        assert [joint[m]["low_coverage"] for m in (A, B, C, D)] == [False, False, True, True]
+        assert [(joint[m]["rank_best"], joint[m]["rank_worst"]) for m in (C, D)] == [(None, None)] * 2
+        assert all(joint[m]["score"] is not None for m in (C, D))  # still fitted, only unranked
+
+    # in its own definition each of them covers everything since joining
+    one = rated(sums[1]["point"], ("definition", "1", "point"))
+    two = rated(sums[2]["point"], ("definition", "2", "point"))
+    assert sorted(one) == [A, B, C, D] and sorted(two) == [A, B, D]
+    assert [one[m]["coverage"] for m in (A, B, C, D)] == [1.0] * 4 and not any(r["low_coverage"] for r in one.values())
+    assert [two[m]["coverage"] for m in (A, B, D)] == [1.0] * 3 and not any(r["low_coverage"] for r in two.values())
+
+
 # ---------------------------------------------------------------- rows
 
 def test_rows_carry_the_stored_columns_and_a_json_method():
@@ -198,6 +222,8 @@ def test_window_columns_are_stored_on_the_rows_of_both_metrics():
         WindowScore("global", None, A, "sql", 0.7, 0.9, 9, 10),
         WindowScore("global", None, B, "mase", None, 0.6, 6, 10),
         WindowScore("definition", "7", A, "sql", None, 0.5, 5, 10),
+        WindowScore("frequency_horizon", "01:00:00::1 day", A, "mase", 0.8, 0.95, 19, 20),
+        WindowScore("frequency_horizon", "01:00:00::1 day", A, "sql", 0.6, 0.9, 18, 20),
     ]
     window = service.window_columns(scores)
     assert window[("global", None, A)] == {
@@ -216,6 +242,11 @@ def test_window_columns_are_stored_on_the_rows_of_both_metrics():
     own_scope = rated(sums["point"], ("definition", "7", "point"), window)
     assert own_scope[A]["sql_participation_30d"] == 0.5 and own_scope[A]["mase_30d"] is None
     assert own_scope[B]["tasks_30d"] is None
+
+    key = ("frequency_horizon", "01:00:00::1 day", "point")
+    horizon = rated(sums["point"], key, window)
+    assert [horizon[A][c] for c in service.WINDOW_COLUMNS] == [0.8, 0.95, 0.6, 0.9, 20]
+    assert [horizon[B][c] for c in service.WINDOW_COLUMNS] == [None] * 5
 
 
 # ---------------------------------------------------------------- run
