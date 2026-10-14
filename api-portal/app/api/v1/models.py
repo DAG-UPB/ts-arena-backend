@@ -25,8 +25,8 @@ async def register_model(
 
     Probabilistic forecasts are scored on all nine deciles (0.1 to 0.9). Send all nine:
     a missing decile is interpolated from the ones you sent (extrapolated beyond the
-    outermost), which can only cost you. A forecast with fewer than two deciles per
-    timestamp is scored as a point forecast.
+    outermost), which can only cost you on average. A forecast in which no timestamp
+    carries at least two deciles is scored as a point forecast.
     """
     try:
         # Use the user_id from the authenticated user
