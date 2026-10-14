@@ -46,7 +46,9 @@ class Config:
     
     # Scheduler Configuration
     CHALLENGE_SCHEDULE_FILE = os.getenv("CHALLENGE_SCHEDULE_FILE", "app/configs/challenge_schedules.yaml")
-    
+    # Daily Arena Score job: on only for 1, true or yes
+    ARENA_SCORE_JOB_ENABLED = os.getenv("ARENA_SCORE_JOB_ENABLED", "").strip().lower() in ("1", "true", "yes")
+
     @classmethod
     def validate_config(cls) -> bool:
         """Validates the configuration and returns True if all required values are present"""

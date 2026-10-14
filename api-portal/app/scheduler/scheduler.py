@@ -8,6 +8,7 @@ from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.cron import CronTrigger
 
+from app.core.config import Config
 from app.scheduler.schedule_validation import describe_overlaps, find_overlaps
 from app.scheduler.running_jobs_repair import (
     clear_orphaned_counter,
@@ -21,6 +22,7 @@ from app.scheduler.jobs import (
     periodic_challenge_scores_evaluation_job,
     periodic_forecast_scoring_job,
     periodic_elo_ranking_calculation_job,
+    periodic_arena_score_calculation_job,
     periodic_participation_check_job,
     startup_elo_check_job
 )
@@ -34,6 +36,8 @@ from pathlib import Path
 # Worst case a mid-life leak is repaired ~2 intervals after it happens (backend-75).
 ORPHANED_COUNTER_CHECK_INTERVAL_SECONDS = 300.0
 ORPHANED_COUNTER_CONFIRMATIONS = 2
+
+ARENA_SCORE_SCHEDULE_ID = "periodic_arena_score_calculation"
 
 
 class ChallengeScheduler:
@@ -107,6 +111,9 @@ class ChallengeScheduler:
 
                 # Schedule the ELO ranking calculation job (4x daily)
                 await self.schedule_periodic_elo_calculation()
+
+                # Schedule the Arena Score calculation job when enabled (never raises)
+                await self.schedule_periodic_arena_score_calculation()
 
                 # Schedule the daily participation check (backend #92)
                 await self.schedule_periodic_participation_check()
@@ -460,6 +467,38 @@ class ChallengeScheduler:
             self.logger.exception(f"Failed to schedule periodic ELO calculation job: {e}")
             raise
 
+    async def schedule_periodic_arena_score_calculation(self) -> None:
+        """
+        Runs the Arena Score job at :40 of 03, 09, 15 and 21 UTC while ARENA_SCORE_JOB_ENABLED
+        is on; with the flag off, removes its schedule. Logs instead of raising.
+        """
+        try:
+            if Config.ARENA_SCORE_JOB_ENABLED:
+                await self.scheduler.configure_task(
+                    periodic_arena_score_calculation_job,
+                    max_running_jobs=1,
+                    misfire_grace_time=3600,
+                )
+                # replace, so the persisted schedule picks up changes to this configuration
+                await self.scheduler.add_schedule(
+                    func_or_task_id=periodic_arena_score_calculation_job,
+                    trigger=CronTrigger(hour="3,9,15,21", minute="40"),
+                    id=ARENA_SCORE_SCHEDULE_ID,
+                    coalesce=CoalescePolicy.latest,
+                    misfire_grace_time=3600,
+                    conflict_policy=ConflictPolicy.replace,
+                )
+                self.logger.info(
+                    "Scheduled periodic Arena Score calculation job "
+                    "(runs at 03:40, 09:40, 15:40, 21:40 UTC)"
+                )
+            else:
+                # The data store keeps schedules across restarts, so drop one left from when the flag was on
+                await self.scheduler.remove_schedule(ARENA_SCORE_SCHEDULE_ID)
+                self.logger.info("Arena Score job disabled (ARENA_SCORE_JOB_ENABLED is off)")
+        except Exception as e:
+            self.logger.exception(f"Failed to schedule Arena Score job: {e}")
+
     async def schedule_periodic_participation_check(self) -> None:
         """
         Schedules the daily participation check (backend #92).
@@ -682,6 +721,9 @@ class ChallengeScheduler:
 
             # Reschedule ELO calculation
             await self.schedule_periodic_elo_calculation()
+
+            # Reschedule Arena Score calculation (never raises)
+            await self.schedule_periodic_arena_score_calculation()
 
             # Reload config if available
             if self._config_path:
