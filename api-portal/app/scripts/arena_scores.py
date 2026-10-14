@@ -6,6 +6,8 @@ Run inside the running api-portal container:
 
 The date defaults to today (UTC); a date that already has rows is replaced:
     docker compose exec api-portal python -m app.scripts.arena_scores --date 2026-10-14
+
+Inputs are not cut at the date: it only labels the rows and sets the 30-day window.
 """
 import argparse
 import asyncio

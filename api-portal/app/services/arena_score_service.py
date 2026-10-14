@@ -21,7 +21,6 @@ from app.services.mase_window import WindowScore, compute_window_scores, definit
 logger = logging.getLogger(__name__)
 
 ERROR_COLUMN = {"point": "mae", "probabilistic": "sql_score"}
-SCOPE_TYPES = ("global", "definition", "frequency_horizon")
 WINDOW_COLUMNS = ("mase_30d", "participation_30d", "sql_30d", "sql_participation_30d", "tasks_30d")
 
 GroupKey = Tuple[str, Optional[str], str]  # scope type, scope id, metric
@@ -197,7 +196,7 @@ async def compute_and_store_arena_scores(session: AsyncSession, calculation_date
             await store(("definition", str(definition_id), metric), part)
         await asyncio.to_thread(fold_definition, aggregates, definition, sums)
 
-    for key in sorted(aggregates, key=lambda k: SCOPE_TYPES.index(k[0])):
+    for key in list(aggregates):
         await store(key, aggregates.pop(key))
 
     summary["groups"] = len(groups)
