@@ -3,7 +3,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
-from apscheduler import AsyncScheduler, CoalescePolicy, ConflictPolicy, ScheduleLookupError
+from apscheduler import AsyncScheduler, CoalescePolicy, ConflictPolicy
 from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.cron import CronTrigger
@@ -494,10 +494,7 @@ class ChallengeScheduler:
                 )
             else:
                 # The data store keeps schedules across restarts, so drop one left from when the flag was on
-                try:
-                    await self.scheduler.remove_schedule(ARENA_SCORE_SCHEDULE_ID)
-                except ScheduleLookupError:
-                    pass
+                await self.scheduler.remove_schedule(ARENA_SCORE_SCHEDULE_ID)
                 self.logger.info("Arena Score job disabled (ARENA_SCORE_JOB_ENABLED is off)")
         except Exception as e:
             self.logger.exception(f"Failed to schedule Arena Score job: {e}")
