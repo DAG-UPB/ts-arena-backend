@@ -202,12 +202,12 @@ def test_enabled_runs_four_times_a_day_at_forty_past(monkeypatch, caplog):
     schedule = inner.schedule
     assert schedule["func_or_task_id"] is jobs.periodic_arena_score_calculation_job
     assert schedule["id"] == SCHEDULE_ID
-    assert (schedule["trigger"].hour, schedule["trigger"].minute) == ("0,6,12,18", "40")
+    assert (schedule["trigger"].hour, schedule["trigger"].minute) == ("3,9,15,21", "40")
     assert schedule["coalesce"] is CoalescePolicy.latest
     assert schedule["misfire_grace_time"] == 3600
     assert schedule["conflict_policy"] is ConflictPolicy.replace
     assert inner.removed == []
-    assert ("Scheduled periodic Arena Score calculation job (runs at 00:40, 06:40, 12:40, 18:40 UTC)"
+    assert ("Scheduled periodic Arena Score calculation job (runs at 03:40, 09:40, 15:40, 21:40 UTC)"
             in _messages(caplog))
 
 
