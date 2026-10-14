@@ -22,6 +22,11 @@ async def register_model(
     
     The model will be associated with the user based on the provided API key.
     The organization is automatically determined from the user's profile.
+
+    Probabilistic forecasts are scored on all nine deciles (0.1 to 0.9). Send all nine:
+    a missing decile is interpolated from the ones you sent (extrapolated beyond the
+    outermost), which can only cost you. A forecast with fewer than two deciles per
+    timestamp is scored as a point forecast.
     """
     try:
         # Use the user_id from the authenticated user
