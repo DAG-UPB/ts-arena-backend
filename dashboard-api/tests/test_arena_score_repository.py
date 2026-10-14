@@ -160,20 +160,13 @@ def test_non_finite_numbers_become_null():
     assert out[0]["score"] is None and out[0]["ci_lower"] is None and out[0]["coverage"] is None
 
 
-@pytest.mark.parametrize("stored,expected", [
-    (4, 4), (4.0, 4), (None, None), ("4", None), (True, None), ([4], None),
-])
-def test_provisional_weeks_is_read_from_the_method_as_a_number(stored, expected):
-    out, _ = ArenaScoreRepository(FakeConn([[db_row(provisional_weeks=stored)]])).get_leaderboard("global")
-    assert out[0]["provisional_weeks"] == expected
+def test_the_method_fields_are_cast_in_sql():
+    conn = FakeConn([[]])
+    ArenaScoreRepository(conn).get_leaderboard("global")
 
-
-@pytest.mark.parametrize("stored,expected", [
-    (0.5, 0.5), (1, 1.0), (None, None), ("0.5", None), (False, None), (float("nan"), None),
-])
-def test_coverage_tau_is_read_from_the_method_as_a_number(stored, expected):
-    out, _ = ArenaScoreRepository(FakeConn([[db_row(coverage_tau=stored)]])).get_leaderboard("global")
-    assert out[0]["coverage_tau"] == expected
+    query, _ = conn.cursor_obj.executed[0]
+    assert "(a.method->>'provisional_weeks')::int AS provisional_weeks" in query
+    assert "(a.method->>'tau')::float8 AS coverage_tau" in query
 
 
 def test_a_row_has_exactly_the_documented_fields():
@@ -285,47 +278,38 @@ def test_a_history_entry_has_the_documented_fields_and_fits_the_schema():
     assert parsed.model_id == 17 and parsed.track == "reference"
 
 
-def test_the_history_query_filters_the_model_metric_and_days():
+def test_the_history_query_filters_the_model_and_metric_and_sorts_by_day():
     conn = FakeConn([MODEL, []])
-    ArenaScoreRepository(conn).get_model_history(
-        17, metric="probabilistic", start_date=date(2026, 9, 1), end_date=date(2026, 9, 30)
-    )
+    ArenaScoreRepository(conn).get_model_history(17, metric="probabilistic")
 
     model_query, model_params = conn.cursor_obj.executed[0]
     assert f"{track_sql('mi')} AS track" in model_query and model_params == (17,)
     query, params = conn.cursor_obj.executed[1]
     assert "a.model_id = %s AND a.metric = %s" in query
-    assert "a.calculation_date >= %s" in query and "a.calculation_date <= %s" in query
     assert query.rstrip().endswith("ORDER BY a.calculation_date")
-    assert params == (17, "probabilistic", date(2026, 9, 1), date(2026, 9, 30))
+    assert params == (17, "probabilistic")
     assert placeholders(query) == len(params)
-
-
-def test_the_history_query_has_no_day_filter_by_default():
-    conn = FakeConn([MODEL, []])
-    ArenaScoreRepository(conn).get_model_history(17)
-
-    query, params = conn.cursor_obj.executed[1]
-    assert "calculation_date >=" not in query and "calculation_date <=" not in query
-    assert params == (17, "point")
 
 
 def test_the_history_endpoint_answers_404_for_an_unknown_model():
     with pytest.raises(HTTPException) as exc:
         arena_routes.get_model_arena_scores(
-            model_id=1, metric="point", start_date=None, end_date=None,
-            api_key="k", conn=FakeConn([None]),
+            model_id=1, metric="point", api_key="k", conn=FakeConn([None]),
         )
     assert exc.value.status_code == 404
 
 
 # --- filters ----------------------------------------------------------------------------
 
+def _days(*days):
+    return [{"calculation_date": day} for day in days]
+
+
 def test_filter_options():
     conn = FakeConn([
         [{"id": 3, "name": "B challenge"}, {"id": 1, "name": "A challenge"}],
         [{"scope_id": "00:15:00::1 day"}, {"scope_id": "01:00:00::3 days"}],
-        [{"calculation_date": date(2026, 10, 14)}, {"calculation_date": date(2026, 9, 30)}],
+        _days(date(2026, 10, 14), date(2026, 9, 30)),
     ])
     options = ArenaScoreRepository(conn).get_filter_options()
 
@@ -358,3 +342,26 @@ def test_the_documented_examples_fit_the_response_schemas():
 def test_every_leaderboard_field_is_documented():
     doc = arena_routes.get_arena_scores.__doc__
     assert [name for name in ArenaScoreRowSchema.model_fields if f"`{name}`" not in doc] == []
+
+
+def test_the_dates_are_the_latest_day_and_the_month_ends():
+    days = _days(date(2026, 10, 14), date(2026, 10, 13), date(2026, 9, 30), date(2026, 9, 29),
+                 date(2026, 8, 31), date(2026, 8, 1))
+    options = ArenaScoreRepository(FakeConn([[], [], days])).get_filter_options()
+
+    assert [(d["calculation_date"], d["is_month_end"]) for d in options["calculation_dates"]] == [
+        (date(2026, 10, 14), False), (date(2026, 9, 30), True), (date(2026, 8, 31), True),
+    ]
+
+
+def test_a_latest_day_that_is_a_month_end_is_listed_once():
+    days = _days(date(2026, 10, 31), date(2026, 10, 30), date(2026, 9, 30))
+    options = ArenaScoreRepository(FakeConn([[], [], days])).get_filter_options()
+
+    assert [(d["calculation_date"], d["is_month_end"]) for d in options["calculation_dates"]] == [
+        (date(2026, 10, 31), True), (date(2026, 9, 30), True),
+    ]
+
+
+def test_no_stored_day_means_no_dates():
+    assert ArenaScoreRepository(FakeConn([[], [], []])).get_filter_options()["calculation_dates"] == []

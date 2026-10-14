@@ -2,7 +2,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.core.arena_scores import parse_date, resolve_scope, validate_metric
+from app.core.arena_scores import parse_calculation_date, resolve_scope, validate_metric
 from app.core.dependencies import get_api_key
 from app.core.tracks import validate_track
 from app.database.connection import get_db_connection
@@ -102,7 +102,7 @@ def get_arena_scores(
     **Calculation Date:**
     - If not provided: returns the latest scores for the scope and metric
     - If provided (format: YYYY-MM-DD): returns the scores for that specific date
-    - Use `/models/arena-score-filters` to see the available calculation dates
+    - Use `/models/arena-score-filters` to see the month-end dates and the latest date
 
     **Ordering:** rows are sorted by score, best first. Models without a score come last,
     in alphabetical order. With `scope_type`, rows are grouped by scope.
@@ -233,7 +233,7 @@ def get_arena_scores(
     validate_metric(metric)
     track = validate_track(track)
     resolved_type, resolved_id = resolve_scope(definition_id, frequency_horizon, scope_type)
-    calc_date = parse_date(calculation_date, "calculation_date")
+    calc_date = parse_calculation_date(calculation_date)
 
     repo = ArenaScoreRepository(conn)
     rankings, resolved_date = repo.get_leaderboard(
@@ -284,7 +284,7 @@ def get_arena_score_filters(
     - Only values with Arena Scores are returned
     - `definitions` contains the definition IDs and names for scope_type='definition'
     - `frequency_horizons` contains the frequency::horizon combinations for scope_type='frequency_horizon'
-    - `calculation_dates` contains the calculation dates with a month-end indicator, sorted by date descending
+    - `calculation_dates` contains the month-end dates and the latest date with a month-end indicator, sorted by date descending
 
     **Headers:**
     - X-API-Key: Valid API key required
@@ -300,16 +300,6 @@ def get_model_arena_scores(
         "point",
         description="Metric: 'point' (point accuracy, default) or 'probabilistic' (quantile loss).",
         examples=["point"]
-    ),
-    start_date: Optional[str] = Query(
-        None,
-        description="Only calculation dates from this day on (YYYY-MM-DD)",
-        examples=["2026-09-01"]
-    ),
-    end_date: Optional[str] = Query(
-        None,
-        description="Only calculation dates up to this day (YYYY-MM-DD)",
-        examples=["2026-10-14"]
     ),
     api_key: str = Depends(get_api_key),
     conn = Depends(get_db_connection)
@@ -385,17 +375,14 @@ def get_model_arena_scores(
     - `score`, `ci_lower`, `ci_upper` are `null` on days where the model is not comparable
       with the rest of the scope; `rank_best` and `rank_worst` are `null` on days where the
       model is not ranked
-    - Use `start_date` and `end_date` to limit the days returned
 
     **Headers:**
     - X-API-Key: Valid API key required
     """
     validate_metric(metric)
-    start = parse_date(start_date, "start_date")
-    end = parse_date(end_date, "end_date")
 
     repo = ArenaScoreRepository(conn)
-    result = repo.get_model_history(model_id, metric=metric, start_date=start, end_date=end)
+    result = repo.get_model_history(model_id, metric=metric)
 
     if not result:
         raise HTTPException(status_code=404, detail="Model not found")

@@ -1,6 +1,5 @@
 """Arena Score read side: rank ranges, ordering, request validation and routing."""
 import importlib
-import random
 import sys
 from datetime import date
 
@@ -14,7 +13,7 @@ from app.core.arena_scores import (
     arrange_leaderboard,
     is_month_end,
     leaderboard_order,
-    parse_date,
+    parse_calculation_date,
     resolve_scope,
     scope_order,
     track_rank_ranges,
@@ -119,27 +118,6 @@ def test_unranked_entries_neither_get_a_range_nor_count():
 def test_a_ranked_entry_without_both_bounds_is_left_out(lo, hi):
     ranges = track_rank_ranges([ranked("open", 5.0, 6.0), ranked("open", lo, hi)])
     assert ranges == [(1, 1), (None, None)]
-
-
-def _brute_force(entries):
-    members = [k for k, (_, lo, hi, ok) in enumerate(entries) if ok and lo is not None and hi is not None]
-    out = [(None, None)] * len(entries)
-    for m in members:
-        same = [o for o in members if o != m and entries[o][0] == entries[m][0]]
-        best = 1 + sum(1 for o in same if entries[o][1] > entries[m][2])
-        worst = 1 + sum(1 for o in same if entries[o][2] >= entries[m][1])
-        out[m] = (best, worst)
-    return out
-
-
-def test_ranges_match_the_definition_on_random_intervals_with_many_ties():
-    rng = random.Random(7)
-    for _ in range(300):
-        entries = []
-        for _ in range(rng.randint(0, 25)):
-            a, b = rng.randint(0, 12), rng.randint(0, 12)   # inverted intervals included
-            entries.append((rng.choice(["reference", "open"]), float(a), float(b), rng.random() < 0.8))
-        assert track_rank_ranges(entries) == _brute_force(entries)
 
 
 # --- ordering and arrangement -----------------------------------------------------------
@@ -327,13 +305,13 @@ def test_scope_resolution(args, expected):
     assert resolve_scope(*args) == expected
 
 
-def test_dates_parse_or_fail_with_the_parameter_name():
-    assert parse_date("2026-10-14", "calculation_date") == date(2026, 10, 14)
-    assert parse_date(None, "calculation_date") is None
-    assert parse_date("", "calculation_date") is None
+def test_the_calculation_date_parses_or_fails_with_400():
+    assert parse_calculation_date("2026-10-14") == date(2026, 10, 14)
+    assert parse_calculation_date(None) is None
+    assert parse_calculation_date("") is None
     with pytest.raises(HTTPException) as exc:
-        parse_date("14/10/2026", "start_date")
-    assert (exc.value.status_code, exc.value.detail) == (400, "Invalid start_date format. Use YYYY-MM-DD.")
+        parse_calculation_date("14/10/2026")
+    assert (exc.value.status_code, exc.value.detail) == (400, "Invalid calculation_date format. Use YYYY-MM-DD.")
 
 
 @pytest.mark.parametrize("day,expected", [

@@ -30,16 +30,6 @@ def _clean(row: Dict[str, Any]) -> Dict[str, Any]:
     return {key: sanitize_float(value) for key, value in row.items()}
 
 
-def _method_number(value: Any, as_int: bool = False) -> Optional[float]:
-    """A number read from the stored method; anything else is None."""
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    value = sanitize_float(value)
-    if value is None:
-        return None
-    return int(value) if as_int else float(value)
-
-
 class ArenaScoreRepository:
     """Reads the stored Arena Scores."""
 
@@ -106,8 +96,8 @@ class ArenaScoreRepository:
                 a.sql_30d,
                 a.sql_participation_30d,
                 a.tasks_30d,
-                a.method -> 'provisional_weeks' AS provisional_weeks,
-                a.method -> 'tau' AS coverage_tau
+                (a.method->>'provisional_weeks')::int AS provisional_weeks,
+                (a.method->>'tau')::float8 AS coverage_tau
             FROM forecasts.daily_arena_scores a
             JOIN models.model_info mi ON mi.id = a.model_id
             LEFT JOIN auth.organizations o ON o.id = mi.organization_id
@@ -120,20 +110,11 @@ class ArenaScoreRepository:
             cur.execute(query, tuple(date_params + scope_params))
             rows = [_clean(dict(r)) for r in cur.fetchall()]
 
-        for row in rows:
-            row["provisional_weeks"] = _method_number(row["provisional_weeks"], as_int=True)
-            row["coverage_tau"] = _method_number(row["coverage_tau"])
 
         resolved = rows[0]["calculation_date"] if rows else calculation_date
         return arrange_leaderboard(rows, track, limit), resolved
 
-    def get_model_history(
-        self,
-        model_id: int,
-        metric: str = "point",
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
-    ) -> Optional[Dict[str, Any]]:
+    def get_model_history(self, model_id: int, metric: str = "point") -> Optional[Dict[str, Any]]:
         """Daily Arena Scores of one model grouped by scope; None if the model does not exist."""
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
@@ -158,16 +139,9 @@ class ArenaScoreRepository:
                 FROM forecasts.daily_arena_scores a
                 {_DEFINITION_JOIN}
                 WHERE a.model_id = %s AND a.metric = %s
+                ORDER BY a.calculation_date
             """
-            params: List[Any] = [model_id, metric]
-            if start_date is not None:
-                query += " AND a.calculation_date >= %s"
-                params.append(start_date)
-            if end_date is not None:
-                query += " AND a.calculation_date <= %s"
-                params.append(end_date)
-            query += " ORDER BY a.calculation_date"
-            cur.execute(query, tuple(params))
+            cur.execute(query, (model_id, metric))
             rows = [_clean(dict(r)) for r in cur.fetchall()]
 
         scopes: Dict[Tuple[str, Optional[str]], Dict[str, Any]] = {}
@@ -192,7 +166,7 @@ class ArenaScoreRepository:
         }
 
     def get_filter_options(self) -> Dict[str, Any]:
-        """Definitions, frequency-horizon scopes and calculation dates that have Arena Scores."""
+        """Definitions and frequency-horizon scopes with Arena Scores, and their month-end dates and latest date."""
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
                 SELECT DISTINCT d.id, d.name
@@ -216,12 +190,11 @@ class ArenaScoreRepository:
                 FROM forecasts.daily_arena_scores a
                 ORDER BY a.calculation_date DESC
             """)
+            days = [row["calculation_date"] for row in cur.fetchall()]
             calculation_dates = [
-                {
-                    "calculation_date": row["calculation_date"],
-                    "is_month_end": is_month_end(row["calculation_date"]),
-                }
-                for row in cur.fetchall()
+                {"calculation_date": day, "is_month_end": is_month_end(day)}
+                for k, day in enumerate(days)
+                if k == 0 or is_month_end(day)
             ]
 
         return {
