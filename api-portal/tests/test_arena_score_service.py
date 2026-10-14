@@ -39,20 +39,25 @@ TOY = [
     (5, LOAD, {A: 120, B: 110, C: 115}),
     (5, BIKES, {A: 3.0, B: 3.2, C: 3.3}),
 ]
+TOY_SCORES = [18, 7, 39]  # A, B, C against a naive forecast at 1.2 x A's MAE
 
 
 def day_of(rnd):
     return 28 * (rnd - 1)
 
 
-def make_rows(tasks, round_offset=0, quantiles=(), n_points=POINTS):
-    """Column arrays as `kept_rows` returns them. Models in `quantiles` have an SQL score (0.8 x MAE)."""
+def make_rows(tasks, round_offset=0, quantiles=(), n_points=POINTS, naive=1.2, scale=1.0):
+    """Column arrays as `kept_rows` returns them. Models in `quantiles` have an SQL score (0.8 x MAE).
+
+    The naive MAE of a task is `naive` times the MAE of its first model; None leaves it NULL.
+    """
     rows = []
     for rnd, series, errs in tasks:
+        naive_mae = None if naive is None else naive * next(iter(errs.values()))
         for model, mae in errs.items():
             sql = 0.8 * mae if model in quantiles else None
             rows.append((rnd + round_offset, series, model, day_of(rnd), day_of(rnd) * 86400.0 + MORNING,
-                         mae, sql, n_points))
+                         mae, sql, n_points, naive_mae, scale))
     return {name: np.array([row[k] for row in rows], dtype=dtype)
             for k, (name, dtype) in enumerate(repository.ROW_COLUMNS)}
 
@@ -73,7 +78,8 @@ def test_summarize_definition_builds_pair_sums_and_coverage_tables():
     sums = service.summarize_definition(7, make_rows(TOY))
     assert list(sums) == ["point"]
     point = sums["point"]
-    assert point.pairs.n_pairs == 18
+    assert point.pairs.n_pairs == 42  # 18 between the models, one per model and task with the naive forecast
+    assert service.NAIVE_MODEL_ID in point.pairs.i
     assert (point.pairs.first_day, point.pairs.last_day) == (0, 112)
     assert point.rounds == [(7, r, day_of(r) * 86400.0 + MORNING, 2) for r in range(1, 6)]
     assert point.model_tasks == sorted(
@@ -85,31 +91,59 @@ def test_probabilistic_sums_hold_only_rows_with_quantiles():
     assert sorted(sums) == ["point", "probabilistic"]
     prob = sums["probabilistic"]
     assert {m for _, _, m, _ in prob.model_tasks} == {A, B}
-    assert prob.pairs.n_pairs == 10 and {*prob.pairs.i, *prob.pairs.j} == {A, B}
+    assert prob.pairs.n_pairs == 30 and {*prob.pairs.i, *prob.pairs.j} == {A, B, service.NAIVE_MODEL_ID}
     assert {r for _, r, _, _ in prob.rounds} == {1, 2, 3, 4, 5}
     assert all(tasks == 2 for _, _, _, tasks in prob.rounds)
-    assert sums["point"].pairs.n_pairs == 18
+    assert sums["point"].pairs.n_pairs == 42
 
 
 def test_errors_that_do_not_count_are_left_out():
     rows = make_rows(TOY)
     rows["mae"][:2] = np.nan  # round 1, series LOAD: neither row has a valid error
     sums = service.summarize_definition(7, rows)["point"]
-    assert sums.pairs.n_pairs == 17
+    assert sums.pairs.n_pairs == 39
     assert sums.rounds[0] == (7, 1, MORNING, 1)  # only the BIKES task of round 1 is left
     assert service.summarize_definition(7, make_rows([])) == {}
 
 
-def test_a_single_model_task_is_no_pair_but_counts_for_tasks_played_and_coverage():
+def test_a_single_model_task_is_a_pair_with_the_naive_forecast():
     sums = service.summarize_definition(7, make_rows(TOY + [(6, LOAD, {A: 100}), (7, LOAD, {D: 80})]))["point"]
-    assert sums.pairs.n_pairs == 18
+    assert sums.pairs.n_pairs == 44
     assert (7, 6, day_of(6) * 86400.0 + MORNING, 1) in sums.rounds
     by_model = rated(sums)
     assert by_model[A]["tasks_played"] == 11 and by_model[A]["rounds_played"] == 6
     lonely = by_model[D]
-    assert lonely["score"] is None and lonely["unranked_disconnected"] and lonely["weeks_played"] == 0
+    assert lonely["score"] == pytest.approx(100 * math.log(1.2), abs=1e-4)  # its only task: vs naive at 1.2 x its MAE
+    assert not lonely["unranked_disconnected"] and lonely["provisional"] and lonely["weeks_played"] == 1
     assert (lonely["tasks_played"], lonely["rounds_played"]) == (1, 1)
-    assert not by_model[A]["unranked_disconnected"]
+    assert service.NAIVE_MODEL_ID not in by_model
+
+
+def test_the_naive_row_comes_from_the_row_with_the_most_points():
+    rows = make_rows([(1, LOAD, {A: 10.0, B: 8.0})])
+    rows["n_points"] = np.array([24, 12])
+    rows["naive_mae"] = np.array([12.0, 6.0])
+    r, s, e, n, d = service.naive_rows(rows["round_id"], rows["series_id"], rows["naive_mae"],
+                                       rows["n_points"], rows["day"])
+    assert (r.tolist(), s.tolist(), e.tolist(), n.tolist(), d.tolist()) == ([1], [LOAD], [12.0], [24], [0])
+    sums = service.summarize_definition(7, rows)["point"]
+    assert sums.pairs.n_pairs == 1 and sums.pairs.skipped_points == 2  # B's 12 points pair with nobody
+
+
+def test_the_naive_sql_is_its_mae_over_the_scale():
+    sums = service.summarize_definition(7, make_rows([(1, LOAD, {A: 10.0})], quantiles=(A,), naive=1.0, scale=4.0))
+    for metric, naive_err in (("point", 10.0), ("probabilistic", 2.5)):
+        pairs = sums[metric].pairs
+        assert (pairs.i.tolist(), pairs.j.tolist()) == ([service.NAIVE_MODEL_ID], [A])
+        err_a = 10.0 if metric == "point" else 8.0
+        assert pairs.wy.tolist() == pytest.approx([err_a / (naive_err + err_a)])
+
+
+def test_a_scope_without_naive_errors_fails():
+    sums = service.summarize_definition(7, make_rows(TOY, naive=None))["point"]
+    assert sums.pairs.n_pairs == 18
+    with pytest.raises(arena.ArenaScoreFitError):
+        rated(sums)
 
 
 # ---------------------------------------------------------------- scopes
@@ -127,7 +161,7 @@ def test_two_definitions_fold_into_the_running_example():
     single = rated(service.summarize_definition(1, make_rows(TOY))["point"])
     for key, sums in aggregates.items():
         by_model = rated(sums, key)
-        assert [round(by_model[m]["score"]) for m in (A, B, C)] == [996, 976, 1028]
+        assert [round(by_model[m]["score"]) for m in (A, B, C)] == TOY_SCORES
         assert [by_model[m]["weeks_played"] for m in (A, B, C)] == [5, 5, 2]
         assert [by_model[m]["tasks_played"] for m in (A, B, C)] == [10, 10, 4]
         assert [by_model[m]["rounds_played"] for m in (A, B, C)] == [10, 10, 4]
@@ -168,7 +202,7 @@ def test_global_pair_sums_are_the_sum_of_the_definitions():
         parts.append(sums["point"])
         service.fold_definition(aggregates, d, sums)
     glob = aggregates[("global", None, "point")].pairs
-    assert glob.n_pairs == sum(p.pairs.n_pairs for p in parts) == 36
+    assert glob.n_pairs == sum(p.pairs.n_pairs for p in parts) == 84
     assert glob.w.sum() == pytest.approx(sum(p.pairs.w.sum() for p in parts))
     assert len(glob.day) == len(parts[0].pairs.day)  # the same days and model pairs
     assert glob.w == pytest.approx(2 * parts[0].pairs.w)
@@ -207,7 +241,8 @@ def test_rows_carry_the_stored_columns_and_a_json_method():
     assert (rows[A]["calculation_date"], rows[A]["scope_type"], rows[A]["scope_id"], rows[A]["metric"]) == (
         TODAY, "definition", "7", "point")
     assert json.loads(json.dumps(rows[A]["method"])) == rows[A]["method"]
-    assert rows[A]["method"]["n_pairs"] == 18 and rows[A]["method"]["seed"] == arena.SEED
+    assert rows[A]["method"]["n_pairs"] == 42 and rows[A]["method"]["seed"] == arena.SEED
+    assert rows[A]["method"]["zero_point"] == "reference"
     assert rows[A]["method"] is rows[B]["method"]
     for row in rows.values():
         for column in ("score", "ci_lower", "ci_upper"):
@@ -449,8 +484,8 @@ class StreamingSession:
 
 def test_kept_rows_become_one_array_per_column_with_nan_for_a_missing_error():
     partitions = [
-        [(1, 10, 5, 100, 8.64e6, 2.5, None, 24), (1, 10, 6, 100, 8.64e6, 3.0, 2.4, 24)],
-        [(2, 10, 5, 101, 8.7264e6, None, 1.0, 12)],
+        [(1, 10, 5, 100, 8.64e6, 2.5, None, 24, 3.5, 1.5), (1, 10, 6, 100, 8.64e6, 3.0, 2.4, 24, 3.5, 1.5)],
+        [(2, 10, 5, 101, 8.7264e6, None, 1.0, 12, None, None)],
     ]
     session = StreamingSession(partitions)
     rows = asyncio.run(ArenaScoresRepository(session).kept_rows(7))
@@ -460,6 +495,7 @@ def test_kept_rows_become_one_array_per_column_with_nan_for_a_missing_error():
     assert rows["round_id"].tolist() == [1, 1, 2] and rows["n_points"].tolist() == [24, 24, 12]
     assert np.isnan(rows["sql_score"]).tolist() == [True, False, False]
     assert np.isnan(rows["mae"]).tolist() == [False, False, True]
+    assert np.isnan(rows["naive_mae"]).tolist() == np.isnan(rows["scale"]).tolist() == [False, False, True]
 
     empty = asyncio.run(ArenaScoresRepository(StreamingSession([])).kept_rows(7))
     assert all(len(a) == 0 for a in empty.values()) and empty["day"].dtype == np.int64
@@ -470,7 +506,7 @@ def test_kept_rows_query_applies_the_row_filter_of_the_ranking():
     for fragment in (
         "f.final_evaluation", "NOT COALESCE(r.is_cancelled, FALSE)", "f.evaluation_status IN ('complete', 'partial')",
         "ds.is_excluded", "f.has_quantiles AND f.sql_score >= 0", "< 'Infinity'::float8", "r.definition_id = :definition_id",
-        "AT TIME ZONE 'UTC'",
+        "AT TIME ZONE 'UTC'", "f.naive_mae", "f.scale",
         "JOIN models.model_info m ON m.id = f.model_id",
         "m.publishing_date IS NULL OR (r.registration_start AT TIME ZONE 'UTC')::date >= m.publishing_date",
     ):

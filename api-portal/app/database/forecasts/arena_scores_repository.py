@@ -20,6 +20,8 @@ ROW_COLUMNS = (
     ("mae", np.float64),
     ("sql_score", np.float64),
     ("n_points", np.int64),
+    ("naive_mae", np.float64),
+    ("scale", np.float64),
 )
 
 SCORE_COLUMNS = (
@@ -41,7 +43,7 @@ _KEPT_ROWS = text("""
            CASE WHEN f.mae >= 0 AND f.mae < 'Infinity'::float8 THEN f.mae END AS mae,
            CASE WHEN f.has_quantiles AND f.sql_score >= 0 AND f.sql_score < 'Infinity'::float8
                 THEN f.sql_score END AS sql_score,
-           f.n_points
+           f.n_points, f.naive_mae, f.scale
     FROM forecasts.forecast_scores f
     JOIN challenges.rounds r ON r.id = f.round_id
     JOIN models.model_info m ON m.id = f.model_id
@@ -101,7 +103,8 @@ class ArenaScoresRepository:
         """The rows of one definition that count, as one array per `ROW_COLUMNS` entry.
 
         Streamed in chunks, so the rows never exist as Python objects all at once. `mae` and
-        `sql_score` are NaN where that error does not count for the row.
+        `sql_score` are NaN where that error does not count for the row, `naive_mae` and `scale`
+        where they are NULL.
         """
         result = await self.session.stream(_KEPT_ROWS, {"definition_id": definition_id})
         chunks = [

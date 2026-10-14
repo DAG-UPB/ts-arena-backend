@@ -7,6 +7,10 @@ Pure functions on numpy arrays, no database access. For one scope and metric:
     coverage()           coverage rule from per-round task counts
     rate_scope()         fit, block bootstrap, weekly floor, rank ranges
 
+A score is 100 · ln(error ratio) against a reference forecaster fitted with the models (the
+service passes the internal naive forecast); without a reference, the zero point is the mean
+of the fitted models.
+
 A task is one (round, series). The day and week of a round are those of its registration
 start: `day` is an integer UTC day number (days since 1970-01-01), weeks start on Monday.
 """
@@ -21,7 +25,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-POINTS_PER_UNIT = 400.0 / math.log(10.0)  # 174 points = factor e in error
+POINTS_PER_UNIT = 100.0  # 100 points = factor e in error, 1 point ~ 1 % lower error
 TAU = 0.5  # coverage rule: share of a definition's tasks since a model joined
 PROVISIONAL_WEEKS = 4  # fewer weeks played: score and CI shown, no rank
 BLOCK_DAYS = 28  # bootstrap block length
@@ -375,11 +379,11 @@ def _linkage(weeks: int, rho: float) -> float:
     return float(1.0 + 2.0 * np.sum((1.0 - k / weeks) * rho ** k))
 
 
-def _pooled_floor(group_model, group_week, resid, n):
+def _pooled_floor(group_model, group_week, resid, n, poolable):
     """Pooled sigma_week and lag-1 correlation, half-width per model, pool threshold and size."""
     weeks = np.bincount(group_model, minlength=n)
     for threshold in (LONG_RECORD_WEEKS, *POOL_FALLBACK_WEEKS):
-        pool = weeks >= threshold
+        pool = (weeks >= threshold) & poolable
         if pool.any():
             break
     else:
@@ -446,17 +450,23 @@ def rate_scope(
     n_boot: int = N_BOOT,
     seed: int = SEED,
     scope: str = "",
+    reference: Any = None,
 ) -> ScopeRating:
     """Ratings, intervals and rank ranges of one scope and metric, one row per model by id.
 
-    models:  every model with a kept row in the scope
-    covered: coverage per model, from `coverage()`
-    scope:   label for log messages
+    models:    every model with a kept row in the scope
+    covered:   coverage per model, from `coverage()`
+    scope:     label for log messages
+    reference: id in `pairs` of a reference forecaster, not in `models`: fitted like a model,
+               its strength is the zero point; it gets no row and stays out of the bootstrap
+               anchor set, the floor pool and the ranks
     """
     beta = pairs.beta
     model_list = sorted({m.item() if hasattr(m, "item") else m for m in models})
     ids = np.unique(np.concatenate([pairs.i, pairs.j]))
-    if not set(ids.tolist()) <= set(model_list):
+    if reference is not None and reference in model_list:
+        raise ValueError("the reference must not be in `models`")
+    if not set(ids.tolist()) <= set(model_list) | {reference}:
         raise ValueError("pairs refer to models that are not in `models`")
     if any(m not in covered for m in model_list):
         raise ValueError("`covered` needs an entry for every model")
@@ -481,6 +491,8 @@ def rate_scope(
         fitted = label == groups[np.lexsort((mass, size))[-1]]
     fitted_ids = ids[fitted].tolist()
     fitted_set = set(fitted_ids)
+    if reference is not None and n_all and reference not in fitted_set:
+        raise ArenaScoreFitError(f"reference {reference} is not in the fitted group of scope {scope}")
     left_out = [m for m in model_list if m not in fitted_set]
     if left_out:
         logger.warning("Arena Score scope %s: %d model(s) not connected to the largest group, "
@@ -491,6 +503,7 @@ def rate_scope(
                        min(len(pairs.skipped_zero), _LOGGED_PAIRS), list(pairs.skipped_zero[:_LOGGED_PAIRS]))
 
     n = len(fitted_ids)
+    is_ref = np.array([m == reference for m in fitted_ids], dtype=bool)
     theta = np.zeros(n)
     lo_boot, hi_boot = np.full(n, np.nan), np.full(n, np.nan)
     n_present = np.zeros(n, dtype=np.int64)
@@ -510,11 +523,11 @@ def rate_scope(
         ri, rj, rweek = new[ii[row_in]], new[jj[row_in]], week[row_in]
         rw, rwy, rday = pairs.w[row_in], pairs.wy[row_in], pairs.day[row_in]
         group_model, group_week, resid = _week_strengths(ri, rj, rweek, rw, rwy, theta, n)
-        sigma, rho, half, pool_weeks, pool_size = _pooled_floor(group_model, group_week, resid, n)
+        sigma, rho, half, pool_weeks, pool_size = _pooled_floor(group_model, group_week, resid, n, ~is_ref)
 
         weeks = weeks_all[fitted]
-        anchor_weeks = min(LONG_RECORD_WEEKS, int(weeks.max()))
-        anchor = weeks >= anchor_weeks
+        anchor_weeks = min(LONG_RECORD_WEEKS, int(weeks[~is_ref].max()))
+        anchor = (weeks >= anchor_weeks) & ~is_ref
         anchor_size = int(anchor.sum())
         row_pair = (np.cumsum(pair_in) - 1)[pair_of_row[row_in]]
         draws, diag = _bootstrap((row_pair, rday - pairs.first_day, rw, rwy), (fi, fj), theta, anchor,
@@ -529,14 +542,16 @@ def rate_scope(
     if half is not None:
         ci_lo, ci_hi = np.fmin(lo_boot, theta - half), np.fmax(hi_boot, theta + half)
     fit_weeks = weeks_all[fitted]
-    fit_covered = np.array([covered[m].covered for m in fitted_ids], dtype=bool)
-    ranked = (fit_weeks >= PROVISIONAL_WEEKS) & fit_covered if half is not None else np.zeros(n, bool)
+    fit_covered = np.array([m == reference or covered[m].covered for m in fitted_ids], dtype=bool)
+    ranked = (fit_weeks >= PROVISIONAL_WEEKS) & fit_covered & ~is_ref if half is not None else np.zeros(n, bool)
     best, worst = np.zeros(n, np.int64), np.zeros(n, np.int64)
     if ranked.any():
         best[ranked], worst[ranked] = _rank_ranges(ci_lo[ranked], ci_hi[ranked])
 
+    zero = float(theta[is_ref][0]) if is_ref.any() else 0.0
+
     def display(x: float) -> float:
-        return float(1000.0 + POINTS_PER_UNIT * x / beta)
+        return float(POINTS_PER_UNIT * (x - zero) / beta)
 
     slot = {m: k for k, m in enumerate(fitted_ids)}
     position = {m: k for k, m in enumerate(ids.tolist())}
@@ -556,7 +571,7 @@ def rate_scope(
         has_boot = not np.isnan(lo_boot[s])
         rows.append(ModelRating(
             **common,
-            theta=float(theta[s] / beta),
+            theta=float((theta[s] - zero) / beta),
             score=display(theta[s]),
             ci_lower=None if ci_lo is None else display(ci_lo[s]),
             ci_upper=None if ci_hi is None else display(ci_hi[s]),
@@ -572,6 +587,7 @@ def rate_scope(
 
     method = dict(
         seed=seed, n_boot=n_boot, block_days=BLOCK_DAYS, beta=beta, tau=TAU,
+        points_per_unit=POINTS_PER_UNIT, zero_point="reference" if is_ref.any() else "mean",
         provisional_weeks=PROVISIONAL_WEEKS, long_record_weeks=LONG_RECORD_WEEKS,
         sigma_week=None if sigma is None else sigma / beta,
         sigma_week_points=None if sigma is None else POINTS_PER_UNIT * sigma / beta,
