@@ -34,4 +34,7 @@ CREATE TABLE IF NOT EXISTS forecasts.daily_arena_scores (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_arena_scores_unique
 ON forecasts.daily_arena_scores (calculation_date, scope_type, COALESCE(scope_id, ''), metric, model_id);
 
+CREATE INDEX IF NOT EXISTS idx_daily_arena_scores_model
+ON forecasts.daily_arena_scores (model_id, metric, calculation_date);
+
 COMMIT;
