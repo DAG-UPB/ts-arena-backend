@@ -12,6 +12,15 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# TCP keepalives on every connection: an idle flow is not expired by a middlebox,
+# and a dead peer is noticed within ~90 s instead of on the next query.
+KEEPALIVES = {
+    "keepalives": 1,
+    "keepalives_idle": 60,
+    "keepalives_interval": 10,
+    "keepalives_count": 3,
+}
+
 
 class DatabaseConnection:
     """DB Connection Manager backed by a thread-safe connection pool.
@@ -47,6 +56,7 @@ class DatabaseConnection:
                         minconn=settings.DB_POOL_MIN,
                         maxconn=settings.DB_POOL_MAX,
                         dsn=self.database_url,
+                        **KEEPALIVES,
                     )
                     logger.debug(
                         "DB pool ready (min=%s, max=%s)",
@@ -66,6 +76,30 @@ class DatabaseConnection:
             return url.replace("postgres+psycopg2://", "postgres://", 1)
         return url
 
+    @staticmethod
+    def _checkout(pool):
+        """Take a connection that answers, discarding any that died while idle.
+
+        A network drop can kill every idle connection at once. The pool keeps at
+        most DB_POOL_MIN of them, so after that many discards getconn() opens a
+        fresh one; if that fails too, the database is unreachable.
+        """
+        for attempt in range(settings.DB_POOL_MIN + 1):
+            conn = pool.getconn()
+            try:
+                # Autocommit keeps the probe to one round trip with no transaction
+                # left open; psycopg2 switches it client-side.
+                conn.autocommit = True
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+                conn.autocommit = False
+                return conn
+            except psycopg2.Error as e:
+                pool.putconn(conn, close=True)
+                if attempt == settings.DB_POOL_MIN:
+                    raise
+                logger.warning("Discarded a dead pooled connection: %s", e)
+
     @contextmanager
     def get_connection(self):
         """Context manager yielding a pooled DB connection."""
@@ -77,7 +111,7 @@ class DatabaseConnection:
             )
         conn = None
         try:
-            conn = pool.getconn()
+            conn = self._checkout(pool)
             yield conn
         except HTTPException:
             # Not a database fault. A handler raising 404/401 is ordinary control
