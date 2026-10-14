@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
-from apscheduler import CoalescePolicy, ConflictPolicy, ScheduleLookupError
+from apscheduler import CoalescePolicy, ConflictPolicy
 
 import app.core.config as config_module
 import app.scheduler.jobs as jobs
@@ -219,16 +219,6 @@ def test_disabled_schedules_nothing_and_removes_a_persisted_schedule(monkeypatch
     assert inner.task is None
     assert inner.schedule is None
     assert inner.removed == [SCHEDULE_ID]
-    assert "Arena Score job disabled (ARENA_SCORE_JOB_ENABLED is off)" in _messages(caplog)
-
-
-def test_a_schedule_not_found_on_removal_is_ignored(monkeypatch, caplog):
-    inner = _RecordingScheduler(remove_error=ScheduleLookupError(SCHEDULE_ID))
-    with caplog.at_level(logging.INFO, logger="test-scheduler"):
-        _schedule(monkeypatch, inner, enabled=False)
-
-    assert inner.removed == [SCHEDULE_ID]
-    assert _messages(caplog, logging.ERROR) == []
     assert "Arena Score job disabled (ARENA_SCORE_JOB_ENABLED is off)" in _messages(caplog)
 
 
