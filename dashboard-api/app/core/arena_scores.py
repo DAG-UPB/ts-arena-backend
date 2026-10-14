@@ -1,5 +1,4 @@
 """Arena Score read side: request validation and the parts of a leaderboard computed on read."""
-from bisect import bisect_left, bisect_right
 from collections import defaultdict
 from datetime import date
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -55,7 +54,7 @@ def resolve_scope(
     return "global", None
 
 
-def parse_date(value: Optional[str], name: str) -> Optional[date]:
+def parse_calculation_date(value: Optional[str]) -> Optional[date]:
     if not value:
         return None
     try:
@@ -63,7 +62,7 @@ def parse_date(value: Optional[str], name: str) -> Optional[date]:
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid {name} format. Use YYYY-MM-DD.",
+            detail="Invalid calculation_date format. Use YYYY-MM-DD.",
         )
 
 
@@ -72,20 +71,13 @@ def is_month_end(day: date) -> bool:
 
 
 def _ranges_within(bounds: Sequence[Tuple[float, float]]) -> List[Tuple[int, int]]:
-    n = len(bounds)
-    lowers = sorted(lo for lo, _ in bounds)
-    uppers = sorted(hi for _, hi in bounds)
-    out = []
-    for lo, hi in bounds:
-        above = n - bisect_right(lowers, hi)
-        not_below = n - bisect_left(uppers, lo)
-        # each count includes the model itself exactly when its own comparison holds
-        if lo > hi:
-            above -= 1
-        if hi >= lo:
-            not_below -= 1
-        out.append((1 + above, 1 + not_below))
-    return out
+    return [
+        (
+            1 + sum(1 for o, (lo_o, _) in enumerate(bounds) if o != m and lo_o > hi_m),
+            1 + sum(1 for o, (_, hi_o) in enumerate(bounds) if o != m and hi_o >= lo_m),
+        )
+        for m, (lo_m, hi_m) in enumerate(bounds)
+    ]
 
 
 def track_rank_ranges(
