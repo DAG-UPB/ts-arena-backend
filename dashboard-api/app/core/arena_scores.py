@@ -101,6 +101,23 @@ def track_rank_ranges(
     return out
 
 
+def places(entries: Sequence[Tuple[Any, Optional[float], bool]]) -> List[Optional[int]]:
+    """Place of each (group, score, ranked) entry: 1 + the ranked entries of its group with a higher score.
+
+    Equal scores share a place. Unranked entries get None and do not count. The place lies
+    within the rank range whenever each interval contains its score.
+    """
+    scores: Dict[Any, List[float]] = defaultdict(list)
+    for group, score, is_ranked in entries:
+        if is_ranked and score is not None:
+            scores[group].append(score)
+    return [
+        1 + sum(1 for other in scores[group] if other > score)
+        if is_ranked and score is not None else None
+        for group, score, is_ranked in entries
+    ]
+
+
 def leaderboard_order(row: Dict[str, Any]) -> Tuple:
     """Score descending, models without a score last, then model name."""
     score = row.get("score")
@@ -126,9 +143,9 @@ def scope_order(scope_type: str, scope_id: Optional[str]) -> Tuple:
 def arrange_leaderboard(
     rows: List[Dict[str, Any]], track: Optional[str], limit: int
 ) -> List[Dict[str, Any]]:
-    """Sort each scope, add the track rank range, keep one track, cut to `limit` per scope.
+    """Sort each scope, add the places and the track rank range, keep one track, cut to `limit` per scope.
 
-    The ranges are computed before the track filter and the limit, so neither changes them.
+    Places and ranges are computed before the track filter and the limit, so neither changes them.
     """
     by_scope: Dict[Tuple[Any, ...], List[Dict[str, Any]]] = defaultdict(list)
     for row in rows:
@@ -143,6 +160,10 @@ def arrange_leaderboard(
         ])
         for row, (best, worst) in zip(scope_rows, ranges):
             row["track_rank_best"], row["track_rank_worst"] = best, worst
+        overall = places([(None, r["score"], r["rank_best"] is not None) for r in scope_rows])
+        in_track = places([(r["track"], r["score"], r["rank_best"] is not None) for r in scope_rows])
+        for row, place, track_place in zip(scope_rows, overall, in_track):
+            row["rank"], row["track_rank"] = place, track_place
         if track is not None:
             scope_rows = [r for r in scope_rows if r["track"] == track]
         out.extend(scope_rows[:limit])

@@ -14,6 +14,7 @@ from app.core.arena_scores import (
     is_month_end,
     leaderboard_order,
     parse_calculation_date,
+    places,
     resolve_scope,
     scope_order,
     track_rank_ranges,
@@ -120,6 +121,49 @@ def test_a_ranked_entry_without_both_bounds_is_left_out(lo, hi):
     assert ranges == [(1, 1), (None, None)]
 
 
+# --- places ----------------------------------------------------------------------------
+
+def test_the_place_counts_the_ranked_entries_with_a_higher_score():
+    assert places([(None, 1040.0, True), (None, 1050.0, True), (None, 1000.0, True)]) == [2, 1, 3]
+
+
+def test_equal_scores_share_a_place_and_the_next_one_is_skipped():
+    assert places([(None, 1050.0, True), (None, 1040.0, True), (None, 1040.0, True), (None, 1000.0, True)]) == [
+        1, 2, 2, 4,
+    ]
+
+
+def test_unranked_entries_neither_get_a_place_nor_count():
+    assert places([
+        (None, 1100.0, False),    # provisional: higher score, but no rank
+        (None, 1050.0, True),
+        (None, None, False),      # not comparable
+        (None, 1000.0, True),
+    ]) == [None, 1, None, 2]
+
+
+def test_a_ranked_entry_without_a_score_has_no_place():
+    assert places([(None, None, True), (None, 1000.0, True)]) == [None, 1]
+
+
+def test_places_are_counted_within_the_group():
+    assert places([("reference", 1000.0, True), ("open", 1100.0, True), ("reference", 900.0, True)]) == [
+        1, 1, 2,
+    ]
+
+
+def test_the_place_lies_within_the_rank_range_when_intervals_contain_their_scores():
+    entries = [(1040.0, 1030.0, 1050.0), (1035.0, 1025.0, 1045.0), (1030.0, 1020.0, 1040.0),
+               (1000.0, 995.0, 1005.0), (999.0, 990.0, 1008.0), (900.0, 890.0, 910.0)]
+    ranges = track_rank_ranges([ranked("open", lo, hi) for _, lo, hi in entries])
+    for place, (best, worst) in zip(places([("open", score, True) for score, _, _ in entries]), ranges):
+        assert best <= place <= worst
+
+
+def test_no_places():
+    assert places([]) == []
+
+
 # --- ordering and arrangement -----------------------------------------------------------
 
 def _row(model_id, name, score, track="reference", scope=("global", None), best=None, worst=None,
@@ -183,6 +227,7 @@ def test_arrange_adds_the_track_range_and_leaves_the_stored_ranks_alone():
     assert [(r["track_rank_best"], r["track_rank_worst"]) for r in out] == [
         (1, 2), (1, 1), (1, 2), (None, None),
     ]
+    assert [(r["rank"], r["track_rank"]) for r in out] == [(1, 1), (2, 1), (3, 2), (None, None)]
 
 
 def test_the_track_filter_only_drops_rows():
@@ -196,9 +241,10 @@ def test_the_track_filter_only_drops_rows():
 
     assert [r["model_id"] for r in only] == [1, 3]
     for r in only:
-        for key in ("rank_best", "rank_worst", "track_rank_best", "track_rank_worst", "score"):
+        for key in ("rank", "rank_best", "rank_worst", "track_rank", "track_rank_best", "track_rank_worst", "score"):
             assert r[key] == both[r["model_id"]][key]
     assert [(r["track_rank_best"], r["track_rank_worst"]) for r in only] == [(1, 1), (2, 2)]
+    assert [(r["rank"], r["track_rank"]) for r in only] == [(1, 1), (3, 2)]
 
 
 def test_the_limit_applies_per_scope_after_the_track_filter_and_keeps_the_ranges():
@@ -218,6 +264,7 @@ def test_the_limit_applies_per_scope_after_the_track_filter_and_keeps_the_ranges
         assert (r["track_rank_best"], r["track_rank_worst"]) == (
             full[r["model_id"]]["track_rank_best"], full[r["model_id"]]["track_rank_worst"])
     assert [r["track_rank_best"] for r in cut] == [1, 2, 1, 2]
+    assert [(r["rank"], r["track_rank"]) for r in cut] == [(1, 1), (3, 2), (1, 1), (3, 2)]
 
 
 def test_every_scope_is_ranked_on_its_own():
@@ -228,8 +275,8 @@ def test_every_scope_is_ranked_on_its_own():
         _row(1, "a", 1000.0, scope=("definition", "2"), best=2, worst=2, lo=990.0, hi=1010.0),
     ]
     out = arrange_leaderboard(rows, None, 100)
-    assert [(r["scope_id"], r["model_id"], r["track_rank_best"]) for r in out] == [
-        ("1", 1, 1), ("1", 2, 2), ("2", 2, 1), ("2", 1, 2),
+    assert [(r["scope_id"], r["model_id"], r["track_rank_best"], r["rank"]) for r in out] == [
+        ("1", 1, 1, 1), ("1", 2, 2, 2), ("2", 2, 1, 1), ("2", 1, 2, 2),
     ]
 
 

@@ -17,6 +17,18 @@ _HISTORY_COLUMNS = (
     "provisional", "low_coverage", "unranked_disconnected", "coverage", "weeks_played",
 )
 
+# Place by score as in `places`, for rows read without the rest of their scope.
+_PLACE_SQL = """CASE WHEN a.rank_best IS NULL OR a.score IS NULL THEN NULL ELSE 1 + (
+                    SELECT count(*)
+                    FROM forecasts.daily_arena_scores o
+                    WHERE o.calculation_date = a.calculation_date
+                      AND o.scope_type = a.scope_type
+                      AND COALESCE(o.scope_id, '') = COALESCE(a.scope_id, '')
+                      AND o.metric = a.metric
+                      AND o.rank_best IS NOT NULL
+                      AND o.score > a.score
+                )::int END AS rank"""
+
 
 def _scope_where(alias: str, scope_id: Optional[str]) -> str:
     sql = f"{alias}.metric = %s AND {alias}.scope_type = %s"
@@ -135,7 +147,8 @@ class ArenaScoreRepository:
                     a.scope_id,
                     d.id AS definition_id,
                     d.name AS definition_name,
-                    {', '.join('a.' + c for c in _HISTORY_COLUMNS)}
+                    {', '.join('a.' + c for c in _HISTORY_COLUMNS)},
+                    {_PLACE_SQL}
                 FROM forecasts.daily_arena_scores a
                 {_DEFINITION_JOIN}
                 WHERE a.model_id = %s AND a.metric = %s
@@ -155,7 +168,7 @@ class ArenaScoreRepository:
                     "definition_name": row["definition_name"],
                     "daily_scores": [],
                 }
-            scopes[key]["daily_scores"].append({c: row[c] for c in _HISTORY_COLUMNS})
+            scopes[key]["daily_scores"].append({c: row[c] for c in _HISTORY_COLUMNS + ("rank",)})
 
         return {
             "model_id": model["model_id"],
