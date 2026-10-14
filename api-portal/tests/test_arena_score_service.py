@@ -440,5 +440,7 @@ def test_kept_rows_query_applies_the_row_filter_of_the_ranking():
         "f.final_evaluation", "NOT COALESCE(r.is_cancelled, FALSE)", "f.evaluation_status IN ('complete', 'partial')",
         "ds.is_excluded", "f.has_quantiles AND f.sql_score >= 0", "< 'Infinity'::float8", "r.definition_id = :definition_id",
         "AT TIME ZONE 'UTC'",
+        "JOIN models.model_info m ON m.id = f.model_id",
+        "m.publishing_date IS NULL OR (r.registration_start AT TIME ZONE 'UTC')::date >= m.publishing_date",
     ):
         assert fragment in sql

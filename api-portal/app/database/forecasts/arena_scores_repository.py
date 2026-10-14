@@ -33,6 +33,7 @@ SCORE_COLUMNS = (
 
 # `day` is the UTC day number of the round's registration start, `registered` its epoch seconds.
 # An error that does not count is NULL: not finite or negative, or an SQL score without quantiles.
+# Rows for a round registered before the model's publishing date do not count.
 _KEPT_ROWS = text("""
     SELECT f.round_id, f.series_id, f.model_id,
            (r.registration_start AT TIME ZONE 'UTC')::date - DATE '1970-01-01' AS day,
@@ -43,12 +44,14 @@ _KEPT_ROWS = text("""
            f.n_points
     FROM forecasts.forecast_scores f
     JOIN challenges.rounds r ON r.id = f.round_id
+    JOIN models.model_info m ON m.id = f.model_id
     WHERE r.definition_id = :definition_id
       AND f.final_evaluation
       AND NOT COALESCE(r.is_cancelled, FALSE)
       AND f.evaluation_status IN ('complete', 'partial')
       AND r.registration_start IS NOT NULL
       AND f.n_points IS NOT NULL
+      AND (m.publishing_date IS NULL OR (r.registration_start AT TIME ZONE 'UTC')::date >= m.publishing_date)
       AND NOT EXISTS (
           SELECT 1 FROM challenges.definition_series_scd2 ds
           WHERE ds.definition_id = r.definition_id
