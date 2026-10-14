@@ -2,24 +2,23 @@
 Pure (no DB, no I/O) probabilistic forecast metric functions.
 
 Implements **Scaled Quantile Loss (SQL)** as defined by fev-bench
-(arXiv:2509.26468, Sec. 3.2), adapted to the arena scaling convention:
+(arXiv:2509.26468, Sec. 3.2):
 
     ρ_q(y, ŷ)  = 2 · |(y − ŷ) · (1(y ≤ ŷ) − q)|          # quantile loss (fev form)
-    a          = mean_t |y_t − naive|                     # SAME denominator as arena MASE
     SQL        = mean_q [ mean_t ρ_q(y_t, ŷ_t^{(q)}) / a ] # mean over quantiles of mean over time
 
-The scale ``a`` is the MAE of the flat last-context-value naive over the evaluated
-timestamps — identical to the arena MASE denominator (``mae_naive``), so SQL and MASE are
-directly comparable on the platform. This is a deliberate deviation from fev's seasonal
-scaling. Consequence: arena SQL values are not numerically comparable to
-published fev-bench SQL, but the ranking methodology is.
+The scale ``a`` is always the one that scales MASE in the same table, so SQL and MASE are
+directly comparable:
+
+- ``forecasts.forecast_scores`` (``compute_score_fields``): the in-sample seasonal naive MAE
+  of the context, ``a = mean_t |y_t − y_{t−m}|`` (``context_scale``), as in Hyndman &
+  Koehler (2006) MASE.
+- ``forecasts.scores`` (legacy scorer): the MAE of the flat last-context-value naive over the
+  evaluated timestamps (``naive_scale``). Its ``mase`` is a relative MAE against persistence.
 
 Key identity (regression anchor): a degenerate distribution where all nine deciles equal the
-point forecast scores exactly the same as the arena MASE of that point forecast, because the
+point forecast scores exactly the same as the MASE of that point forecast, because the
 deciles are symmetric about 0.5 and ``mean_q |1(y≤ŷ) − q| = 0.5``.
-
-``forecasts.scores.mase`` is a relative MAE against persistence, not Hyndman & Koehler MASE;
-``context_scale`` and ``compute_score_fields`` compute the latter for ``forecasts.forecast_scores``.
 
 These functions are intentionally free of any database or framework dependency so they can be
 unit-tested in isolation and reused by the scoring service.
@@ -87,7 +86,7 @@ def quantile_loss(y_true: np.ndarray, q_pred: np.ndarray, level: float) -> np.nd
 
 
 def naive_scale(y_true: np.ndarray, naive_value: float) -> Optional[float]:
-    """Arena MASE denominator: mean |y − naive| over the evaluated timestamps.
+    """Legacy ``forecasts.scores`` scale: mean |y − naive| over the evaluated timestamps.
 
     Returns ``None`` when the scale is zero (undefined SQL), mirroring the MASE
     ``mae_naive == 0`` edge case so the caller can store NULL.
@@ -108,7 +107,8 @@ def sql_score(
         y_true: actual values, shape (T,).
         quantile_forecasts: mapping ``level -> predicted array`` (each shape (T,)).
             Only the levels present are scored (partial sets are allowed).
-        scale: the SQL scale ``a`` (arena ``mae_naive``); ``None``/0 -> undefined.
+        scale: the SQL scale ``a``, the MASE denominator (see module docstring);
+            ``None``/0 -> undefined.
 
     Returns:
         ``(overall_sql, per_level)`` where ``overall_sql`` is the mean over levels of the
@@ -327,11 +327,11 @@ def compute_sql_fields(
     """Compute the 5 stored SQL columns for one (model, series) evaluation.
 
     This is the single source of truth for turning aligned evaluation arrays plus the
-    shared MASE/SQL scale (``mae_naive``) into the columns persisted on
-    ``forecasts.scores``: ``sql_score, sql_per_quantile, has_quantiles,
-    quantile_levels_count, quantile_crossing_count``. Both the live scorer
-    (``ScoreEvaluationService._calculate_score_for_model_series``) and the historical
-    backfill script (``app/scripts/backfill_sql_scores.py``) call this function so their
+    shared MASE/SQL scale into the SQL columns of ``forecasts.forecast_scores`` (via
+    ``compute_score_fields``) and ``forecasts.scores``: ``sql_score, sql_per_quantile,
+    has_quantiles, quantile_levels_count, quantile_crossing_count``. On ``forecasts.scores``
+    the legacy scorer (``ScoreEvaluationService._calculate_score_for_model_series``) and the
+    historical backfill script (``app/scripts/backfill_sql_scores.py``) both call it, so their
     results are byte-identical by construction.
 
     Args:
@@ -339,8 +339,8 @@ def compute_sql_fields(
         y_pred: point forecasts, shape (T,).
         probabilistic_values: per-timestamp ``probabilistic_values`` dicts (or None),
             aligned with ``y_true``/``y_pred``.
-        mae_naive: the SQL scale (the naive MAE, or the context scale from
-            ``compute_score_fields``). ``0`` means the SQL scale is undefined ->
+        mae_naive: the SQL scale: the context scale from ``compute_score_fields``, or the
+            legacy flat-naive MAE. ``0`` means the SQL scale is undefined ->
             ``sql_score``/``sql_per_quantile`` come back ``None``.
 
     Returns:
