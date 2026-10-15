@@ -5,6 +5,7 @@ Before this, a client could not tell a whole upload from a partial one: `success
 split, the resolved `model_id` was never returned, and `errors` mixed genuine rejections
 with advisories. These tests pin the contract that fixes that.
 """
+import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -231,3 +232,33 @@ async def test_one_bad_series_does_not_sink_the_rest_of_the_upload():
     fatal = set(resp.errors) - set(resp.warnings)
     assert len(fatal) == 1 and "'series_b'" in fatal.pop()
     svc.forecast_repo.bulk_create_forecasts.assert_awaited_once()
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+@pytest.mark.asyncio
+async def test_non_finite_value_rejects_the_series(bad):
+    points = _points(pv=FULL_Q)
+    points[1] = ForecastDataPoint.model_validate({"ts": points[1].ts, "value": bad})
+    svc = _service()
+    resp = await svc.upload_forecasts(_request(points), user_id=1)
+    fatal = set(resp.errors) - set(resp.warnings)
+    assert len(fatal) == 1 and "Non-finite values for series 'series_a'" in fatal.pop()
+    assert resp.success is False and resp.points_inserted == 0
+    svc.forecast_repo.bulk_create_forecasts.assert_not_awaited()
+
+
+@pytest.mark.parametrize("key", ["q_0.5", "0.5"])
+@pytest.mark.asyncio
+async def test_non_finite_quantile_rejects_the_series(key):
+    pv = {k: v for k, v in FULL_Q.items() if k != "q_0.5"} | {key: "NaN"}
+    resp = await _service().upload_forecasts(_request(_points(pv=pv)), user_id=1)
+    fatal = set(resp.errors) - set(resp.warnings)
+    assert len(fatal) == 1 and "3 forecast point(s) carry NaN or Infinity" in fatal.pop()
+    assert resp.success is False
+
+
+def test_non_finite_values_parse_from_json_and_are_flagged():
+    body = '{"ts": "2026-10-15T00:00:00Z", "value": NaN, "probabilistic_values": {"q_0.1": Infinity, "mean": NaN}}'
+    point = ForecastDataPoint.model_validate(json.loads(body))
+    assert not point.is_finite and point.non_finite_quantile_keys == ["q_0.1"]
+    assert ForecastDataPoint(ts=NOW, value=1.0, probabilistic_values={"mean": float("nan")}).is_finite
