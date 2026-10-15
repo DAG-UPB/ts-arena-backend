@@ -7,11 +7,13 @@ from app.core.dependencies import get_api_key
 from app.core.tracks import validate_track
 from app.database.connection import get_db_connection
 from app.repositories.arena_score_repository import ArenaScoreRepository
+from app.repositories.mase_history_repository import MaseHistoryRepository
 from app.schemas.arena_score import (
     ArenaScoreFiltersSchema,
     ArenaScoreLeaderboardSchema,
     ModelArenaScoresSchema,
 )
+from app.schemas.mase_history import MaseHistorySchema
 
 router = APIRouter(prefix="/api/v1", tags=["Models"])
 
@@ -396,3 +398,49 @@ def get_model_arena_scores(
         raise HTTPException(status_code=404, detail="Model not found")
 
     return result
+
+
+@router.get("/models/mase-30d-history", response_model=MaseHistorySchema)
+def get_mase_30d_history(
+    definition_id: Optional[int] = Query(
+        None,
+        description="Challenge definition ID (scope_type='definition')",
+        examples=[1]
+    ),
+    frequency_horizon: Optional[str] = Query(
+        None,
+        description="frequency::horizon combination (scope_type='frequency_horizon'), e.g., '00:15:00::1 day'",
+        examples=["00:15:00::1 day"]
+    ),
+    track: Optional[str] = Query(
+        None,
+        description="Keep one track only: 'reference' or 'open'. Omit for both. The field the relative MASE compares with is always all models.",
+        examples=["reference"]
+    ),
+    api_key: str = Depends(get_api_key),
+    conn = Depends(get_db_connection)
+):
+    """
+    Weekly 30-day MASE of every model in one scope.
+
+    One point per Monday 00:00 UTC since 2025-01-06. Each point covers the rounds that ended in
+    the 30 days before, so consecutive points share 23 days. Without a filter the scope is
+    global. Only one of `definition_id` and `frequency_horizon` can be given.
+
+    - `mase_30d`: geometric mean MASE over the model's scored tasks in the window, the value
+      the leaderboard shows as "MASE (30 days)". `null` below 80 % participation.
+    - `mase_rel_30d`: the model's MASE relative to the field. Per task, the field is the
+      geometric mean MASE of every model scored on it. 1 is the typical model, 0.9 is 10 %
+      lower error. It removes the season and the series mix, which move all models together.
+    - `participation_30d`: the model's share of the scope's tasks in the window.
+
+    Models with no value in any week are left out. Past weeks are recomputed on every refresh
+    from the current scores, so they follow rescoring and series exclusions.
+
+    **Headers:**
+    - X-API-Key: Valid API key required
+    """
+    track = validate_track(track)
+    scope_type, scope_id = resolve_scope(definition_id, frequency_horizon, None)
+    history = MaseHistoryRepository(conn).get_history(scope_type, scope_id, track)
+    return {"scope": {"type": scope_type, "id": scope_id}, "track": track, **history}

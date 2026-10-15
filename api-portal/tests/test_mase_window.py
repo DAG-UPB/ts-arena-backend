@@ -1,10 +1,20 @@
 """Displayed MASE/SQL over the 30-day window: participation rule, geometric mean, scope roll-up."""
+import asyncio
 import math
 from datetime import date, datetime, timezone
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from app.services.mase_window import aggregate_window, window_bounds
+from app.services.forecast_metrics import MASE_METHOD
+from app.services.mase_window import (
+    MIN_PARTICIPATION,
+    WINDOW_DAYS,
+    aggregate_window,
+    refresh_weekly_mase,
+    window_bounds,
+)
 
 HOURLY = ("01:00:00", "1 day")
 QUARTER_HOURLY = ("00:15:00", "1 day")
@@ -115,3 +125,61 @@ def test_window_is_the_30_full_days_before_the_ranking_date():
     start, end = window_bounds(date(2026, 10, 13))
     assert start == datetime(2026, 9, 13, tzinfo=timezone.utc)
     assert end == datetime(2026, 10, 13, tzinfo=timezone.utc)
+
+
+# --- the weekly view ----------------------------------------------------------
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MIGRATION = Path(__file__).resolve().parents[1] / "app/scripts/migrations/2026_weekly_mase_30d.sql"
+VIEW_START = "CREATE MATERIALIZED VIEW IF NOT EXISTS forecasts.weekly_mase_30d AS"
+VIEW_END = "ON forecasts.weekly_mase_30d (scope_type, scope_id, week);"
+
+
+def _view_block(sql: str) -> str:
+    start = sql.index(VIEW_START)
+    return sql[start:sql.index(VIEW_END, start) + len(VIEW_END)]
+
+
+def test_weekly_view_uses_the_current_mase_method():
+    assert f"f.method = '{MASE_METHOD}'" in _view_block(MIGRATION.read_text())
+
+
+def test_weekly_view_matches_init_db():
+    assert _view_block(MIGRATION.read_text()) == _view_block((REPO_ROOT / "init_db.sql").read_text())
+
+
+def test_weekly_view_applies_the_window_and_participation_rule():
+    block = _view_block(MIGRATION.read_text())
+    assert f"w.week - {WINDOW_DAYS} AND dd.end_day < w.week" in block
+    assert (
+        f"{MIN_PARTICIPATION.denominator} * mw.tasks >= {MIN_PARTICIPATION.numerator} * sw.scope_tasks"
+        in block
+    )
+
+
+class _ViewSession:
+    def __init__(self, exists):
+        self.exists = exists
+        self.statements = []
+        self.commits = 0
+
+    async def execute(self, statement):
+        self.statements.append(str(statement))
+        return SimpleNamespace(scalar=lambda: self.exists)
+
+    async def commit(self):
+        self.commits += 1
+
+
+def test_refresh_runs_concurrently_and_commits():
+    session = _ViewSession(exists=True)
+    assert asyncio.run(refresh_weekly_mase(session)) is True
+    assert session.statements[-1] == "REFRESH MATERIALIZED VIEW CONCURRENTLY forecasts.weekly_mase_30d"
+    assert session.commits == 1
+
+
+def test_refresh_is_skipped_while_the_view_is_missing():
+    session = _ViewSession(exists=False)
+    assert asyncio.run(refresh_weekly_mase(session)) is False
+    assert len(session.statements) == 1
+    assert session.commits == 0

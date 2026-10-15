@@ -5,6 +5,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from fractions import Fraction
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.forecasts.forecast_scores_repository import ForecastScoresRepository
@@ -12,6 +13,7 @@ from app.services.forecast_metrics import MASE_METHOD
 
 WINDOW_DAYS = 30
 MIN_PARTICIPATION = Fraction(4, 5)
+WEEKLY_VIEW = "forecasts.weekly_mase_30d"
 
 Scope = Tuple[str, Optional[str]]
 
@@ -91,3 +93,13 @@ async def compute_window_scores(session: AsyncSession, ranking_date: date) -> Li
     start, end = window_bounds(ranking_date)
     definitions, models = await ForecastScoresRepository(session).window_aggregates(start, end, MASE_METHOD)
     return aggregate_window(definitions, models)
+
+
+async def refresh_weekly_mase(session: AsyncSession) -> bool:
+    """Recompute the weekly 30-day MASE view; False while it does not exist."""
+    exists = await session.execute(text(f"SELECT to_regclass('{WEEKLY_VIEW}') IS NOT NULL"))
+    if not exists.scalar():
+        return False
+    await session.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {WEEKLY_VIEW}"))
+    await session.commit()
+    return True
