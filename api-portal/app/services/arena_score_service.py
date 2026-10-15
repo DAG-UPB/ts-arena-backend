@@ -37,14 +37,27 @@ class ScopeSums(NamedTuple):
 
     pairs: arena.PairSums
     rounds: List[Tuple[int, int, float, int]]  # (definition, round, registration start, tasks)
-    model_tasks: List[Tuple[int, int, int, int]]  # (definition, round, model, tasks)
+    model_tasks: List[Tuple[int, int, int, int]]  # (definition, round, model, full-count tasks)
 
 
-def _count_pairs(a: np.ndarray, b: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """The distinct (a, b) pairs in order, with the number of rows of each."""
+def _count_pairs(
+    a: np.ndarray, b: np.ndarray, where: Optional[np.ndarray] = None
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The distinct (a, b) pairs in order, with the number of rows of each (only rows in `where`)."""
     base = int(b.max()) + 1
-    key, count = np.unique(a * base + b, return_counts=True)
+    key, inverse = np.unique(a * base + b, return_inverse=True)
+    count = np.bincount(inverse.ravel(), weights=where, minlength=len(key)).astype(np.int64)
     return key // base, key % base, count
+
+
+def full_count(rnd: np.ndarray, series: np.ndarray, n_points: np.ndarray) -> np.ndarray:
+    """Whether each row has the most points of its task; only those rows earn coverage."""
+    base = int(series.max()) + 1
+    _, task = np.unique(rnd * base + series, return_inverse=True)
+    task = task.ravel()
+    most = np.zeros(task.max() + 1, dtype=n_points.dtype)
+    np.maximum.at(most, task, n_points)
+    return n_points == most[task]
 
 
 def naive_error(metric: str, rows: Mapping[str, np.ndarray]) -> np.ndarray:
@@ -82,7 +95,8 @@ def summarize_definition(definition_id: int, rows: Mapping[str, np.ndarray]) -> 
         task_round, _, _ = _count_pairs(rnd, series)
         round_ids, round_tasks = np.unique(task_round, return_counts=True)
         registered = rows["registered"][use][np.unique(rnd, return_index=True)[1]]
-        model_round, model_id, model_rows = _count_pairs(rnd, model)
+        full = full_count(rnd, series, rows["n_points"][use])
+        model_round, model_id, model_rows = _count_pairs(rnd, model, where=full)
         out[metric] = ScopeSums(
             pairs=pairs,
             rounds=[(definition_id, r, s, n) for r, s, n in
@@ -147,7 +161,7 @@ def rate_group(
     rounds_played: Counter = Counter()
     for _, _, model, tasks in sums.model_tasks:
         tasks_played[model] += tasks
-        rounds_played[model] += 1
+        rounds_played[model] += int(tasks > 0)
 
     return [
         {
