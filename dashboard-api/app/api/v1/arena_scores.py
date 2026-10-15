@@ -217,11 +217,12 @@ def get_arena_scores(
     - `unranked_disconnected`: The model has no comparison with the main group of models
       in the scope, so it has no score and no rank
     - `coverage`: The smallest share, over the challenge definitions of the scope that have
-      scored rounds since the model joined, of those rounds' tasks the model forecast (0 to 1)
+      scored rounds since the model joined, of those rounds' tasks the model forecast on all
+      of the task's points (0 to 1)
     - `weeks_played`: Calendar weeks in which the model was compared with other models
-    - `tasks_played`: Tasks (one series in one round) the model forecast. Counts every
-      forecast, also for tasks no other model forecast
-    - `rounds_played`: Rounds the model forecast
+    - `tasks_played`: Tasks (one series in one round) the model forecast on all of the task's
+      points, also tasks no other model forecast
+    - `rounds_played`: Rounds with at least one such task
 
     *Last 30 Days:*
     - `mase_30d`: Geometric mean MASE over the rounds that ended in the last 30 days.

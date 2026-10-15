@@ -238,8 +238,8 @@ def coverage(
 
     rounds:      (definition, round, registration_start, tasks), tasks = tasks of the round in
                  which anyone has a kept row
-    model_tasks: (definition, round, model, tasks), tasks = tasks of the round in which the
-                 model has a kept row
+    model_tasks: (definition, round, model, tasks), one per round in which the model has a kept
+                 row; tasks = those of its rows with the task's full point count, may be 0
     """
     rounds = list(rounds)
     position = {(d, r): k for k, (d, r, _, _) in enumerate(rounds)}
@@ -251,8 +251,8 @@ def coverage(
 
     per_model: Dict[Any, Tuple[List[int], List[float]]] = {}
     for d, r, model, tasks in model_tasks:
-        if tasks <= 0:
-            continue
+        if tasks < 0:
+            raise ValueError(f"model_tasks has a negative task count: {(d, r, model, tasks)}")
         if (d, r) not in position:
             raise ValueError(f"model_tasks refers to an unknown round: {(d, r)}")
         idx, count = per_model.setdefault(model, ([], []))
