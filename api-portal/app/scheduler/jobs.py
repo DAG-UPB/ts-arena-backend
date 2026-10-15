@@ -14,6 +14,7 @@ from app.services.forecast_scoring_service import ForecastScoringService
 from app.services.score_evaluation_service import ScoreEvaluationService
 from app.services.elo_ranking_service import EloRankingService
 from app.services.arena_score_service import compute_and_store_arena_scores
+from app.services.mase_window import refresh_weekly_mase
 from app.services.monitoring_service import (
     MonitoringService,
     ParticipationThresholds,
@@ -399,6 +400,21 @@ def _describe_arena_score_failure(failure: Dict[str, Any]) -> str:
     return f"{scope} [{failure['metric']}]: {first_line}"
 
 
+async def _refresh_weekly_mase(logger: logging.Logger) -> None:
+    """A failed refresh keeps the previous snapshot readable and does not fail the Arena Score job."""
+    started = time.monotonic()
+    try:
+        async with SessionLocal() as session:
+            refreshed = await refresh_weekly_mase(session)
+    except Exception as e:
+        logger.error(f"Weekly 30-day MASE refresh FAILED: {e}", exc_info=True)
+        return
+    if refreshed:
+        logger.info("Weekly 30-day MASE refreshed in %.1f s", time.monotonic() - started)
+    else:
+        logger.info("Weekly 30-day MASE skipped: its view does not exist yet.")
+
+
 @job_error_handler
 async def periodic_arena_score_calculation_job() -> None:
     """Rate every scope and metric into forecasts.daily_arena_scores. No-op until its tables exist."""
@@ -427,6 +443,7 @@ async def periodic_arena_score_calculation_job() -> None:
                 "Arena Score job: %d group(s) failed: %s",
                 len(failures), "; ".join(_describe_arena_score_failure(f) for f in failures),
             )
+        await _refresh_weekly_mase(logger)
     except Exception as e:
         logger.error(f"Arena Score calculation FAILED: {e}", exc_info=True)
         raise  # Re-raise to let decorator handle it

@@ -68,7 +68,10 @@ def _summary(**changes):
 @pytest.fixture
 def arena(monkeypatch):
     """The database and the service the job talks to, recording what it asks of them."""
-    state = SimpleNamespace(tables=True, statements=[], dates=[], error=None, summary=_summary())
+    state = SimpleNamespace(
+        tables=True, statements=[], dates=[], error=None, summary=_summary(),
+        refreshes=0, view=True, refresh_error=None,
+    )
 
     class Session:
         async def execute(self, statement):
@@ -87,8 +90,15 @@ def arena(monkeypatch):
             raise state.error
         return state.summary
 
+    async def refresh(session):
+        state.refreshes += 1
+        if state.refresh_error:
+            raise state.refresh_error
+        return state.view
+
     monkeypatch.setattr(jobs, "SessionLocal", Session)
     monkeypatch.setattr(jobs, "compute_and_store_arena_scores", compute)
+    monkeypatch.setattr(jobs, "refresh_weekly_mase", refresh)
     return state
 
 
@@ -157,6 +167,35 @@ def test_a_service_error_is_logged_and_stays_out_of_the_scheduler(arena, caplog)
     with caplog.at_level(logging.INFO, logger="challenge-scheduler"):
         asyncio.run(jobs.periodic_arena_score_calculation_job())
     assert any("database gone" in message for message in _messages(caplog, logging.ERROR))
+
+
+def test_refreshes_the_weekly_mase_after_the_scores(arena, caplog):
+    with caplog.at_level(logging.INFO, logger="challenge-scheduler"):
+        _run_job()
+    assert arena.refreshes == 1
+    assert any(m.startswith("Weekly 30-day MASE refreshed in ") for m in _messages(caplog))
+
+
+def test_no_refresh_when_the_arena_tables_are_missing(arena):
+    arena.tables = False
+    _run_job()
+    assert arena.refreshes == 0
+
+
+def test_a_missing_weekly_view_is_skipped_quietly(arena, caplog):
+    arena.view = False
+    with caplog.at_level(logging.INFO, logger="challenge-scheduler"):
+        _run_job()
+    assert "Weekly 30-day MASE skipped: its view does not exist yet." in _messages(caplog)
+    assert _messages(caplog, logging.ERROR) == []
+
+
+def test_a_failed_refresh_is_logged_and_does_not_fail_the_job(arena, caplog):
+    arena.refresh_error = RuntimeError("lock timeout")
+    with caplog.at_level(logging.INFO, logger="challenge-scheduler"):
+        _run_job()
+    assert any("Arena Score job done" in m for m in _messages(caplog))
+    assert any("Weekly 30-day MASE refresh FAILED: lock timeout" in m for m in _messages(caplog, logging.ERROR))
 
 
 # --- the schedule -----------------------------------------------------------
