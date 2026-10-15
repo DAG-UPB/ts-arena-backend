@@ -71,14 +71,14 @@ class ArenaScoreRowSchema(ModelFieldsSchema):
     unranked_disconnected: bool = Field(..., description="The model has no comparison with the main group of the scope: no score, no rank")
     coverage: Optional[float] = Field(
         None,
-        description="Smallest share, over the scope's challenge definitions with scored rounds since the model joined, of those rounds' tasks the model forecast (0 to 1)",
+        description="Smallest share, over the scope's challenge definitions with scored rounds since the model joined, of those rounds' tasks the model forecast on all of the task's points (0 to 1)",
     )
 
     weeks_played: int = Field(..., description="Calendar weeks in which the model was compared with other models")
     tasks_played: int = Field(
-        ..., description="Tasks (one series in one round) the model forecast, including tasks no other model forecast"
+        ..., description="Tasks (one series in one round) the model forecast on all of the task's points, including tasks no other model forecast"
     )
-    rounds_played: int = Field(..., description="Rounds the model forecast")
+    rounds_played: int = Field(..., description="Rounds with at least one such task")
 
     mase_30d: Optional[float] = Field(
         None, description="Geometric mean MASE over the last 30 days. Null below 80 % participation"

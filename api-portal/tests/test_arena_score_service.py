@@ -130,6 +130,31 @@ def test_the_naive_row_comes_from_the_row_with_the_most_points():
     assert sums.pairs.n_pairs == 1 and sums.pairs.skipped_points == 2  # B's 12 points pair with nobody
 
 
+def test_a_short_count_row_earns_no_coverage():
+    tasks = [(r, s, {A: 100.0 + r, B: 90.0 + 2 * r, D: 95.0}) for r in range(1, 5) for s in (LOAD, BIKES)]
+    rows = make_rows(tasks)
+    short = (rows["model_id"] == D) & (rows["round_id"] > 1)  # D leaves out a point in rounds 2 to 4
+    rows["n_points"][short] = POINTS - 1
+    sums = service.summarize_definition(7, rows)["point"]
+    assert sums.pairs.skipped_points == 6 * 3  # D against A, B and the naive forecast
+    assert [(r, n) for _, r, m, n in sums.model_tasks if m == D] == [(1, 2), (2, 0), (3, 0), (4, 0)]
+    assert sums.rounds == [(7, r, day_of(r) * 86400.0 + MORNING, 2) for r in range(1, 5)]
+
+    by_model = rated(sums)
+    assert by_model[D]["coverage"] == pytest.approx(2 / 8) and by_model[D]["low_coverage"]
+    assert (by_model[D]["rank_best"], by_model[D]["rank_worst"]) == (None, None)
+    assert (by_model[D]["tasks_played"], by_model[D]["rounds_played"]) == (2, 1)
+    assert (by_model[A]["coverage"], by_model[A]["tasks_played"], by_model[A]["rounds_played"]) == (1.0, 8, 4)
+
+
+def test_a_model_with_only_short_count_rows_is_kept_with_zero_coverage():
+    rows = make_rows([(r, LOAD, {A: 100.0, B: 90.0 + r, D: 80.0}) for r in range(1, 5)])
+    rows["n_points"][rows["model_id"] == D] = POINTS - 2
+    by_model = rated(service.summarize_definition(7, rows)["point"])
+    assert by_model[D]["coverage"] == 0.0 and by_model[D]["low_coverage"]
+    assert (by_model[D]["tasks_played"], by_model[D]["rounds_played"]) == (0, 0)
+
+
 def test_the_naive_sql_is_its_mae_over_the_scale():
     sums = service.summarize_definition(7, make_rows([(1, LOAD, {A: 10.0})], quantiles=(A,), naive=1.0, scale=4.0))
     for metric, naive_err in (("point", 10.0), ("probabilistic", 2.5)):

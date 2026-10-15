@@ -888,6 +888,14 @@ def test_rounds_without_tasks_count_as_seen_but_not_in_the_ratio():
         arena.coverage([(1, 1, 0, 2)], [(1, 9, "m", 1)])
 
 
+def test_a_round_without_full_count_tasks_still_marks_the_join():
+    rounds = [(1, 1, 0, 2), (1, 2, 1, 2)]
+    assert arena.coverage(rounds, [(1, 1, "m", 0), (1, 2, "m", 2)])["m"] == Coverage(True, 0.5)
+    assert arena.coverage(rounds, [(1, 1, "m", 0)])["m"] == Coverage(False, 0.0)
+    with pytest.raises(ValueError):
+        arena.coverage(rounds, [(1, 1, "m", -1)])
+
+
 def test_toy_coverage():
     rows = [(1, r, 28 * (r - 1), s, m) for r, s, errs in TOY for m in errs]
     assert coverage_of(rows) == {A: Coverage(True, 1.0), B: Coverage(True, 1.0), C: Coverage(True, 1.0)}

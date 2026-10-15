@@ -1,12 +1,20 @@
 """Forecast schemas aligned with forecasts.forecasts table structure."""
 import logging
+import math
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-from app.services.forecast_metrics import clean_probabilistic_values
+from app.services.forecast_metrics import canonical_quantile_key, clean_probabilistic_values
 
 logger = logging.getLogger(__name__)
+
+
+def _finite(raw: Any) -> bool:
+    try:
+        return math.isfinite(float(raw))
+    except (TypeError, ValueError):
+        return False
 
 # ==========================================================================
 # Upload Schemas
@@ -25,6 +33,15 @@ class ForecastDataPoint(BaseModel):
         description="Keys discarded while cleaning this point — reported per series by the "
                     "upload service, never persisted.",
     )
+    non_finite_quantile_keys: List[str] = Field(
+        default_factory=list,
+        exclude=True,
+        description="Decile keys sent with NaN or Infinity; the upload service rejects the series.",
+    )
+
+    @property
+    def is_finite(self) -> bool:
+        return math.isfinite(self.value) and not self.non_finite_quantile_keys
 
     @model_validator(mode="before")
     @classmethod
@@ -42,8 +59,14 @@ class ForecastDataPoint(BaseModel):
         """
         if not isinstance(data, dict):
             return data
-        cleaned, dropped = clean_probabilistic_values(data.get("probabilistic_values"))
-        return {**data, "probabilistic_values": cleaned, "dropped_probabilistic_keys": dropped}
+        raw = data.get("probabilistic_values")
+        cleaned, dropped = clean_probabilistic_values(raw)
+        non_finite = [
+            str(key) for key, value in raw.items()
+            if canonical_quantile_key(key) is not None and not _finite(value)
+        ] if isinstance(raw, dict) else []
+        return {**data, "probabilistic_values": cleaned, "dropped_probabilistic_keys": dropped,
+                "non_finite_quantile_keys": non_finite}
 
 
 class ForecastSeriesUpload(BaseModel):
