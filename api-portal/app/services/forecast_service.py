@@ -188,6 +188,19 @@ class ForecastService:
                     )
                     continue
 
+            non_finite = [p.ts for p in series_upload.forecasts if not p.is_finite]
+            if non_finite:
+                error_msg = (
+                    f"Non-finite values for series '{challenge_series_name}': "
+                    f"{len(non_finite)} forecast point(s) carry NaN or Infinity in the value or a "
+                    f"quantile, first at {_as_utc(min(non_finite)).isoformat()}; series rejected"
+                )
+                hard_errors.append(error_msg)
+                logger.warning(
+                    f"round={round_id} model={model_id} series={series_id}: {error_msg}"
+                )
+                continue
+
             # Prepare forecasts.
             # Repair any quantile crossings (isotonic sort per point) so stored quantiles are
             # monotone; count repairs to surface as a non-fatal upload warning.
