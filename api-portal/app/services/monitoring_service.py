@@ -17,6 +17,9 @@ side effect of backend #87's round cancellation, and again nobody was told. The 
 on every `daily_rankings` write and reports both directions — an *intended* removal
 (backend #64 dropped ten models on 2026-08-24) should announce itself too.
 
+Both checks report a finding once (backend #111): the ranking job rewrites the same date
+four times a day, and a dead runner stays dead for days.
+
 Three design decisions worth keeping, all forced by the data:
 
 * **Cancelled rounds still count.** backend #87 cancelled every `smard_dam` round between
@@ -38,7 +41,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -142,6 +145,7 @@ class RankingMembershipDiff:
     previous_date: Optional[date]
     entered: Sequence[str]
     left: Sequence[str]
+    since_earlier_run: bool = False
 
     @property
     def changed(self) -> bool:
@@ -236,29 +240,14 @@ _PREVIOUS_RANKING_DATE_SQL = text(
 )
 
 
-_RANKING_MEMBERSHIP_SQL = text(
+_GLOBAL_MEMBERSHIP_SQL = text(
     """
-    WITH cur_m AS (
-        SELECT model_id
-        FROM forecasts.daily_rankings
-        WHERE scope_type = 'global'
-          AND metric = :metric
-          AND calculation_date = :calculation_date
-    ),
-    prev_m AS (
-        SELECT model_id
-        FROM forecasts.daily_rankings
-        WHERE scope_type = 'global'
-          AND metric = :metric
-          AND calculation_date = :previous_date
-    )
-    SELECT (c.model_id IS NULL) AS has_left,
-           mi.name AS model_name
-    FROM cur_m c
-    FULL OUTER JOIN prev_m p USING (model_id)
-    JOIN models.model_info mi ON mi.id = coalesce(c.model_id, p.model_id)
-    WHERE c.model_id IS NULL OR p.model_id IS NULL
-    ORDER BY has_left, model_name
+    SELECT dr.model_id, mi.name AS model_name
+    FROM forecasts.daily_rankings dr
+    JOIN models.model_info mi ON mi.id = dr.model_id
+    WHERE dr.scope_type = 'global'
+      AND dr.metric = :metric
+      AND dr.calculation_date = :calculation_date
     """
 )
 
@@ -315,10 +304,37 @@ class MonitoringService:
 
     # --- Check 2: global ranking membership diff ----------------------------------
 
-    async def diff_global_ranking_membership(
+    async def global_ranking_membership(
         self, metric: str, calculation_date: date
+    ) -> Dict[int, str]:
+        """`global` leaderboard members for `metric` on `calculation_date`, id -> name."""
+        result = await self.db.execute(
+            _GLOBAL_MEMBERSHIP_SQL,
+            {"metric": metric, "calculation_date": calculation_date},
+        )
+        return {row.model_id: row.model_name for row in result.all()}
+
+    async def diff_global_ranking_membership(
+        self,
+        metric: str,
+        calculation_date: date,
+        earlier_today: Optional[Mapping[int, str]] = None,
     ) -> RankingMembershipDiff:
-        """Diff `global` membership for `metric` against the previous calculation date."""
+        """Diff `global` membership for `metric` against what was announced last.
+
+        The ranking job rewrites the same `calculation_date` several times a day. When an
+        earlier run already stored that date (`earlier_today`, snapshotted before this run
+        wrote), the diff is against it, so a change is reported once rather than on every
+        later run of the day. Otherwise it is against the previous calculation date.
+        """
+        current = await self.global_ranking_membership(metric, calculation_date)
+
+        if earlier_today:
+            return _membership_diff(
+                metric, calculation_date, calculation_date, earlier_today, current,
+                since_earlier_run=True,
+            )
+
         previous_date = await self.db.scalar(
             _PREVIOUS_RANKING_DATE_SQL,
             {"metric": metric, "calculation_date": calculation_date},
@@ -339,31 +355,53 @@ class MonitoringService:
                 left=[],
             )
 
-        result = await self.db.execute(
-            _RANKING_MEMBERSHIP_SQL,
-            {
-                "metric": metric,
-                "calculation_date": calculation_date,
-                "previous_date": previous_date,
-            },
-        )
-        rows = result.all()
+        previous = await self.global_ranking_membership(metric, previous_date)
+        return _membership_diff(metric, calculation_date, previous_date, previous, current)
 
-        return RankingMembershipDiff(
-            metric=metric,
-            calculation_date=calculation_date,
-            previous_date=previous_date,
-            entered=[r.model_name for r in rows if not r.has_left],
-            left=[r.model_name for r in rows if r.has_left],
-        )
+
+def _membership_diff(
+    metric: str,
+    calculation_date: date,
+    previous_date: date,
+    previous: Mapping[int, str],
+    current: Mapping[int, str],
+    since_earlier_run: bool = False,
+) -> RankingMembershipDiff:
+    return RankingMembershipDiff(
+        metric=metric,
+        calculation_date=calculation_date,
+        previous_date=previous_date,
+        entered=sorted(current[m] for m in current.keys() - previous.keys()),
+        left=sorted(previous[m] for m in previous.keys() - current.keys()),
+        since_earlier_run=since_earlier_run,
+    )
+
+
+def split_new_findings(
+    current: Sequence[ParticipationFinding],
+    previous: Sequence[ParticipationFinding],
+) -> Tuple[List[ParticipationFinding], List[ParticipationFinding]]:
+    """Split `current` into pairs not flagged in `previous` and pairs that already were.
+
+    The check runs daily and a dead runner stays dead, so without this the same pairs
+    would fill the channel every morning until someone fixed or retired the model.
+    """
+    seen = {(f.model_id, f.definition_id) for f in previous}
+    new = [f for f in current if (f.model_id, f.definition_id) not in seen]
+    ongoing = [f for f in current if (f.model_id, f.definition_id) in seen]
+    return new, ongoing
 
 
 def build_participation_alert(
     findings: Sequence[ParticipationFinding],
     thresholds: ParticipationThresholds,
     as_of: datetime,
+    ongoing: Sequence[ParticipationFinding] = (),
 ) -> Alert:
     """Render findings as one digest grouped by model.
+
+    `ongoing` are pairs already reported on an earlier day; they get one summary line
+    instead of being listed again.
 
     One message per run, not one per finding: a dead runner takes out every definition it
     was submitting to at once, and sixteen near-identical alerts would bury the signal it
@@ -395,6 +433,14 @@ def build_participation_alert(
         lines.append(f"{model_name}:")
         lines.extend(f"  - {item.describe(thresholds)}" for item in items)
 
+    if ongoing:
+        ongoing_models = sorted({f.model_name for f in ongoing})
+        lines.append("")
+        lines.append(
+            f"Still flagged from earlier days, not repeated: {len(ongoing)} pair(s) across "
+            f"{', '.join(ongoing_models)}"
+        )
+
     lines.append("")
     lines.append(
         f"Window: last {thresholds.recent_n} rounds vs the {thresholds.baseline_n} before them, "
@@ -405,10 +451,13 @@ def build_participation_alert(
 
 def build_ranking_membership_alert(diff: RankingMembershipDiff) -> Alert:
     """Render a membership change. Intended changes are reported too, by design."""
+    if diff.since_earlier_run:
+        span = f"{diff.calculation_date}, since the earlier run that day"
+    else:
+        span = f"{diff.previous_date} -> {diff.calculation_date}"
     title = (
         f"Global leaderboard membership changed [{diff.metric}]: "
-        f"{len(diff.left)} left, {len(diff.entered)} entered "
-        f"({diff.previous_date} -> {diff.calculation_date})"
+        f"{len(diff.left)} left, {len(diff.entered)} entered ({span})"
     )
     lines: List[str] = []
     if diff.left:
@@ -423,8 +472,40 @@ def build_ranking_membership_alert(diff: RankingMembershipDiff) -> Alert:
     return Alert(title=title, lines=lines)
 
 
-async def alert_on_ranking_membership_change(
+async def snapshot_global_ranking_membership(
     session: AsyncSession, metric: str, calculation_date: date
+) -> Optional[Dict[int, str]]:
+    """Membership an earlier run already stored for `calculation_date`. Never raises.
+
+    Taken before the ranking job overwrites the date, and handed back to
+    `alert_on_ranking_membership_change`. None on failure, which falls back to diffing
+    against the previous date.
+    """
+    try:
+        return await MonitoringService(session).global_ranking_membership(
+            metric, calculation_date
+        )
+    except Exception as exc:  # noqa: BLE001 - monitoring must never break the caller
+        logger.error(
+            "Ranking membership snapshot failed for metric '%s' on %s: %s",
+            metric,
+            calculation_date,
+            exc,
+            exc_info=True,
+        )
+        # The ranking run reuses this session; clear the aborted transaction first.
+        try:
+            await session.rollback()
+        except Exception:  # noqa: BLE001
+            logger.error("Rollback after the failed snapshot failed too.", exc_info=True)
+        return None
+
+
+async def alert_on_ranking_membership_change(
+    session: AsyncSession,
+    metric: str,
+    calculation_date: date,
+    earlier_today: Optional[Mapping[int, str]] = None,
 ) -> Optional[RankingMembershipDiff]:
     """Run check 2 and alert if membership moved. Never raises.
 
@@ -433,7 +514,9 @@ async def alert_on_ranking_membership_change(
     """
     try:
         service = MonitoringService(session)
-        diff = await service.diff_global_ranking_membership(metric, calculation_date)
+        diff = await service.diff_global_ranking_membership(
+            metric, calculation_date, earlier_today
+        )
         if not diff.changed:
             logger.info(
                 "Global ranking membership [%s] unchanged vs %s.", metric, diff.previous_date
