@@ -3,7 +3,7 @@ import asyncio
 import logging
 import functools
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Callable, Awaitable
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +19,7 @@ from app.services.monitoring_service import (
     MonitoringService,
     ParticipationThresholds,
     build_participation_alert,
+    split_new_findings,
 )
 from app.scheduler.dependencies import get_scheduler
 
@@ -458,6 +459,7 @@ async def periodic_participation_check_job() -> None:
     happens inside the upload handler, so no upload means no request at all. The only
     evidence is the absence of `challenges.participants` rows, so this is the one check
     that can see it. Emits a single grouped digest per run, or nothing when all is well.
+    Only pairs not already flagged a day earlier are listed (backend-111).
     """
     logger = logging.getLogger("challenge-scheduler")
     logger.info("Starting participation check job")
@@ -471,16 +473,28 @@ async def periodic_participation_check_job() -> None:
             findings = await service.check_participation_drop(
                 as_of=as_of, thresholds=thresholds
             )
+            if not findings:
+                logger.info("Participation check: no model/challenge pair below threshold.")
+                return
+            # The same check as of the previous daily run, replayed from stored data.
+            previous = await service.check_participation_drop(
+                as_of=as_of - timedelta(days=1), thresholds=thresholds
+            )
 
-        if not findings:
-            logger.info("Participation check: no model/challenge pair below threshold.")
+        new, ongoing = split_new_findings(findings, previous)
+        if not new:
+            logger.info(
+                "Participation check: %d pair(s) below threshold, all already reported.",
+                len(ongoing),
+            )
             return
 
         logger.info(
-            "Participation check: %d model/challenge pair(s) below threshold; alerting.",
-            len(findings),
+            "Participation check: %d new pair(s) below threshold (%d already reported); alerting.",
+            len(new),
+            len(ongoing),
         )
-        await send_alert_async(build_participation_alert(findings, thresholds, as_of))
+        await send_alert_async(build_participation_alert(new, thresholds, as_of, ongoing))
 
     except Exception as e:
         logger.exception(f"Failed to run participation check: {e}")

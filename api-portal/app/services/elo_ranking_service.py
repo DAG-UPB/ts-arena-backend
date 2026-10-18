@@ -8,7 +8,10 @@ import numpy as np
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
-from app.services.monitoring_service import alert_on_ranking_membership_change
+from app.services.monitoring_service import (
+    alert_on_ranking_membership_change,
+    snapshot_global_ranking_membership,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +115,9 @@ class EloRankingService:
         """
         total_start = time.time()
         calc_date = calculation_date or date.today()
-        
+        # Before this run overwrites the date, so the membership alert reports a change once.
+        earlier_today = await snapshot_global_ranking_membership(self.session, metric, calc_date)
+
         results = {
             "global": [],
             "per_definition": [],
@@ -217,7 +222,7 @@ class EloRankingService:
         # global rows at all is precisely the case where everyone dropped out.
         # alert_on_ranking_membership_change swallows its own failures — monitoring must
         # never fail the calculation it observes.
-        await alert_on_ranking_membership_change(self.session, metric, calc_date)
+        await alert_on_ranking_membership_change(self.session, metric, calc_date, earlier_today)
 
         return results
 

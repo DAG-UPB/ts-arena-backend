@@ -20,6 +20,8 @@ from app.services.monitoring_service import (
     alert_on_ranking_membership_change,
     build_participation_alert,
     build_ranking_membership_alert,
+    snapshot_global_ranking_membership,
+    split_new_findings,
 )
 
 
@@ -172,6 +174,47 @@ def test_participation_digest_reports_the_window_used():
     assert "last 7 rounds vs the 28 before them" in alert.render()
 
 
+def test_split_keeps_only_pairs_not_flagged_the_day_before():
+    """A retired model stays silent for weeks; it must not fill the channel daily (backend-111)."""
+    old = _finding(model_id=1, definition_id=1)
+    same_model_new_definition = _finding(model_id=1, definition_id=2)
+    other_model = _finding(model_id=2, definition_id=1)
+
+    new, ongoing = split_new_findings(
+        [old, same_model_new_definition, other_model], previous=[old]
+    )
+
+    assert new == [same_model_new_definition, other_model]
+    assert ongoing == [old]
+
+
+def test_split_with_nothing_new_returns_no_new_findings():
+    old = _finding(model_id=1, definition_id=1)
+    new, ongoing = split_new_findings([old], previous=[old])
+    assert new == [] and ongoing == [old]
+
+
+def test_participation_digest_summarises_ongoing_pairs_in_one_line():
+    thresholds = ParticipationThresholds()
+    ongoing = [
+        _finding(model_name="moment-small", definition_id=1),
+        _finding(model_name="moment-small", definition_id=2),
+        _finding(model_name="moment-large", definition_id=1),
+    ]
+    alert = build_participation_alert(
+        [_finding(model_name="Prophet", miss_streak=6)],
+        thresholds,
+        datetime(2026, 10, 18, 4, 30, tzinfo=timezone.utc),
+        ongoing,
+    )
+    text = alert.render()
+
+    assert "1 model/challenge pair(s) across 1 model(s)" in alert.title
+    assert "Prophet:" in text
+    assert "moment-small:" not in text
+    assert "not repeated: 3 pair(s) across moment-large, moment-small" in text
+
+
 # --- ranking membership ----------------------------------------------------------
 
 
@@ -204,8 +247,8 @@ def test_membership_alert_names_models_and_direction():
 
 
 class _FakeResultRow:
-    def __init__(self, has_left, model_name):
-        self.has_left = has_left
+    def __init__(self, model_id, model_name):
+        self.model_id = model_id
         self.model_name = model_name
 
 
@@ -218,46 +261,85 @@ class _FakeResult:
 
 
 class _FakeSession:
-    """Answers the two queries the diff makes: previous date, then the membership rows."""
+    """Answers the previous-date lookup and the per-date membership query."""
 
-    def __init__(self, previous_date, rows):
+    def __init__(self, previous_date, membership):
         self._previous_date = previous_date
-        self._rows = rows
+        self._membership = membership  # date -> {model_id: name}
 
     async def scalar(self, query, params=None):
         return self._previous_date
 
     async def execute(self, query, params=None):
-        return _FakeResult(self._rows)
+        members = self._membership.get(params["calculation_date"], {})
+        return _FakeResult([_FakeResultRow(i, n) for i, n in members.items()])
+
+
+D10, D11 = date(2026, 9, 10), date(2026, 9, 11)
 
 
 def test_first_ever_calculation_does_not_announce_the_whole_leaderboard():
-    service = MonitoringService(_FakeSession(previous_date=None, rows=[]))
-    diff = asyncio.run(service.diff_global_ranking_membership("mase", date(2026, 9, 11)))
+    session = _FakeSession(previous_date=None, membership={D11: {1: "Chronos-2"}})
+    diff = asyncio.run(MonitoringService(session).diff_global_ranking_membership("mase", D11))
 
     assert diff.previous_date is None
     assert diff.changed is False
 
 
 def test_diff_splits_rows_into_entered_and_left():
-    rows = [
-        _FakeResultRow(has_left=False, model_name="Chronos-2"),
-        _FakeResultRow(has_left=True, model_name="MLForecast"),
-    ]
-    service = MonitoringService(_FakeSession(previous_date=date(2026, 9, 10), rows=rows))
-    diff = asyncio.run(service.diff_global_ranking_membership("sql", date(2026, 9, 11)))
+    session = _FakeSession(
+        previous_date=D10,
+        membership={D10: {2: "MLForecast", 3: "AutoETS"}, D11: {1: "Chronos-2", 3: "AutoETS"}},
+    )
+    diff = asyncio.run(MonitoringService(session).diff_global_ranking_membership("sql", D11))
 
     assert diff.entered == ["Chronos-2"]
     assert diff.left == ["MLForecast"]
     assert diff.changed is True
+    assert diff.since_earlier_run is False
+
+
+def test_later_run_of_the_same_day_diffs_against_the_earlier_run():
+    """The 18:00 run must not re-announce what the 12:00 run already reported (backend-111)."""
+    session = _FakeSession(
+        previous_date=D10,
+        membership={D10: {2: "MLForecast"}, D11: {1: "Chronos-2", 2: "MLForecast"}},
+    )
+    earlier_today = {1: "Chronos-2", 2: "MLForecast"}
+    diff = asyncio.run(
+        MonitoringService(session).diff_global_ranking_membership("mase", D11, earlier_today)
+    )
+
+    assert diff.changed is False
+
+
+def test_later_run_reports_only_what_moved_since_the_earlier_run():
+    session = _FakeSession(previous_date=D10, membership={D11: {1: "Chronos-2", 4: "TiRex"}})
+    earlier_today = {1: "Chronos-2", 2: "MLForecast"}
+    diff = asyncio.run(
+        MonitoringService(session).diff_global_ranking_membership("mase", D11, earlier_today)
+    )
+
+    assert diff.entered == ["TiRex"]
+    assert diff.left == ["MLForecast"]
+    assert diff.since_earlier_run is True
+    assert "since the earlier run that day" in build_ranking_membership_alert(diff).title
 
 
 # --- the never-break-the-caller contract -----------------------------------------
 
 
 class _ExplodingSession:
+    rolled_back = False
+
     async def scalar(self, query, params=None):
         raise RuntimeError("database is on fire")
+
+    async def execute(self, query, params=None):
+        raise RuntimeError("database is on fire")
+
+    async def rollback(self):
+        self.rolled_back = True
 
 
 def test_membership_check_swallows_its_own_failure():
@@ -270,6 +352,15 @@ def test_membership_check_swallows_its_own_failure():
     assert result is None
 
 
+def test_snapshot_swallows_its_own_failure_and_clears_the_transaction():
+    """It runs before the ranking writes, on the same session they use."""
+    session = _ExplodingSession()
+    result = asyncio.run(snapshot_global_ranking_membership(session, "mase", D11))
+
+    assert result is None
+    assert session.rolled_back is True
+
+
 def test_membership_check_is_silent_when_membership_is_unchanged(monkeypatch):
     sent = []
 
@@ -278,8 +369,8 @@ def test_membership_check_is_silent_when_membership_is_unchanged(monkeypatch):
         return True
 
     monkeypatch.setattr("app.services.monitoring_service.send_alert_async", _capture)
-    session = _FakeSession(previous_date=date(2026, 9, 10), rows=[])
-    diff = asyncio.run(alert_on_ranking_membership_change(session, "mase", date(2026, 9, 11)))
+    session = _FakeSession(previous_date=D10, membership={D10: {1: "A"}, D11: {1: "A"}})
+    diff = asyncio.run(alert_on_ranking_membership_change(session, "mase", D11))
 
     assert diff is not None and diff.changed is False
     assert sent == []
@@ -293,11 +384,8 @@ def test_membership_check_alerts_when_membership_moved(monkeypatch):
         return True
 
     monkeypatch.setattr("app.services.monitoring_service.send_alert_async", _capture)
-    session = _FakeSession(
-        previous_date=date(2026, 9, 10),
-        rows=[_FakeResultRow(has_left=True, model_name="MLForecast")],
-    )
-    diff = asyncio.run(alert_on_ranking_membership_change(session, "mase", date(2026, 9, 11)))
+    session = _FakeSession(previous_date=D10, membership={D10: {2: "MLForecast"}, D11: {}})
+    diff = asyncio.run(alert_on_ranking_membership_change(session, "mase", D11))
 
     assert diff is not None and diff.changed is True
     assert len(sent) == 1
