@@ -456,8 +456,9 @@ class ChallengeRoundRepository:
                 SELECT 
                     r.id, 
                     r.created_at, 
-                    r.start_time, 
+                    r.start_time,
                     r.end_time,
+                    r.registration_end,
                     -- Use calculated_at from scores where final_evaluation is true as evaluation time
                     -- If no evaluation yet, use NOW() for actuals (or NULL if strictly after eval)
                     COALESCE(
@@ -489,7 +490,7 @@ class ChallengeRoundRepository:
                       AND a.ts >= ri.start_time 
                       AND a.ts <= ri.end_time
                 ) as actuals,
-                -- Forecast Data (grouped by readable_id)
+                -- Forecast Data (grouped by readable_id); none until registration has closed
                 (
                     SELECT COALESCE(
                         json_object_agg(
@@ -503,10 +504,12 @@ class ChallengeRoundRepository:
                         ), '{}'::json
                     )
                     FROM (
-                        SELECT DISTINCT mi.readable_id 
+                        SELECT DISTINCT mi.readable_id
                         FROM forecasts.forecasts f
                         JOIN models.model_info mi ON f.model_id = mi.id
+                        CROSS JOIN round_info ri
                         WHERE f.round_id = sp.round_id AND f.series_id = sp.series_id
+                          AND ri.registration_end <= NOW()
                     ) f
                 ) as forecasts
             FROM challenges.series_pseudo sp
