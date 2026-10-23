@@ -173,7 +173,12 @@ def pair_sums(round_id, series_id, model_id, err, n_points, day, beta: float = 1
                 a, b = pi[one_zero], pj[one_zero]
                 zero.extend(zip(r[a].tolist(), s[a].tolist(), m[a].tolist(), m[b].tolist()))
             both = zi & zj
-            y = np.where(both, 0.5, ej / np.where(both, 1.0, ei + ej))[keep]
+            # Normalize only when the sum would overflow, preserving ordinary
+            # arithmetic while keeping the graded ratio of two finite errors.
+            overflow = ei > np.finfo(np.float64).max - ej
+            scale = np.where(overflow, np.maximum(ei, ej), 1.0)
+            si, sj = ei / scale, ej / scale
+            y = np.where(both, 0.5, sj / np.where(both, 1.0, si + sj))[keep]
             if not len(y):
                 continue
             n_pairs += len(y)
