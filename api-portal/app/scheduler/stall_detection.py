@@ -9,6 +9,7 @@ not notice.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import text
@@ -27,12 +28,17 @@ _RESTORE_RUNNING = text(
     """
 )
 
+# Mirrors acquire_schedules (not paused, lease free). Rows held by this scheduler are
+# skipped: an undeserializable row stays leased to it without ever being released, which
+# a restart would not fix. Times come from the app clock, like APScheduler's own.
 _FIND_OVERDUE = text(
     """
     SELECT s.id
       FROM schedules s
-     WHERE s.next_fire_time < now() - make_interval(secs => :grace_seconds)
-       AND (s.acquired_by IS NULL OR s.acquired_until < now())
+     WHERE s.next_fire_time < :cutoff
+       AND s.paused IS FALSE
+       AND (s.acquired_by IS NULL OR s.acquired_until < :now)
+       AND s.acquired_by IS DISTINCT FROM :identity
      ORDER BY s.id
     """
 )
@@ -41,6 +47,7 @@ _FIND_OVERDUE = text(
 async def find_overdue_schedules(
     database_url: str,
     grace_seconds: float,
+    identity: Optional[str] = None,
     logger: Optional[logging.Logger] = None,
 ) -> list[str]:
     """Return ids of unacquired schedules whose fire time passed more than ``grace_seconds`` ago.
@@ -49,14 +56,23 @@ async def find_overdue_schedules(
     triggers a restart.
     """
     log = logger or logging.getLogger("challenge-scheduler")
+    now = datetime.now(timezone.utc)
     engine = create_async_engine(database_url)
     try:
         async with engine.begin() as conn:
+            await conn.execute(text("SET LOCAL statement_timeout = '10s'"))
             if not (await conn.execute(_SCHEDULES_PRESENT)).scalar():
                 return []
             if (await conn.execute(_RESTORE_RUNNING)).scalar():
                 return []
-            rows = await conn.execute(_FIND_OVERDUE, {"grace_seconds": grace_seconds})
+            rows = await conn.execute(
+                _FIND_OVERDUE,
+                {
+                    "cutoff": now - timedelta(seconds=grace_seconds),
+                    "now": now,
+                    "identity": identity,
+                },
+            )
             return [row.id for row in rows.fetchall()]
     except Exception as exc:
         log.warning(f"Could not check for overdue schedules: {exc}")

@@ -43,6 +43,10 @@ ORPHANED_COUNTER_CONFIRMATIONS = 2
 STALL_CHECK_INTERVAL_SECONDS = 300.0
 STALL_GRACE_SECONDS = 300.0
 STALL_CONFIRMATIONS = 2
+# A stall that is back within this window is not fixed by restarting; restarting again
+# would only cancel running jobs over and over.
+STALL_RESTART_COOLDOWN_SECONDS = 3600.0
+RESTART_RETRY_INTERVAL_SECONDS = 60.0
 
 ARENA_SCORE_SCHEDULE_ID = "periodic_arena_score_calculation"
 
@@ -79,6 +83,8 @@ class ChallengeScheduler:
         # _check_for_orphaned_counters.
         self._orphan_watch: dict[str, tuple[int, int]] = {}
         self._stall_observations = 0
+        self._last_stall_restart: Optional[float] = None
+        self._restart_pending = False
 
     def _create_scheduler(self) -> AsyncScheduler:
         """Create a new AsyncScheduler instance with the configured data store."""
@@ -583,6 +589,7 @@ class ChallengeScheduler:
         loop = asyncio.get_running_loop()
         next_orphan_check = loop.time() + ORPHANED_COUNTER_CHECK_INTERVAL_SECONDS
         next_stall_check = loop.time() + STALL_CHECK_INTERVAL_SECONDS
+        next_restart_retry = loop.time()
 
         while not self._shutdown_event.is_set():
             try:
@@ -602,10 +609,34 @@ class ChallengeScheduler:
                     )
                     await self._check_for_orphaned_counters()
 
+                # A failed restart leaves _started False, which every other branch
+                # requires; without this the scheduler stays dead for good.
+                if (
+                    not self._started
+                    and self._restart_pending
+                    and loop.time() >= next_restart_retry
+                ):
+                    next_restart_retry = loop.time() + RESTART_RETRY_INTERVAL_SECONDS
+                    if self._restart_count >= self._max_restart_attempts:
+                        self._restart_count = 0
+                    await self._attempt_restart()
+                    continue
+
                 if self._started and loop.time() >= next_stall_check:
                     next_stall_check = loop.time() + STALL_CHECK_INTERVAL_SECONDS
                     if await self._check_for_stall() and not self._shutdown_event.is_set():
-                        await self._attempt_restart()
+                        if (
+                            self._last_stall_restart is not None
+                            and loop.time() - self._last_stall_restart
+                            < STALL_RESTART_COOLDOWN_SECONDS
+                        ):
+                            self.logger.error(
+                                "Scheduler still stalled after a restart within the "
+                                "cooldown; not restarting again. Needs investigation."
+                            )
+                        else:
+                            self._last_stall_restart = loop.time()
+                            await self._attempt_restart()
 
                 # Check if scheduler task has crashed (completed unexpectedly)
                 if self._started and self._scheduler_task:
@@ -678,7 +709,10 @@ class ChallengeScheduler:
     async def _check_for_stall(self) -> bool:
         """True once overdue, unacquired schedules are seen on consecutive checks."""
         overdue = await find_overdue_schedules(
-            self._database_url, STALL_GRACE_SECONDS, self.logger
+            self._database_url,
+            STALL_GRACE_SECONDS,
+            identity=self.scheduler.identity,
+            logger=self.logger,
         )
         if not overdue:
             self._stall_observations = 0
@@ -772,10 +806,12 @@ class ChallengeScheduler:
 
             # Reset restart counter on successful restart
             self._restart_count = 0
+            self._restart_pending = False
 
         except Exception as e:
             self.logger.error(
                 f"Failed to restart scheduler (attempt {self._restart_count}): {e}",
                 exc_info=True
             )
-            # Will retry on next monitoring cycle
+            # The monitor retries every RESTART_RETRY_INTERVAL_SECONDS
+            self._restart_pending = True

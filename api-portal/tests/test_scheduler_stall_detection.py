@@ -26,10 +26,11 @@ def sched() -> ChallengeScheduler:
 
 @pytest.fixture
 def overdue(monkeypatch):
-    state = {"ids": []}
+    state = {"ids": [], "identity": None}
 
-    async def fake_find(database_url, grace_seconds, logger=None):
+    async def fake_find(database_url, grace_seconds, identity=None, logger=None):
         assert database_url == DB_URL
+        state["identity"] = identity
         return list(state["ids"])
 
     monkeypatch.setattr(scheduler_module, "find_overdue_schedules", fake_find)
@@ -56,6 +57,13 @@ def test_confirmed_stall_restarts(sched, overdue):
     assert _check(sched, times=STALL_CONFIRMATIONS)[-1] is True
 
 
+def test_own_identity_is_excluded(sched, overdue):
+    """Rows leased to this scheduler (e.g. undeserializable ones) never count as a stall."""
+    _check(sched)
+
+    assert overdue["identity"] == sched.scheduler.identity
+
+
 def test_transient_overdue_resets_confirmation(sched, overdue):
     overdue["ids"] = ["periodic_forecast_scoring"]
     _check(sched)
@@ -67,35 +75,111 @@ def test_transient_overdue_resets_confirmation(sched, overdue):
     assert _check(sched) == [False]
 
 
-def test_confirmation_restarts_after_a_restart(sched, overdue):
+def test_confirmation_count_resets_after_a_confirmed_stall(sched, overdue):
     overdue["ids"] = ["periodic_forecast_scoring"]
     assert _check(sched, times=STALL_CONFIRMATIONS)[-1] is True
 
     assert _check(sched) == [False]
 
 
-def test_monitor_restarts_on_confirmed_stall(sched, monkeypatch):
-    """The monitor calls the existing restart path once the stall is confirmed."""
-    restarts = []
-    checks = iter([False, True])
-
-    async def fake_check():
-        return next(checks)
-
-    async def fake_restart():
-        restarts.append(True)
-        sched._shutdown_event.set()
-
+@pytest.fixture
+def fast_monitor(monkeypatch, sched):
+    """Run the monitor loop without waiting; each check interval elapses immediately."""
     async def fast_sleep(_seconds):
         return None
 
     monkeypatch.setattr(scheduler_module, "STALL_CHECK_INTERVAL_SECONDS", 0.0)
+    monkeypatch.setattr(scheduler_module, "RESTART_RETRY_INTERVAL_SECONDS", 0.0)
     monkeypatch.setattr(scheduler_module, "ORPHANED_COUNTER_CHECK_INTERVAL_SECONDS", 1e9)
     monkeypatch.setattr(scheduler_module.asyncio, "sleep", fast_sleep)
+    return sched
+
+
+def _run_monitor(sched, monkeypatch, checks, max_loops=10):
+    """Drive the monitor with scripted stall results; return the number of restarts."""
+    restarts = []
+    results = iter(checks)
+    loops = {"n": 0}
+
+    async def fake_check():
+        loops["n"] += 1
+        if loops["n"] >= max_loops:
+            sched._shutdown_event.set()
+        return next(results, False)
+
+    async def fake_restart():
+        restarts.append(True)
+
     monkeypatch.setattr(sched, "_check_for_stall", fake_check)
     monkeypatch.setattr(sched, "_attempt_restart", fake_restart)
     sched._started = True
-
     asyncio.run(sched._monitor_scheduler())
+    return len(restarts)
 
-    assert restarts == [True]
+
+def test_monitor_restarts_on_confirmed_stall(fast_monitor, monkeypatch):
+    assert _run_monitor(fast_monitor, monkeypatch, [False, True]) == 1
+
+
+def test_monitor_does_not_restart_again_within_cooldown(fast_monitor, monkeypatch):
+    """A stall that is back right after a restart is logged, not restarted in a loop."""
+    assert _run_monitor(fast_monitor, monkeypatch, [True, True, True]) == 1
+
+
+def test_monitor_skips_stall_check_while_not_started(fast_monitor, monkeypatch):
+    calls = []
+
+    async def fake_check():
+        calls.append(True)
+        return True
+
+    async def stop_after_first_sleep(_seconds):
+        fast_monitor._shutdown_event.set()
+
+    monkeypatch.setattr(fast_monitor, "_check_for_stall", fake_check)
+    monkeypatch.setattr(scheduler_module.asyncio, "sleep", stop_after_first_sleep)
+    fast_monitor._started = False
+
+    asyncio.run(fast_monitor._monitor_scheduler())
+
+    assert calls == []
+
+
+def test_failed_restart_is_retried(fast_monitor, monkeypatch):
+    """A restart that fails leaves _started False; the monitor must keep retrying."""
+    attempts = []
+
+    async def failing_then_ok_restart():
+        attempts.append(True)
+        if len(attempts) < 3:
+            fast_monitor._restart_pending = True
+            return
+        fast_monitor._restart_pending = False
+        fast_monitor._started = True
+        fast_monitor._shutdown_event.set()
+
+    monkeypatch.setattr(fast_monitor, "_attempt_restart", failing_then_ok_restart)
+    fast_monitor._started = False
+    fast_monitor._restart_pending = True
+
+    asyncio.run(fast_monitor._monitor_scheduler())
+
+    assert len(attempts) == 3
+
+
+def test_pending_retry_lifts_the_attempt_cap(fast_monitor, monkeypatch):
+    """After the cap is reached, a pending restart is retried instead of given up for good."""
+    attempts = []
+
+    async def restart():
+        attempts.append(fast_monitor._restart_count)
+        fast_monitor._shutdown_event.set()
+
+    monkeypatch.setattr(fast_monitor, "_attempt_restart", restart)
+    fast_monitor._started = False
+    fast_monitor._restart_pending = True
+    fast_monitor._restart_count = fast_monitor._max_restart_attempts
+
+    asyncio.run(fast_monitor._monitor_scheduler())
+
+    assert attempts == [0]
