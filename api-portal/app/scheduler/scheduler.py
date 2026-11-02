@@ -17,6 +17,12 @@ from app.scheduler.running_jobs_repair import (
     reconcile_running_job_counters,
 )
 from app.scheduler.stall_detection import find_overdue_schedules
+from app.scheduler.schedule_selection import (
+    ROUND_TASK_ID,
+    in_environment,
+    is_active,
+    stale_round_schedule_ids,
+)
 from app.scheduler.jobs import (
     create_round_from_definition_job,
     prepare_round_context_data_job,
@@ -85,6 +91,9 @@ class ChallengeScheduler:
         self._stall_observations = 0
         self._last_stall_restart: Optional[float] = None
         self._restart_pending = False
+        # Definition ids allowed to create rounds; None until a schedule file was loaded.
+        self._round_definition_ids: Optional[set[int]] = None
+        self._round_schedules_loaded = asyncio.Event()
 
     def _create_scheduler(self) -> AsyncScheduler:
         """Create a new AsyncScheduler instance with the configured data store."""
@@ -287,6 +296,12 @@ class ChallengeScheduler:
         Also syncs definitions to the database for the challenge definitions table.
         """
         self._config_path = config_path  # Store for potential restart
+        try:
+            await self._load_recurring_schedules(config_path)
+        finally:
+            self._round_schedules_loaded.set()
+
+    async def _load_recurring_schedules(self, config_path: str) -> None:
         await self._ensure_started()
         path = Path(config_path)
         if not path.exists():
@@ -300,15 +315,32 @@ class ChallengeScheduler:
             self.logger.exception(f"Error loading schedule config from {config_path}: {e}")
             return
 
-        schedules = data.get("schedules", [])
-        self.logger.info(f"Found {len(schedules)} recurring schedules in {config_path}")
+        all_schedules = data.get("schedules", [])
+        environment = Config.ARENA_ENVIRONMENT
+        schedules = []
+        for schedule_config in all_schedules:
+            if in_environment(schedule_config, environment):
+                schedules.append(schedule_config)
+            else:
+                self.logger.info(
+                    f"Schedule '{schedule_config.get('id')}' is limited to "
+                    f"{schedule_config.get('environments')}; skipped in environment "
+                    f"'{environment or 'unset'}'."
+                )
+        wanted_ids = {
+            s.get("id") for s in schedules if s.get("id") and s.get("cron") and is_active(s)
+        }
+        self.logger.info(
+            f"Found {len(all_schedules)} recurring schedules in {config_path}, "
+            f"{len(wanted_ids)} creating rounds here"
+        )
 
         # Overlapping registration windows starve whichever challenge the model
         # uploader reaches second. Report loudly, but keep loading — a bad config
         # should not leave the platform with no rounds at all. The shipped config is
         # kept overlap-free by test_schedule_validation.py.
         try:
-            overlaps = find_overlaps(schedules)
+            overlaps = find_overlaps([s for s in schedules if is_active(s)])
             for message in describe_overlaps(overlaps):
                 self.logger.error(f"Overlapping registration windows: {message}")
         except Exception as e:
@@ -317,6 +349,8 @@ class ChallengeScheduler:
         # Import here to avoid circular imports
         from app.database.connection import SessionLocal
         from app.services.challenge_service import ChallengeService
+
+        startup_runs: list[tuple[str, int]] = []
 
         for schedule_config in schedules:
             schedule_id = schedule_config.get("id")
@@ -328,16 +362,21 @@ class ChallengeScheduler:
                 continue
 
             try:
-                # Sync definition to database
+                # Sync definition to database, also for inactive schedules: their
+                # definition and history stay visible.
                 definition_id = None
                 async with SessionLocal() as session:
                     challenge_service = ChallengeService(session, scheduler=self)
                     definition_id = await challenge_service.sync_definition_from_yaml(schedule_id, schedule_config)
-                
+
                 if definition_id is None:
                     self.logger.error(f"Failed to sync definition for {schedule_id}")
                     continue
-                
+
+                if schedule_id not in wanted_ids:
+                    self.logger.info(f"Schedule '{schedule_id}' is inactive; it creates no rounds.")
+                    continue
+
                 # conflict_policy=replace: the schedule persists in the SQLAlchemy data
                 # store across restarts and add_schedule() defaults to do_nothing, so
                 # without this an existing row keeps its original trigger forever — the
@@ -354,11 +393,70 @@ class ChallengeScheduler:
                 self.logger.info(f"Upserted cron schedule '{schedule_id}' with cron '{cron_expression}'")
 
                 if run_on_startup:
-                    self.logger.info(f"Executing '{schedule_id}' on startup.")
-                    await create_round_from_definition_job(definition_id)
+                    startup_runs.append((schedule_id, definition_id))
 
             except Exception as e:
                 self.logger.exception(f"Failed to add or run schedule '{schedule_id}': {e}")
+
+        await self._remove_stale_round_schedules(wanted_ids)
+        self._round_definition_ids = await self._stored_round_definition_ids(wanted_ids)
+        self._round_schedules_loaded.set()
+
+        # After the allowed set is known, so the job's guard does not wait on this load.
+        for schedule_id, definition_id in startup_runs:
+            try:
+                self.logger.info(f"Executing '{schedule_id}' on startup.")
+                await create_round_from_definition_job(definition_id)
+            except Exception as e:
+                self.logger.exception(f"Failed to run schedule '{schedule_id}' on startup: {e}")
+
+    async def _remove_stale_round_schedules(self, wanted_ids: set[str]) -> None:
+        """Drop the cron job of every round schedule no longer wanted by the YAML."""
+        try:
+            existing = [(s.id, s.task_id) for s in await self.scheduler.get_schedules()]
+        except Exception as e:
+            self.logger.exception(f"Could not list schedules to remove stale ones: {e}")
+            return
+        for schedule_id in stale_round_schedule_ids(existing, wanted_ids):
+            try:
+                await self.scheduler.remove_schedule(schedule_id)
+                self.logger.warning(
+                    f"Removed cron schedule '{schedule_id}': not active in the schedule "
+                    "config. Its definition and history stay."
+                )
+            except Exception as e:
+                self.logger.exception(f"Failed to remove schedule '{schedule_id}': {e}")
+
+    async def _stored_round_definition_ids(self, wanted_ids: set[str]) -> Optional[set[int]]:
+        """Definition ids of the wanted round schedules as stored, i.e. what will fire.
+
+        Read from the store rather than from this load, so a definition whose sync failed
+        keeps its rounds. None (no guard) if the store cannot be read.
+        """
+        try:
+            stored = await self.scheduler.get_schedules()
+        except Exception as e:
+            self.logger.exception(f"Could not list schedules for the round guard: {e}")
+            return None
+        return {
+            s.args[0]
+            for s in stored
+            if s.task_id == ROUND_TASK_ID and s.id in wanted_ids and s.args
+        }
+
+    async def round_definition_allowed(self, definition_id: int, timeout: float = 120.0) -> bool:
+        """False if a schedule file is loaded and does not let this definition create rounds."""
+        try:
+            await asyncio.wait_for(self._round_schedules_loaded.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            self.logger.warning(
+                f"Schedule config not loaded after {timeout:.0f}s; allowing definition "
+                f"{definition_id}."
+            )
+            return True
+        if self._round_definition_ids is None:
+            return True
+        return definition_id in self._round_definition_ids
 
     async def schedule_challenge_preparation(
         self,

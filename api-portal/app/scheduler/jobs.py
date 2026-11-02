@@ -97,7 +97,14 @@ async def create_round_from_definition_job(definition_id: int) -> None:
     try:
         # Get scheduler from global reference
         scheduler = get_scheduler()
-        
+
+        if scheduler is not None and not await scheduler.round_definition_allowed(definition_id):
+            logger.warning(
+                f"Definition {definition_id} is not active in the schedule config; "
+                "no round created."
+            )
+            return
+
         async with SessionLocal() as session:
             challenge_service = ChallengeService(session, scheduler=scheduler)
             

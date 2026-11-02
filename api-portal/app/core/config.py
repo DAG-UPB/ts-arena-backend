@@ -46,6 +46,8 @@ class Config:
     
     # Scheduler Configuration
     CHALLENGE_SCHEDULE_FILE = os.getenv("CHALLENGE_SCHEDULE_FILE", "app/configs/challenge_schedules.yaml")
+    # Matched against a schedule's `environments` list; unset runs only schedules without one
+    ARENA_ENVIRONMENT = os.getenv("ARENA_ENVIRONMENT", "").strip().lower() or None
     # Daily Arena Score job: on only for 1, true or yes
     ARENA_SCORE_JOB_ENABLED = os.getenv("ARENA_SCORE_JOB_ENABLED", "").strip().lower() in ("1", "true", "yes")
 
