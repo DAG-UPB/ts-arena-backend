@@ -18,6 +18,7 @@ from app.scheduler.running_jobs_repair import (
 )
 from app.scheduler.stall_detection import find_overdue_schedules
 from app.scheduler.schedule_selection import (
+    ROUND_TASK_ID,
     in_environment,
     is_active,
     stale_round_schedule_ids,
@@ -349,7 +350,6 @@ class ChallengeScheduler:
         from app.database.connection import SessionLocal
         from app.services.challenge_service import ChallengeService
 
-        active_definition_ids: set[int] = set()
         startup_runs: list[tuple[str, int]] = []
 
         for schedule_config in schedules:
@@ -391,7 +391,6 @@ class ChallengeScheduler:
                     conflict_policy=ConflictPolicy.replace,
                 )
                 self.logger.info(f"Upserted cron schedule '{schedule_id}' with cron '{cron_expression}'")
-                active_definition_ids.add(definition_id)
 
                 if run_on_startup:
                     startup_runs.append((schedule_id, definition_id))
@@ -400,7 +399,7 @@ class ChallengeScheduler:
                 self.logger.exception(f"Failed to add or run schedule '{schedule_id}': {e}")
 
         await self._remove_stale_round_schedules(wanted_ids)
-        self._round_definition_ids = active_definition_ids
+        self._round_definition_ids = await self._stored_round_definition_ids(wanted_ids)
         self._round_schedules_loaded.set()
 
         # After the allowed set is known, so the job's guard does not wait on this load.
@@ -427,6 +426,23 @@ class ChallengeScheduler:
                 )
             except Exception as e:
                 self.logger.exception(f"Failed to remove schedule '{schedule_id}': {e}")
+
+    async def _stored_round_definition_ids(self, wanted_ids: set[str]) -> Optional[set[int]]:
+        """Definition ids of the wanted round schedules as stored, i.e. what will fire.
+
+        Read from the store rather than from this load, so a definition whose sync failed
+        keeps its rounds. None (no guard) if the store cannot be read.
+        """
+        try:
+            stored = await self.scheduler.get_schedules()
+        except Exception as e:
+            self.logger.exception(f"Could not list schedules for the round guard: {e}")
+            return None
+        return {
+            s.args[0]
+            for s in stored
+            if s.task_id == ROUND_TASK_ID and s.id in wanted_ids and s.args
+        }
 
     async def round_definition_allowed(self, definition_id: int, timeout: float = 120.0) -> bool:
         """False if a schedule file is loaded and does not let this definition create rounds."""

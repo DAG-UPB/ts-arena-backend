@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from app.scheduler.schedule_selection import is_active
 from app.scheduler.schedule_validation import (
     describe_overlaps,
     expand_windows,
@@ -123,6 +124,6 @@ def test_missing_registration_duration_falls_back_to_one_hour():
 
 
 def test_shipped_config_has_no_overlapping_registration_windows():
-    schedules = yaml.safe_load(CONFIG_PATH.read_text())["schedules"]
+    schedules = [s for s in yaml.safe_load(CONFIG_PATH.read_text())["schedules"] if is_active(s)]
     overlaps = find_overlaps(schedules, reference_time=REFERENCE)
     assert not overlaps, "; ".join(describe_overlaps(overlaps))

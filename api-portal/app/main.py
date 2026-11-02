@@ -258,9 +258,9 @@ async def lifespan(app: FastAPI):
                 max_restart_attempts=5,  # Auto-restart up to 5 times
                 restart_delay=5.0,  # Wait 5 seconds between restarts
             )
-            await scheduler.start()
-            # Set global scheduler reference for jobs
+            # Set before start(): a persisted cron firing during boot must see the round guard
             set_scheduler(scheduler)
+            await scheduler.start()
             try:
                 await scheduler.load_recurring_schedules(Config.CHALLENGE_SCHEDULE_FILE)
             except Exception:
@@ -268,6 +268,7 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             app.state.logger.error(f"Failed to initialize scheduler: {e}", exc_info=True)
             scheduler = None
+            set_scheduler(None)
     else:
         app.state.logger.warning("DATABASE_URL not set – Scheduler is disabled")
     app.state.challenge_scheduler = scheduler

@@ -57,14 +57,21 @@ def test_stale_ids_ignore_other_tasks():
 
 
 class FakeAPScheduler:
-    def __init__(self, existing=()):
-        self.schedules = {sid: ROUND_TASK_ID for sid in existing}
+    """``schedules`` maps id -> task id; ``args`` keeps the stored job arguments."""
+
+    def __init__(self):
+        self.schedules: dict[str, str] = {}
+        self.args: dict[str, list] = {}
 
     async def add_schedule(self, func_or_task_id, trigger, id, args, **kwargs):
         self.schedules[id] = ROUND_TASK_ID
+        self.args[id] = list(args)
 
     async def get_schedules(self):
-        return [SimpleNamespace(id=i, task_id=t) for i, t in self.schedules.items()]
+        return [
+            SimpleNamespace(id=i, task_id=t, args=tuple(self.args.get(i, ())))
+            for i, t in self.schedules.items()
+        ]
 
     async def remove_schedule(self, schedule_id):
         del self.schedules[schedule_id]
@@ -83,8 +90,11 @@ def env(monkeypatch, tmp_path):
     """A scheduler with a fake data store; definitions get ids 1, 2, ... by schedule id."""
     synced: dict[str, int] = {}
     created: list[int] = []
+    failing: set[str] = set()
 
     async def fake_sync(self, schedule_id, schedule_config):
+        if schedule_id in failing:
+            raise RuntimeError("database unavailable")
         return synced.setdefault(schedule_id, len(synced) + 1)
 
     async def fake_ensure_started(self):
@@ -115,7 +125,7 @@ def env(monkeypatch, tmp_path):
         monkeypatch.setattr(scheduler_module.Config, "ARENA_ENVIRONMENT", environment)
         asyncio.run(sched.load_recurring_schedules(str(path)))
 
-    return SimpleNamespace(sched=sched, synced=synced, created=created, load=load)
+    return SimpleNamespace(sched=sched, synced=synced, created=created, failing=failing, load=load)
 
 
 def _schedule(schedule_id, **extra):
@@ -187,6 +197,48 @@ def test_missing_config_does_not_block_rounds(env, tmp_path):
     _run_job(env, 7)
 
     assert env.created == [7]
+
+
+def test_failed_sync_keeps_the_stored_schedule_running(env):
+    """A transient DB error during a reload must not stop a schedule that is still wanted."""
+    env.load([_schedule("a"), _schedule("b")])
+    env.failing.add("b")
+
+    env.load([_schedule("a"), _schedule("b")])
+
+    assert set(env.sched.scheduler.schedules) == {"a", "b"}
+    _run_job(env, env.synced["b"])
+    assert env.created == [env.synced["b"]]
+
+
+def test_dev_only_schedule_in_store_is_removed_without_environment(env):
+    env.load([_schedule("a"), _schedule("cov", environments=["dev"])], environment="dev")
+
+    env.load([_schedule("a"), _schedule("cov", environments=["dev"])])
+
+    assert set(env.sched.scheduler.schedules) == {"a"}
+    _run_job(env, env.synced["cov"])
+    assert env.created == []
+
+
+def test_shipped_config_keeps_every_schedule_with_environment_unset(env):
+    """Prod parity: the shipped YAML removes nothing and blocks no definition."""
+    shipped = yaml.safe_load(
+        (scheduler_module.Path(__file__).parent.parent / "app/configs/challenge_schedules.yaml").read_text()
+    )["schedules"]
+
+    env.load(shipped)
+
+    assert set(env.sched.scheduler.schedules) == {s["id"] for s in shipped}
+    for definition_id in env.synced.values():
+        _run_job(env, definition_id)
+    assert sorted(env.created) == sorted(env.synced.values())
+
+
+def test_guard_fails_open_when_config_never_loads(env):
+    allowed = asyncio.run(env.sched.round_definition_allowed(1, timeout=0.01))
+
+    assert allowed is True
 
 
 def test_run_on_startup_creates_a_round(env):
