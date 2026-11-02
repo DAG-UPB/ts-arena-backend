@@ -86,6 +86,11 @@ def _record_calls(plugin, payload):
     return calls
 
 
+def test_horizon_beyond_the_scd2_publish_lead_is_rejected():
+    with pytest.raises(ValueError):
+        BrightSkyPlugin("g", {"kind": "forecast", "horizon_hours": 24 * 31}, [], "30 minutes")
+
+
 def test_forecast_window_runs_from_this_hour_over_the_horizon():
     plugin = _plugin("forecast")
     calls = _record_calls(plugin, _payload([
