@@ -30,8 +30,11 @@ def forecast_points(payload: Dict[str, Any], fields: List[str]) -> Dict[str, Lis
     for record in payload.get("weather", []):
         if record.get("source_id") not in forecast_sources:
             continue
+        fallbacks = record.get("fallback_source_ids") or {}
         for f in fields:
             value = record.get(f)
+            if f in fallbacks and fallbacks[f] not in forecast_sources:
+                continue
             if value is not None:
                 points[f].append({"ts": record["timestamp"], "value": float(value)})
     return points
@@ -60,6 +63,7 @@ class BrightSkyForecastPlugin(MultiSeriesPlugin):
                 "date": start.isoformat(),
                 "last_date": end.isoformat(),
                 "tz": "UTC",
+                "units": "dwd",
             },
             timeout=30,
         )

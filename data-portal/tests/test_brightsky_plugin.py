@@ -41,6 +41,18 @@ def test_forecast_points_drops_observations_and_missing_values():
     assert points["solar"] == [{"ts": "2026-11-02T14:00:00+00:00", "value": 0.05}]
 
 
+def test_field_filled_from_an_observation_source_is_dropped():
+    payload = _payload([
+        {"timestamp": "2026-11-02T13:00:00+00:00", "source_id": 1, "temperature": 8.5,
+         "solar": 0.2, "fallback_source_ids": {"solar": 2}},
+        {"timestamp": "2026-11-02T14:00:00+00:00", "source_id": 1, "temperature": 8.0,
+         "solar": 0.1, "fallback_source_ids": {"solar": 3}},
+    ], forecast_ids=(1, 3))
+    points = forecast_points(payload, ["temperature", "solar"])
+    assert len(points["temperature"]) == 2
+    assert points["solar"] == [{"ts": "2026-11-02T14:00:00+00:00", "value": 0.1}]
+
+
 @pytest.fixture
 def plugin():
     series = [
