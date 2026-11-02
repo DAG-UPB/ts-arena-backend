@@ -16,6 +16,7 @@ from app.scheduler.running_jobs_repair import (
     has_job_for_task,
     reconcile_running_job_counters,
 )
+from app.scheduler.stall_detection import find_overdue_schedules
 from app.scheduler.jobs import (
     create_round_from_definition_job,
     prepare_round_context_data_job,
@@ -36,6 +37,12 @@ from pathlib import Path
 # Worst case a mid-life leak is repaired ~2 intervals after it happens (backend-75).
 ORPHANED_COUNTER_CHECK_INTERVAL_SECONDS = 300.0
 ORPHANED_COUNTER_CONFIRMATIONS = 2
+
+# A schedule left unacquired this long past its fire time, on two consecutive checks,
+# means the scheduler loop is asleep and will not wake on its own (backend-118).
+STALL_CHECK_INTERVAL_SECONDS = 300.0
+STALL_GRACE_SECONDS = 300.0
+STALL_CONFIRMATIONS = 2
 
 ARENA_SCORE_SCHEDULE_ID = "periodic_arena_score_calculation"
 
@@ -71,6 +78,7 @@ class ChallengeScheduler:
         # {task_id: (observed_running_jobs, consecutive_observations)} — see
         # _check_for_orphaned_counters.
         self._orphan_watch: dict[str, tuple[int, int]] = {}
+        self._stall_observations = 0
 
     def _create_scheduler(self) -> AsyncScheduler:
         """Create a new AsyncScheduler instance with the configured data store."""
@@ -574,6 +582,7 @@ class ChallengeScheduler:
 
         loop = asyncio.get_running_loop()
         next_orphan_check = loop.time() + ORPHANED_COUNTER_CHECK_INTERVAL_SECONDS
+        next_stall_check = loop.time() + STALL_CHECK_INTERVAL_SECONDS
 
         while not self._shutdown_event.is_set():
             try:
@@ -592,6 +601,11 @@ class ChallengeScheduler:
                         loop.time() + ORPHANED_COUNTER_CHECK_INTERVAL_SECONDS
                     )
                     await self._check_for_orphaned_counters()
+
+                if self._started and loop.time() >= next_stall_check:
+                    next_stall_check = loop.time() + STALL_CHECK_INTERVAL_SECONDS
+                    if await self._check_for_stall() and not self._shutdown_event.is_set():
+                        await self._attempt_restart()
 
                 # Check if scheduler task has crashed (completed unexpectedly)
                 if self._started and self._scheduler_task:
@@ -660,6 +674,30 @@ class ChallengeScheduler:
             await clear_orphaned_counter(
                 self._database_url, task_id, value, self.logger
             )
+
+    async def _check_for_stall(self) -> bool:
+        """True once overdue, unacquired schedules are seen on consecutive checks."""
+        overdue = await find_overdue_schedules(
+            self._database_url, STALL_GRACE_SECONDS, self.logger
+        )
+        if not overdue:
+            self._stall_observations = 0
+            return False
+
+        self._stall_observations += 1
+        if self._stall_observations < STALL_CONFIRMATIONS:
+            self.logger.warning(
+                f"{len(overdue)} schedule(s) overdue and unacquired ({', '.join(overdue)}); "
+                f"{self._stall_observations}/{STALL_CONFIRMATIONS} observations."
+            )
+            return False
+
+        self._stall_observations = 0
+        self.logger.critical(
+            f"Scheduler loop stalled: {len(overdue)} schedule(s) overdue and unacquired "
+            f"({', '.join(overdue)}). Restarting the scheduler (backend-118)."
+        )
+        return True
 
     async def _attempt_restart(self) -> None:
         """Attempts to restart the scheduler after a crash.
