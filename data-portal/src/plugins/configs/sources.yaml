@@ -2483,6 +2483,7 @@ request_groups:
     schedule: 1 hour
     request_params:
       kind: observation
+      lookback_hours: 72
     timeseries:
     - unique_id: dwd_obs_temperature_schleswig_10035_1h
       extract_filter:
@@ -2494,6 +2495,7 @@ request_groups:
         frequency: 1 hour
         unit: °C
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: temperature
     - unique_id: dwd_obs_wind_speed_schleswig_10035_1h
@@ -2506,6 +2508,7 @@ request_groups:
         frequency: 1 hour
         unit: km/h
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: wind_speed
     - unique_id: dwd_obs_solar_schleswig_10035_1h
@@ -2518,6 +2521,7 @@ request_groups:
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: solar
     - unique_id: dwd_obs_temperature_rostock_10170_1h
@@ -2530,6 +2534,7 @@ request_groups:
         frequency: 1 hour
         unit: °C
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: temperature
     - unique_id: dwd_obs_wind_speed_rostock_10170_1h
@@ -2542,6 +2547,7 @@ request_groups:
         frequency: 1 hour
         unit: km/h
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: wind_speed
     - unique_id: dwd_obs_solar_rostock_10170_1h
@@ -2554,6 +2560,7 @@ request_groups:
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: solar
     - unique_id: dwd_obs_temperature_hamburg_10147_1h
@@ -2566,6 +2573,7 @@ request_groups:
         frequency: 1 hour
         unit: °C
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: temperature
     - unique_id: dwd_obs_wind_speed_hamburg_10147_1h
@@ -2578,6 +2586,7 @@ request_groups:
         frequency: 1 hour
         unit: km/h
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: wind_speed
     - unique_id: dwd_obs_solar_hamburg_10147_1h
@@ -2590,6 +2599,7 @@ request_groups:
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: solar
     - unique_id: dwd_obs_temperature_braunschweig_10348_1h
@@ -2602,6 +2612,7 @@ request_groups:
         frequency: 1 hour
         unit: °C
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: temperature
     - unique_id: dwd_obs_wind_speed_braunschweig_10348_1h
@@ -2614,6 +2625,7 @@ request_groups:
         frequency: 1 hour
         unit: km/h
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: wind_speed
     - unique_id: dwd_obs_solar_braunschweig_10348_1h
@@ -2626,6 +2638,7 @@ request_groups:
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: solar
     - unique_id: dwd_obs_temperature_potsdam_10379_1h
@@ -2638,6 +2651,7 @@ request_groups:
         frequency: 1 hour
         unit: °C
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: temperature
     - unique_id: dwd_obs_wind_speed_potsdam_10379_1h
@@ -2650,6 +2664,7 @@ request_groups:
         frequency: 1 hour
         unit: km/h
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: wind_speed
     - unique_id: dwd_obs_solar_potsdam_10379_1h
@@ -2662,6 +2677,7 @@ request_groups:
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: solar
     - unique_id: dwd_obs_temperature_lindenberg_10393_1h
@@ -2674,6 +2690,7 @@ request_groups:
         frequency: 1 hour
         unit: °C
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: temperature
     - unique_id: dwd_obs_wind_speed_lindenberg_10393_1h
@@ -2686,6 +2703,7 @@ request_groups:
         frequency: 1 hour
         unit: km/h
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: wind_speed
     - unique_id: dwd_obs_solar_lindenberg_10393_1h
@@ -2698,6 +2716,7 @@ request_groups:
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: solar
     - unique_id: dwd_obs_temperature_leipzig_10469_1h
@@ -2710,6 +2729,7 @@ request_groups:
         frequency: 1 hour
         unit: °C
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: temperature
     - unique_id: dwd_obs_wind_speed_leipzig_10469_1h
@@ -2722,6 +2742,7 @@ request_groups:
         frequency: 1 hour
         unit: km/h
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: wind_speed
     - unique_id: dwd_obs_solar_leipzig_10469_1h
@@ -2734,6 +2755,7 @@ request_groups:
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: solar
     - unique_id: dwd_obs_temperature_essen_10410_1h
@@ -2746,6 +2768,7 @@ request_groups:
         frequency: 1 hour
         unit: °C
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: temperature
     - unique_id: dwd_obs_wind_speed_essen_10410_1h
@@ -2758,6 +2781,7 @@ request_groups:
         frequency: 1 hour
         unit: km/h
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: wind_speed
     - unique_id: dwd_obs_solar_essen_10410_1h
@@ -2770,6 +2794,7 @@ request_groups:
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: solar
     - unique_id: dwd_obs_temperature_frankfurt_10637_1h
@@ -2782,6 +2807,7 @@ request_groups:
         frequency: 1 hour
         unit: °C
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: temperature
     - unique_id: dwd_obs_wind_speed_frankfurt_10637_1h
@@ -2794,6 +2820,7 @@ request_groups:
         frequency: 1 hour
         unit: km/h
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: wind_speed
     - unique_id: dwd_obs_solar_frankfurt_10637_1h
@@ -2806,6 +2833,7 @@ request_groups:
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: solar
     - unique_id: dwd_obs_temperature_stuttgart_10739_1h
@@ -2818,6 +2846,7 @@ request_groups:
         frequency: 1 hour
         unit: °C
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: temperature
     - unique_id: dwd_obs_wind_speed_stuttgart_10739_1h
@@ -2830,6 +2859,7 @@ request_groups:
         frequency: 1 hour
         unit: km/h
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: wind_speed
     - unique_id: dwd_obs_solar_stuttgart_10739_1h
@@ -2842,6 +2872,7 @@ request_groups:
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: solar
     - unique_id: dwd_obs_temperature_nuernberg_10763_1h
@@ -2854,6 +2885,7 @@ request_groups:
         frequency: 1 hour
         unit: °C
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: temperature
     - unique_id: dwd_obs_wind_speed_nuernberg_10763_1h
@@ -2866,6 +2898,7 @@ request_groups:
         frequency: 1 hour
         unit: km/h
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: wind_speed
     - unique_id: dwd_obs_solar_nuernberg_10763_1h
@@ -2878,6 +2911,7 @@ request_groups:
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: solar
     - unique_id: dwd_obs_temperature_weihenstephan_10863_1h
@@ -2890,6 +2924,7 @@ request_groups:
         frequency: 1 hour
         unit: °C
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: temperature
     - unique_id: dwd_obs_wind_speed_weihenstephan_10863_1h
@@ -2902,6 +2937,7 @@ request_groups:
         frequency: 1 hour
         unit: km/h
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: wind_speed
     - unique_id: dwd_obs_solar_weihenstephan_10863_1h
@@ -2914,6 +2950,7 @@ request_groups:
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
+        imputation_policy: none
         category: observation
         subcategory: solar
 

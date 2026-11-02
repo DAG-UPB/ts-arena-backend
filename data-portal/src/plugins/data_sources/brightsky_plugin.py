@@ -1,9 +1,10 @@
 """Bright Sky plugin: DWD station weather, observations or MOSMIX forecasts.
 
 Source: Deutscher Wetterdienst (DWD), served by Bright Sky (https://brightsky.dev).
-`kind: observation` stores measured values up to now. `kind: forecast` stores the latest
-forecast from now to `horizon_hours`; past forecasts are not available, so the history of
-those series is what this plugin has archived.
+`kind: observation` stores measured values up to now, re-reading at least `lookback_hours`
+so that provisional values are replaced by quality-controlled ones. `kind: forecast` stores
+the latest forecast from now to `horizon_hours`; past forecasts are not available, so the
+history of those series is what this plugin has archived.
 """
 
 import asyncio
@@ -20,7 +21,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://api.brightsky.dev"
 DEFAULT_HORIZON_HOURS = 48
+DEFAULT_LOOKBACK_HOURS = 72
 KINDS = ("forecast", "observation")
+OBSERVATION_TYPES = {"historical", "current"}
 
 
 def station_points(
@@ -30,10 +33,9 @@ def station_points(
 
     A field that Bright Sky filled from another source (another station or kind) is dropped.
     """
+    wanted_types = {"forecast"} if kind == "forecast" else OBSERVATION_TYPES
     wanted_sources = {
-        s["id"]
-        for s in payload.get("sources", [])
-        if (s.get("observation_type") == "forecast") == (kind == "forecast")
+        s["id"] for s in payload.get("sources", []) if s.get("observation_type") in wanted_types
     }
     points: Dict[str, List[Dict[str, Any]]] = {f: [] for f in fields}
     for record in payload.get("weather", []):
@@ -68,6 +70,7 @@ class BrightSkyPlugin(MultiSeriesPlugin):
             raise ValueError(f"kind must be one of {KINDS}, got {self.kind!r}")
         self.base_url = request_params.get("base_url", DEFAULT_BASE_URL).rstrip("/")
         self.horizon_hours = int(request_params.get("horizon_hours", DEFAULT_HORIZON_HOURS))
+        self.lookback_hours = int(request_params.get("lookback_hours", DEFAULT_LOOKBACK_HOURS))
         self.session = requests.Session()
 
     def _fetch_station(self, wmo_station_id: str, start: datetime, end: datetime) -> Dict[str, Any]:
@@ -89,7 +92,10 @@ class BrightSkyPlugin(MultiSeriesPlugin):
         hour = now.replace(minute=0, second=0, microsecond=0)
         if self.kind == "forecast":
             return hour, hour + timedelta(hours=self.horizon_hours)
-        start = _as_utc(start_date) if start_date else now - timedelta(hours=24)
+        # Reach back far enough that provisional values get their quality-controlled revision.
+        start = now - timedelta(hours=self.lookback_hours)
+        if start_date:
+            start = min(start, _as_utc(start_date))
         return start.replace(minute=0, second=0, microsecond=0), hour
 
     def _fetch_all(

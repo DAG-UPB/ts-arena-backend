@@ -107,6 +107,19 @@ def test_observation_window_runs_from_start_date_to_this_hour():
     assert result["t_a"] == [{"ts": "2026-11-02T12:00:00+00:00", "value": 9.0}]
 
 
+def test_observation_window_reaches_back_at_least_the_lookback():
+    plugin = _plugin("observation")
+    calls = _record_calls(plugin, MIXED)
+    plugin._fetch_all(NOW, "2026-11-01T13:33:08")
+    assert calls[0][1] == HOUR - dt.timedelta(hours=72)
+
+
+def test_observation_ignores_synop_sources():
+    payload = {"weather": [{"timestamp": "2026-11-02T12:30:00+00:00", "source_id": 5, "temperature": 9.0}],
+               "sources": [{"id": 5, "observation_type": "synop"}]}
+    assert station_points(payload, ["temperature"], "observation") == {"temperature": []}
+
+
 def test_failed_station_is_skipped():
     plugin = _plugin("forecast")
 
@@ -135,6 +148,8 @@ def test_shipped_config_pairs_observations_with_forecasts():
     obs = plugins["brightsky-dwd-observation"]
     fc = plugins["brightsky-dwd-mosmix-forecast"]
     assert (obs.kind, fc.kind) == ("observation", "forecast")
+    assert obs.lookback_hours >= 48
+    assert all(s.imputation_policy == "none" for s in obs.get_series_definitions())
 
     def keys(group, prefix):
         out = set()
