@@ -3,11 +3,15 @@
 import logging
 import json
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+# A value is ingested at most this long before its timestamp. Bounds the search for
+# current versions so old (compressed) chunks are excluded at plan time.
+MAX_PUBLISH_LEAD = timedelta(days=30)
 
 
 class TimeSeriesDataSCD2Repository:
@@ -46,6 +50,8 @@ class TimeSeriesDataSCD2Repository:
         for p in data_points:
             if p.get('ts') is not None:
                 ts = datetime.fromisoformat(p['ts'].replace('Z', '+00:00')) if isinstance(p['ts'], str) else p['ts']
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
                 # Value can be None for gap markers
                 value = float(p['value']) if p.get('value') is not None else None
                 # Default quality_code to 0 (original) if not provided
@@ -62,6 +68,9 @@ class TimeSeriesDataSCD2Repository:
 
         if not values_to_upsert:
             return {'inserted': 0, 'updated': 0, 'unchanged': 0}
+
+        min_ts = min(temp_dict)
+        max_ts = max(temp_dict)
 
         try:
             # This single query handles inserts, and updates of existing records
@@ -80,7 +89,11 @@ closed AS (
       is_current = FALSE,
       updated_at = NOW()
   FROM input_data i
-  WHERE t.series_id = i.series_id
+  -- Constant bounds let the planner skip old chunks; a join alone scans and decompresses all.
+  WHERE t.series_id = :series_id
+    AND t.ts BETWEEN :min_ts AND :max_ts
+    AND t.valid_from >= :min_valid_from
+    AND t.series_id = i.series_id
     AND t.ts = i.ts
     AND t.is_current = TRUE
     AND (t.value IS DISTINCT FROM i.value OR t.quality_code IS DISTINCT FROM i.quality_code)
@@ -106,9 +119,12 @@ SELECT
 
             """)
 
-            result = await self.session.execute(
-                upsert_query,
-                {'data': json.dumps([
+            params = {
+                'series_id': series_id,
+                'min_ts': min_ts,
+                'max_ts': max_ts,
+                'min_valid_from': min_ts - MAX_PUBLISH_LEAD,
+                'data': json.dumps([
                     {
                         'series_id': v['series_id'], 
                         'ts': v['ts'].isoformat(), 
@@ -116,8 +132,9 @@ SELECT
                         'quality_code': v.get('quality_code', 0)
                     }
                     for v in values_to_upsert
-                ])}
-            )
+                ]),
+            }
+            result = await self.session.execute(upsert_query, params)
             
             counts = result.fetchone()
             inserted = counts[0] if counts else 0
