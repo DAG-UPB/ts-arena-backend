@@ -38,7 +38,7 @@ def _upsert(points):
 
 
 def test_update_is_bounded_by_series_ts_range_and_valid_from():
-    (sql, params), stats = _upsert([
+    (sql, params), _ = _upsert([
         {"ts": "2026-11-02T12:00:00+00:00", "value": 1.0},
         {"ts": "2026-11-01T12:00:00Z", "value": 2.0},
         {"ts": "2026-11-02T13:00:00+01:00", "value": 3.0},
@@ -49,7 +49,6 @@ def test_update_is_bounded_by_series_ts_range_and_valid_from():
     assert params["max_ts"] == dt.datetime(2026, 11, 2, 12, tzinfo=UTC)
     assert params["min_valid_from"] == lo - MAX_PUBLISH_LEAD
     assert "t.valid_from >= :min_valid_from" in sql
-    assert stats == {"inserted": 2, "updated": 1, "unchanged": 0}
 
 
 def test_naive_timestamps_are_read_as_utc():

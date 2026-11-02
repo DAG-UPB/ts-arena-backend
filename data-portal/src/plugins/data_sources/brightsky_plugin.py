@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from src.plugins.base_plugin import MultiSeriesPlugin, TimeSeriesDefinition
+from src.repositories.time_series_scd2_repository import MAX_PUBLISH_LEAD
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,9 @@ class BrightSkyPlugin(MultiSeriesPlugin):
             raise ValueError(f"kind must be one of {KINDS}, got {self.kind!r}")
         self.base_url = request_params.get("base_url", DEFAULT_BASE_URL).rstrip("/")
         self.horizon_hours = int(request_params.get("horizon_hours", DEFAULT_HORIZON_HOURS))
+        if timedelta(hours=self.horizon_hours) > MAX_PUBLISH_LEAD:
+            # The SCD2 upsert only finds current versions written within MAX_PUBLISH_LEAD of ts.
+            raise ValueError(f"horizon_hours must not exceed {MAX_PUBLISH_LEAD}")
         self.lookback_hours = int(request_params.get("lookback_hours", DEFAULT_LOOKBACK_HOURS))
         self.session = requests.Session()
 
