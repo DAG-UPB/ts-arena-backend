@@ -1,8 +1,10 @@
-"""Bright Sky plugin: DWD MOSMIX weather forecasts per station.
+"""Bright Sky plugin: DWD station weather, observations or MOSMIX forecasts.
 
 Source: Deutscher Wetterdienst (DWD), served by Bright Sky (https://brightsky.dev).
-Only forecast records are kept; past forecasts are not available, so the history of
-these series is what this plugin has archived.
+`kind: observation` stores measured values up to now, re-reading at least `lookback_hours`
+so that provisional values are replaced by quality-controlled ones. `kind: forecast` stores
+the latest forecast from now to `horizon_hours`; past forecasts are not available, so the
+history of those series is what this plugin has archived.
 """
 
 import asyncio
@@ -19,28 +21,40 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://api.brightsky.dev"
 DEFAULT_HORIZON_HOURS = 48
+DEFAULT_LOOKBACK_HOURS = 72
+KINDS = ("forecast", "observation")
+OBSERVATION_TYPES = {"historical", "current"}
 
 
-def forecast_points(payload: Dict[str, Any], fields: List[str]) -> Dict[str, List[Dict[str, Any]]]:
-    """Per field, the points of all forecast records in a /weather response."""
-    forecast_sources = {
-        s["id"] for s in payload.get("sources", []) if s.get("observation_type") == "forecast"
+def station_points(
+    payload: Dict[str, Any], fields: List[str], kind: str = "forecast"
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Per field, the points of all records of one kind in a /weather response.
+
+    A field that Bright Sky filled from another source (another station or kind) is dropped.
+    """
+    wanted_types = {"forecast"} if kind == "forecast" else OBSERVATION_TYPES
+    wanted_sources = {
+        s["id"] for s in payload.get("sources", []) if s.get("observation_type") in wanted_types
     }
     points: Dict[str, List[Dict[str, Any]]] = {f: [] for f in fields}
     for record in payload.get("weather", []):
-        if record.get("source_id") not in forecast_sources:
+        if record.get("source_id") not in wanted_sources:
             continue
         fallbacks = record.get("fallback_source_ids") or {}
         for f in fields:
             value = record.get(f)
-            if f in fallbacks and fallbacks[f] not in forecast_sources:
-                continue
-            if value is not None:
+            if value is not None and f not in fallbacks:
                 points[f].append({"ts": record["timestamp"], "value": float(value)})
     return points
 
 
-class BrightSkyForecastPlugin(MultiSeriesPlugin):
+def _as_utc(value: str) -> datetime:
+    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+
+
+class BrightSkyPlugin(MultiSeriesPlugin):
     """One request per station; each series is one field of one station."""
 
     def __init__(
@@ -51,8 +65,12 @@ class BrightSkyForecastPlugin(MultiSeriesPlugin):
         schedule: str,
     ):
         super().__init__(group_id, request_params, series_definitions, schedule)
+        self.kind = request_params.get("kind", "forecast")
+        if self.kind not in KINDS:
+            raise ValueError(f"kind must be one of {KINDS}, got {self.kind!r}")
         self.base_url = request_params.get("base_url", DEFAULT_BASE_URL).rstrip("/")
         self.horizon_hours = int(request_params.get("horizon_hours", DEFAULT_HORIZON_HOURS))
+        self.lookback_hours = int(request_params.get("lookback_hours", DEFAULT_LOOKBACK_HOURS))
         self.session = requests.Session()
 
     def _fetch_station(self, wmo_station_id: str, start: datetime, end: datetime) -> Dict[str, Any]:
@@ -70,9 +88,20 @@ class BrightSkyForecastPlugin(MultiSeriesPlugin):
         response.raise_for_status()
         return response.json()
 
-    def _fetch_all(self, now: datetime) -> Dict[str, List[Dict[str, Any]]]:
-        start = now.replace(minute=0, second=0, microsecond=0)
-        end = start + timedelta(hours=self.horizon_hours)
+    def _window(self, now: datetime, start_date: Optional[str]) -> tuple[datetime, datetime]:
+        hour = now.replace(minute=0, second=0, microsecond=0)
+        if self.kind == "forecast":
+            return hour, hour + timedelta(hours=self.horizon_hours)
+        # Reach back far enough that provisional values get their quality-controlled revision.
+        start = now - timedelta(hours=self.lookback_hours)
+        if start_date:
+            start = min(start, _as_utc(start_date))
+        return start.replace(minute=0, second=0, microsecond=0), hour
+
+    def _fetch_all(
+        self, now: datetime, start_date: Optional[str] = None
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        start, end = self._window(now, start_date)
 
         by_station: Dict[str, List[TimeSeriesDefinition]] = defaultdict(list)
         for series in self._series_definitions:
@@ -82,10 +111,11 @@ class BrightSkyForecastPlugin(MultiSeriesPlugin):
         for station, series_list in by_station.items():
             fields = [s.extract_filter["field"] for s in series_list]
             try:
-                points = forecast_points(self._fetch_station(station, start, end), fields)
+                payload = self._fetch_station(station, start, end)
             except Exception as e:
                 logger.warning(f"[{self._group_id}] Station {station} failed: {e}")
                 continue
+            points = station_points(payload, fields, self.kind)
             for series in series_list:
                 result[series.unique_id] = points[series.extract_filter["field"]]
         if by_station and not result:
@@ -95,6 +125,8 @@ class BrightSkyForecastPlugin(MultiSeriesPlugin):
     async def get_historical_data_multi(
         self, start_date: str, end_date: Optional[str] = None
     ) -> Dict[str, List[Dict[str, Any]]]:
-        # start_date is ignored: Bright Sky serves only the latest forecast run.
+        # Forecasts ignore start_date: Bright Sky serves only the latest run.
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self._fetch_all, datetime.now(timezone.utc))
+        return await loop.run_in_executor(
+            None, self._fetch_all, datetime.now(timezone.utc), start_date
+        )

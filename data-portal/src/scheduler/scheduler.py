@@ -443,11 +443,14 @@ class DataPortalScheduler:
                             update_frequency=series_def.update_frequency or '15 minutes'
                         )
                         
-                        # Apply imputation to fill gaps
-                        frequency_td = parse_frequency_to_timedelta(series_def.frequency)
-                        imputed_data, n_interpolated, n_null = imputation_service.impute_gaps(
-                            series_data, frequency_td
-                        )
+                        # Apply imputation to fill gaps, unless the series opts out
+                        if series_def.imputation_policy == 'none':
+                            imputed_data, n_interpolated, n_null = series_data, 0, 0
+                        else:
+                            frequency_td = parse_frequency_to_timedelta(series_def.frequency)
+                            imputed_data, n_interpolated, n_null = imputation_service.impute_gaps(
+                                series_data, frequency_td
+                            )
                         total_interpolated += n_interpolated
                         total_null += n_null
                         
