@@ -744,8 +744,10 @@ class ChallengeScheduler:
         if self._restart_count >= self._max_restart_attempts:
             self.logger.error(
                 f"Maximum restart attempts ({self._max_restart_attempts}) reached. "
-                "Giving up on scheduler restart."
+                "Retrying every minute."
             )
+            self._started = False
+            self._restart_pending = True
             return
 
         self._restart_count += 1

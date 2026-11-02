@@ -47,7 +47,7 @@ _FIND_OVERDUE = text(
 async def find_overdue_schedules(
     database_url: str,
     grace_seconds: float,
-    identity: Optional[str] = None,
+    identity: str,
     logger: Optional[logging.Logger] = None,
 ) -> list[str]:
     """Return ids of unacquired schedules whose fire time passed more than ``grace_seconds`` ago.

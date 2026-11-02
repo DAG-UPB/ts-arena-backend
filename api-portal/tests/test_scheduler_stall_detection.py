@@ -28,7 +28,7 @@ def sched() -> ChallengeScheduler:
 def overdue(monkeypatch):
     state = {"ids": [], "identity": None}
 
-    async def fake_find(database_url, grace_seconds, identity=None, logger=None):
+    async def fake_find(database_url, grace_seconds, identity, logger=None):
         assert database_url == DB_URL
         state["identity"] = identity
         return list(state["ids"])
