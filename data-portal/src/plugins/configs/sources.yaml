@@ -2476,13 +2476,454 @@ request_groups:
           subcategory: temperature
           aggregation_level: sensor
 
-  # DWD MOSMIX forecasts per station via Bright Sky. Forecast covariates only (fc_ prefix):
-  # each run stores the latest forecast from now to +horizon_hours.
+  # DWD station observations via Bright Sky: the past part of weather covariates.
+  brightsky-dwd-observation:
+    module: src.plugins.data_sources.brightsky_plugin
+    class: BrightSkyPlugin
+    schedule: 1 hour
+    request_params:
+      kind: observation
+    timeseries:
+    - unique_id: dwd_obs_temperature_schleswig_10035_1h
+      extract_filter:
+        wmo_station_id: '10035'
+        field: temperature
+      metadata:
+        name: 'DWD Observation: temperature Schleswig'
+        description: 'Air temperature 2 m above ground, observation at station Schleswig (WMO 10035). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: °C
+        domain: weather
+        category: observation
+        subcategory: temperature
+    - unique_id: dwd_obs_wind_speed_schleswig_10035_1h
+      extract_filter:
+        wmo_station_id: '10035'
+        field: wind_speed
+      metadata:
+        name: 'DWD Observation: wind speed Schleswig'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, observation at station Schleswig (WMO 10035). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: km/h
+        domain: weather
+        category: observation
+        subcategory: wind_speed
+    - unique_id: dwd_obs_solar_schleswig_10035_1h
+      extract_filter:
+        wmo_station_id: '10035'
+        field: solar
+      metadata:
+        name: 'DWD Observation: solar Schleswig'
+        description: 'Solar irradiation over the previous hour, observation at station Schleswig (WMO 10035). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: kWh/m²
+        domain: weather
+        category: observation
+        subcategory: solar
+    - unique_id: dwd_obs_temperature_rostock_10170_1h
+      extract_filter:
+        wmo_station_id: '10170'
+        field: temperature
+      metadata:
+        name: 'DWD Observation: temperature Rostock-Warnemünde'
+        description: 'Air temperature 2 m above ground, observation at station Rostock-Warnemünde (WMO 10170). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: °C
+        domain: weather
+        category: observation
+        subcategory: temperature
+    - unique_id: dwd_obs_wind_speed_rostock_10170_1h
+      extract_filter:
+        wmo_station_id: '10170'
+        field: wind_speed
+      metadata:
+        name: 'DWD Observation: wind speed Rostock-Warnemünde'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, observation at station Rostock-Warnemünde (WMO 10170). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: km/h
+        domain: weather
+        category: observation
+        subcategory: wind_speed
+    - unique_id: dwd_obs_solar_rostock_10170_1h
+      extract_filter:
+        wmo_station_id: '10170'
+        field: solar
+      metadata:
+        name: 'DWD Observation: solar Rostock-Warnemünde'
+        description: 'Solar irradiation over the previous hour, observation at station Rostock-Warnemünde (WMO 10170). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: kWh/m²
+        domain: weather
+        category: observation
+        subcategory: solar
+    - unique_id: dwd_obs_temperature_hamburg_10147_1h
+      extract_filter:
+        wmo_station_id: '10147'
+        field: temperature
+      metadata:
+        name: 'DWD Observation: temperature Hamburg-Fuhlsbüttel'
+        description: 'Air temperature 2 m above ground, observation at station Hamburg-Fuhlsbüttel (WMO 10147). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: °C
+        domain: weather
+        category: observation
+        subcategory: temperature
+    - unique_id: dwd_obs_wind_speed_hamburg_10147_1h
+      extract_filter:
+        wmo_station_id: '10147'
+        field: wind_speed
+      metadata:
+        name: 'DWD Observation: wind speed Hamburg-Fuhlsbüttel'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, observation at station Hamburg-Fuhlsbüttel (WMO 10147). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: km/h
+        domain: weather
+        category: observation
+        subcategory: wind_speed
+    - unique_id: dwd_obs_solar_hamburg_10147_1h
+      extract_filter:
+        wmo_station_id: '10147'
+        field: solar
+      metadata:
+        name: 'DWD Observation: solar Hamburg-Fuhlsbüttel'
+        description: 'Solar irradiation over the previous hour, observation at station Hamburg-Fuhlsbüttel (WMO 10147). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: kWh/m²
+        domain: weather
+        category: observation
+        subcategory: solar
+    - unique_id: dwd_obs_temperature_braunschweig_10348_1h
+      extract_filter:
+        wmo_station_id: '10348'
+        field: temperature
+      metadata:
+        name: 'DWD Observation: temperature Braunschweig'
+        description: 'Air temperature 2 m above ground, observation at station Braunschweig (WMO 10348). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: °C
+        domain: weather
+        category: observation
+        subcategory: temperature
+    - unique_id: dwd_obs_wind_speed_braunschweig_10348_1h
+      extract_filter:
+        wmo_station_id: '10348'
+        field: wind_speed
+      metadata:
+        name: 'DWD Observation: wind speed Braunschweig'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, observation at station Braunschweig (WMO 10348). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: km/h
+        domain: weather
+        category: observation
+        subcategory: wind_speed
+    - unique_id: dwd_obs_solar_braunschweig_10348_1h
+      extract_filter:
+        wmo_station_id: '10348'
+        field: solar
+      metadata:
+        name: 'DWD Observation: solar Braunschweig'
+        description: 'Solar irradiation over the previous hour, observation at station Braunschweig (WMO 10348). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: kWh/m²
+        domain: weather
+        category: observation
+        subcategory: solar
+    - unique_id: dwd_obs_temperature_potsdam_10379_1h
+      extract_filter:
+        wmo_station_id: '10379'
+        field: temperature
+      metadata:
+        name: 'DWD Observation: temperature Potsdam'
+        description: 'Air temperature 2 m above ground, observation at station Potsdam (WMO 10379). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: °C
+        domain: weather
+        category: observation
+        subcategory: temperature
+    - unique_id: dwd_obs_wind_speed_potsdam_10379_1h
+      extract_filter:
+        wmo_station_id: '10379'
+        field: wind_speed
+      metadata:
+        name: 'DWD Observation: wind speed Potsdam'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, observation at station Potsdam (WMO 10379). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: km/h
+        domain: weather
+        category: observation
+        subcategory: wind_speed
+    - unique_id: dwd_obs_solar_potsdam_10379_1h
+      extract_filter:
+        wmo_station_id: '10379'
+        field: solar
+      metadata:
+        name: 'DWD Observation: solar Potsdam'
+        description: 'Solar irradiation over the previous hour, observation at station Potsdam (WMO 10379). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: kWh/m²
+        domain: weather
+        category: observation
+        subcategory: solar
+    - unique_id: dwd_obs_temperature_lindenberg_10393_1h
+      extract_filter:
+        wmo_station_id: '10393'
+        field: temperature
+      metadata:
+        name: 'DWD Observation: temperature Lindenberg'
+        description: 'Air temperature 2 m above ground, observation at station Lindenberg (WMO 10393). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: °C
+        domain: weather
+        category: observation
+        subcategory: temperature
+    - unique_id: dwd_obs_wind_speed_lindenberg_10393_1h
+      extract_filter:
+        wmo_station_id: '10393'
+        field: wind_speed
+      metadata:
+        name: 'DWD Observation: wind speed Lindenberg'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, observation at station Lindenberg (WMO 10393). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: km/h
+        domain: weather
+        category: observation
+        subcategory: wind_speed
+    - unique_id: dwd_obs_solar_lindenberg_10393_1h
+      extract_filter:
+        wmo_station_id: '10393'
+        field: solar
+      metadata:
+        name: 'DWD Observation: solar Lindenberg'
+        description: 'Solar irradiation over the previous hour, observation at station Lindenberg (WMO 10393). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: kWh/m²
+        domain: weather
+        category: observation
+        subcategory: solar
+    - unique_id: dwd_obs_temperature_leipzig_10469_1h
+      extract_filter:
+        wmo_station_id: '10469'
+        field: temperature
+      metadata:
+        name: 'DWD Observation: temperature Leipzig/Halle'
+        description: 'Air temperature 2 m above ground, observation at station Leipzig/Halle (WMO 10469). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: °C
+        domain: weather
+        category: observation
+        subcategory: temperature
+    - unique_id: dwd_obs_wind_speed_leipzig_10469_1h
+      extract_filter:
+        wmo_station_id: '10469'
+        field: wind_speed
+      metadata:
+        name: 'DWD Observation: wind speed Leipzig/Halle'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, observation at station Leipzig/Halle (WMO 10469). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: km/h
+        domain: weather
+        category: observation
+        subcategory: wind_speed
+    - unique_id: dwd_obs_solar_leipzig_10469_1h
+      extract_filter:
+        wmo_station_id: '10469'
+        field: solar
+      metadata:
+        name: 'DWD Observation: solar Leipzig/Halle'
+        description: 'Solar irradiation over the previous hour, observation at station Leipzig/Halle (WMO 10469). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: kWh/m²
+        domain: weather
+        category: observation
+        subcategory: solar
+    - unique_id: dwd_obs_temperature_essen_10410_1h
+      extract_filter:
+        wmo_station_id: '10410'
+        field: temperature
+      metadata:
+        name: 'DWD Observation: temperature Essen-Bredeney'
+        description: 'Air temperature 2 m above ground, observation at station Essen-Bredeney (WMO 10410). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: °C
+        domain: weather
+        category: observation
+        subcategory: temperature
+    - unique_id: dwd_obs_wind_speed_essen_10410_1h
+      extract_filter:
+        wmo_station_id: '10410'
+        field: wind_speed
+      metadata:
+        name: 'DWD Observation: wind speed Essen-Bredeney'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, observation at station Essen-Bredeney (WMO 10410). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: km/h
+        domain: weather
+        category: observation
+        subcategory: wind_speed
+    - unique_id: dwd_obs_solar_essen_10410_1h
+      extract_filter:
+        wmo_station_id: '10410'
+        field: solar
+      metadata:
+        name: 'DWD Observation: solar Essen-Bredeney'
+        description: 'Solar irradiation over the previous hour, observation at station Essen-Bredeney (WMO 10410). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: kWh/m²
+        domain: weather
+        category: observation
+        subcategory: solar
+    - unique_id: dwd_obs_temperature_frankfurt_10637_1h
+      extract_filter:
+        wmo_station_id: '10637'
+        field: temperature
+      metadata:
+        name: 'DWD Observation: temperature Frankfurt/Main'
+        description: 'Air temperature 2 m above ground, observation at station Frankfurt/Main (WMO 10637). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: °C
+        domain: weather
+        category: observation
+        subcategory: temperature
+    - unique_id: dwd_obs_wind_speed_frankfurt_10637_1h
+      extract_filter:
+        wmo_station_id: '10637'
+        field: wind_speed
+      metadata:
+        name: 'DWD Observation: wind speed Frankfurt/Main'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, observation at station Frankfurt/Main (WMO 10637). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: km/h
+        domain: weather
+        category: observation
+        subcategory: wind_speed
+    - unique_id: dwd_obs_solar_frankfurt_10637_1h
+      extract_filter:
+        wmo_station_id: '10637'
+        field: solar
+      metadata:
+        name: 'DWD Observation: solar Frankfurt/Main'
+        description: 'Solar irradiation over the previous hour, observation at station Frankfurt/Main (WMO 10637). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: kWh/m²
+        domain: weather
+        category: observation
+        subcategory: solar
+    - unique_id: dwd_obs_temperature_stuttgart_10739_1h
+      extract_filter:
+        wmo_station_id: '10739'
+        field: temperature
+      metadata:
+        name: 'DWD Observation: temperature Stuttgart-Schnarrenberg'
+        description: 'Air temperature 2 m above ground, observation at station Stuttgart-Schnarrenberg (WMO 10739). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: °C
+        domain: weather
+        category: observation
+        subcategory: temperature
+    - unique_id: dwd_obs_wind_speed_stuttgart_10739_1h
+      extract_filter:
+        wmo_station_id: '10739'
+        field: wind_speed
+      metadata:
+        name: 'DWD Observation: wind speed Stuttgart-Schnarrenberg'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, observation at station Stuttgart-Schnarrenberg (WMO 10739). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: km/h
+        domain: weather
+        category: observation
+        subcategory: wind_speed
+    - unique_id: dwd_obs_solar_stuttgart_10739_1h
+      extract_filter:
+        wmo_station_id: '10739'
+        field: solar
+      metadata:
+        name: 'DWD Observation: solar Stuttgart-Schnarrenberg'
+        description: 'Solar irradiation over the previous hour, observation at station Stuttgart-Schnarrenberg (WMO 10739). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: kWh/m²
+        domain: weather
+        category: observation
+        subcategory: solar
+    - unique_id: dwd_obs_temperature_nuernberg_10763_1h
+      extract_filter:
+        wmo_station_id: '10763'
+        field: temperature
+      metadata:
+        name: 'DWD Observation: temperature Nürnberg'
+        description: 'Air temperature 2 m above ground, observation at station Nürnberg (WMO 10763). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: °C
+        domain: weather
+        category: observation
+        subcategory: temperature
+    - unique_id: dwd_obs_wind_speed_nuernberg_10763_1h
+      extract_filter:
+        wmo_station_id: '10763'
+        field: wind_speed
+      metadata:
+        name: 'DWD Observation: wind speed Nürnberg'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, observation at station Nürnberg (WMO 10763). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: km/h
+        domain: weather
+        category: observation
+        subcategory: wind_speed
+    - unique_id: dwd_obs_solar_nuernberg_10763_1h
+      extract_filter:
+        wmo_station_id: '10763'
+        field: solar
+      metadata:
+        name: 'DWD Observation: solar Nürnberg'
+        description: 'Solar irradiation over the previous hour, observation at station Nürnberg (WMO 10763). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: kWh/m²
+        domain: weather
+        category: observation
+        subcategory: solar
+    - unique_id: dwd_obs_temperature_weihenstephan_10863_1h
+      extract_filter:
+        wmo_station_id: '10863'
+        field: temperature
+      metadata:
+        name: 'DWD Observation: temperature Weihenstephan'
+        description: 'Air temperature 2 m above ground, observation at station Weihenstephan (WMO 10863). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: °C
+        domain: weather
+        category: observation
+        subcategory: temperature
+    - unique_id: dwd_obs_wind_speed_weihenstephan_10863_1h
+      extract_filter:
+        wmo_station_id: '10863'
+        field: wind_speed
+      metadata:
+        name: 'DWD Observation: wind speed Weihenstephan'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, observation at station Weihenstephan (WMO 10863). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: km/h
+        domain: weather
+        category: observation
+        subcategory: wind_speed
+    - unique_id: dwd_obs_solar_weihenstephan_10863_1h
+      extract_filter:
+        wmo_station_id: '10863'
+        field: solar
+      metadata:
+        name: 'DWD Observation: solar Weihenstephan'
+        description: 'Solar irradiation over the previous hour, observation at station Weihenstephan (WMO 10863). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        frequency: 1 hour
+        unit: kWh/m²
+        domain: weather
+        category: observation
+        subcategory: solar
+
+  # DWD MOSMIX forecasts for the same stations: the future part (fc_ prefix). Each run stores the latest forecast to +horizon_hours.
   brightsky-dwd-mosmix-forecast:
     module: src.plugins.data_sources.brightsky_plugin
-    class: BrightSkyForecastPlugin
+    class: BrightSkyPlugin
     schedule: 30 minutes
     request_params:
+      kind: forecast
       horizon_hours: 48
     timeseries:
     - unique_id: fc_dwd_mosmix_temperature_schleswig_10035_1h
@@ -2491,7 +2932,7 @@ request_groups:
         field: temperature
       metadata:
         name: 'DWD MOSMIX forecast: temperature Schleswig'
-        description: 'Air temperature 2 m above ground, forecast for station Schleswig (WMO 10035). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        description: 'Air temperature 2 m above ground, mosmix forecast at station Schleswig (WMO 10035). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: °C
         domain: weather
@@ -2503,7 +2944,7 @@ request_groups:
         field: wind_speed
       metadata:
         name: 'DWD MOSMIX forecast: wind speed Schleswig'
-        description: 'Mean wind speed over the previous hour, 10 m above ground, forecast for station Schleswig (WMO 10035). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, mosmix forecast at station Schleswig (WMO 10035). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: km/h
         domain: weather
@@ -2515,7 +2956,7 @@ request_groups:
         field: solar
       metadata:
         name: 'DWD MOSMIX forecast: solar Schleswig'
-        description: 'Solar irradiation over the previous hour, forecast for station Schleswig (WMO 10035). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        description: 'Solar irradiation over the previous hour, mosmix forecast at station Schleswig (WMO 10035). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
@@ -2527,7 +2968,7 @@ request_groups:
         field: temperature
       metadata:
         name: 'DWD MOSMIX forecast: temperature Rostock-Warnemünde'
-        description: 'Air temperature 2 m above ground, forecast for station Rostock-Warnemünde (WMO 10170). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        description: 'Air temperature 2 m above ground, mosmix forecast at station Rostock-Warnemünde (WMO 10170). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: °C
         domain: weather
@@ -2539,7 +2980,7 @@ request_groups:
         field: wind_speed
       metadata:
         name: 'DWD MOSMIX forecast: wind speed Rostock-Warnemünde'
-        description: 'Mean wind speed over the previous hour, 10 m above ground, forecast for station Rostock-Warnemünde (WMO 10170). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, mosmix forecast at station Rostock-Warnemünde (WMO 10170). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: km/h
         domain: weather
@@ -2551,7 +2992,7 @@ request_groups:
         field: solar
       metadata:
         name: 'DWD MOSMIX forecast: solar Rostock-Warnemünde'
-        description: 'Solar irradiation over the previous hour, forecast for station Rostock-Warnemünde (WMO 10170). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        description: 'Solar irradiation over the previous hour, mosmix forecast at station Rostock-Warnemünde (WMO 10170). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
@@ -2563,7 +3004,7 @@ request_groups:
         field: temperature
       metadata:
         name: 'DWD MOSMIX forecast: temperature Hamburg-Fuhlsbüttel'
-        description: 'Air temperature 2 m above ground, forecast for station Hamburg-Fuhlsbüttel (WMO 10147). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        description: 'Air temperature 2 m above ground, mosmix forecast at station Hamburg-Fuhlsbüttel (WMO 10147). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: °C
         domain: weather
@@ -2575,7 +3016,7 @@ request_groups:
         field: wind_speed
       metadata:
         name: 'DWD MOSMIX forecast: wind speed Hamburg-Fuhlsbüttel'
-        description: 'Mean wind speed over the previous hour, 10 m above ground, forecast for station Hamburg-Fuhlsbüttel (WMO 10147). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, mosmix forecast at station Hamburg-Fuhlsbüttel (WMO 10147). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: km/h
         domain: weather
@@ -2587,115 +3028,115 @@ request_groups:
         field: solar
       metadata:
         name: 'DWD MOSMIX forecast: solar Hamburg-Fuhlsbüttel'
-        description: 'Solar irradiation over the previous hour, forecast for station Hamburg-Fuhlsbüttel (WMO 10147). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        description: 'Solar irradiation over the previous hour, mosmix forecast at station Hamburg-Fuhlsbüttel (WMO 10147). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
         category: forecast
         subcategory: solar
-    - unique_id: fc_dwd_mosmix_temperature_hannover_10338_1h
+    - unique_id: fc_dwd_mosmix_temperature_braunschweig_10348_1h
       extract_filter:
-        wmo_station_id: '10338'
+        wmo_station_id: '10348'
         field: temperature
       metadata:
-        name: 'DWD MOSMIX forecast: temperature Hannover'
-        description: 'Air temperature 2 m above ground, forecast for station Hannover (WMO 10338). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        name: 'DWD MOSMIX forecast: temperature Braunschweig'
+        description: 'Air temperature 2 m above ground, mosmix forecast at station Braunschweig (WMO 10348). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: °C
         domain: weather
         category: forecast
         subcategory: temperature
-    - unique_id: fc_dwd_mosmix_wind_speed_hannover_10338_1h
+    - unique_id: fc_dwd_mosmix_wind_speed_braunschweig_10348_1h
       extract_filter:
-        wmo_station_id: '10338'
+        wmo_station_id: '10348'
         field: wind_speed
       metadata:
-        name: 'DWD MOSMIX forecast: wind speed Hannover'
-        description: 'Mean wind speed over the previous hour, 10 m above ground, forecast for station Hannover (WMO 10338). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        name: 'DWD MOSMIX forecast: wind speed Braunschweig'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, mosmix forecast at station Braunschweig (WMO 10348). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: km/h
         domain: weather
         category: forecast
         subcategory: wind_speed
-    - unique_id: fc_dwd_mosmix_solar_hannover_10338_1h
+    - unique_id: fc_dwd_mosmix_solar_braunschweig_10348_1h
       extract_filter:
-        wmo_station_id: '10338'
+        wmo_station_id: '10348'
         field: solar
       metadata:
-        name: 'DWD MOSMIX forecast: solar Hannover'
-        description: 'Solar irradiation over the previous hour, forecast for station Hannover (WMO 10338). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        name: 'DWD MOSMIX forecast: solar Braunschweig'
+        description: 'Solar irradiation over the previous hour, mosmix forecast at station Braunschweig (WMO 10348). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
         category: forecast
         subcategory: solar
-    - unique_id: fc_dwd_mosmix_temperature_berlin_10384_1h
+    - unique_id: fc_dwd_mosmix_temperature_potsdam_10379_1h
       extract_filter:
-        wmo_station_id: '10384'
+        wmo_station_id: '10379'
         field: temperature
       metadata:
-        name: 'DWD MOSMIX forecast: temperature Berlin-Tempelhof'
-        description: 'Air temperature 2 m above ground, forecast for station Berlin-Tempelhof (WMO 10384). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        name: 'DWD MOSMIX forecast: temperature Potsdam'
+        description: 'Air temperature 2 m above ground, mosmix forecast at station Potsdam (WMO 10379). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: °C
         domain: weather
         category: forecast
         subcategory: temperature
-    - unique_id: fc_dwd_mosmix_wind_speed_berlin_10384_1h
+    - unique_id: fc_dwd_mosmix_wind_speed_potsdam_10379_1h
       extract_filter:
-        wmo_station_id: '10384'
+        wmo_station_id: '10379'
         field: wind_speed
       metadata:
-        name: 'DWD MOSMIX forecast: wind speed Berlin-Tempelhof'
-        description: 'Mean wind speed over the previous hour, 10 m above ground, forecast for station Berlin-Tempelhof (WMO 10384). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        name: 'DWD MOSMIX forecast: wind speed Potsdam'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, mosmix forecast at station Potsdam (WMO 10379). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: km/h
         domain: weather
         category: forecast
         subcategory: wind_speed
-    - unique_id: fc_dwd_mosmix_solar_berlin_10384_1h
+    - unique_id: fc_dwd_mosmix_solar_potsdam_10379_1h
       extract_filter:
-        wmo_station_id: '10384'
+        wmo_station_id: '10379'
         field: solar
       metadata:
-        name: 'DWD MOSMIX forecast: solar Berlin-Tempelhof'
-        description: 'Solar irradiation over the previous hour, forecast for station Berlin-Tempelhof (WMO 10384). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        name: 'DWD MOSMIX forecast: solar Potsdam'
+        description: 'Solar irradiation over the previous hour, mosmix forecast at station Potsdam (WMO 10379). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
         category: forecast
         subcategory: solar
-    - unique_id: fc_dwd_mosmix_temperature_magdeburg_10361_1h
+    - unique_id: fc_dwd_mosmix_temperature_lindenberg_10393_1h
       extract_filter:
-        wmo_station_id: '10361'
+        wmo_station_id: '10393'
         field: temperature
       metadata:
-        name: 'DWD MOSMIX forecast: temperature Magdeburg'
-        description: 'Air temperature 2 m above ground, forecast for station Magdeburg (WMO 10361). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        name: 'DWD MOSMIX forecast: temperature Lindenberg'
+        description: 'Air temperature 2 m above ground, mosmix forecast at station Lindenberg (WMO 10393). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: °C
         domain: weather
         category: forecast
         subcategory: temperature
-    - unique_id: fc_dwd_mosmix_wind_speed_magdeburg_10361_1h
+    - unique_id: fc_dwd_mosmix_wind_speed_lindenberg_10393_1h
       extract_filter:
-        wmo_station_id: '10361'
+        wmo_station_id: '10393'
         field: wind_speed
       metadata:
-        name: 'DWD MOSMIX forecast: wind speed Magdeburg'
-        description: 'Mean wind speed over the previous hour, 10 m above ground, forecast for station Magdeburg (WMO 10361). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        name: 'DWD MOSMIX forecast: wind speed Lindenberg'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, mosmix forecast at station Lindenberg (WMO 10393). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: km/h
         domain: weather
         category: forecast
         subcategory: wind_speed
-    - unique_id: fc_dwd_mosmix_solar_magdeburg_10361_1h
+    - unique_id: fc_dwd_mosmix_solar_lindenberg_10393_1h
       extract_filter:
-        wmo_station_id: '10361'
+        wmo_station_id: '10393'
         field: solar
       metadata:
-        name: 'DWD MOSMIX forecast: solar Magdeburg'
-        description: 'Solar irradiation over the previous hour, forecast for station Magdeburg (WMO 10361). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        name: 'DWD MOSMIX forecast: solar Lindenberg'
+        description: 'Solar irradiation over the previous hour, mosmix forecast at station Lindenberg (WMO 10393). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
@@ -2707,7 +3148,7 @@ request_groups:
         field: temperature
       metadata:
         name: 'DWD MOSMIX forecast: temperature Leipzig/Halle'
-        description: 'Air temperature 2 m above ground, forecast for station Leipzig/Halle (WMO 10469). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        description: 'Air temperature 2 m above ground, mosmix forecast at station Leipzig/Halle (WMO 10469). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: °C
         domain: weather
@@ -2719,7 +3160,7 @@ request_groups:
         field: wind_speed
       metadata:
         name: 'DWD MOSMIX forecast: wind speed Leipzig/Halle'
-        description: 'Mean wind speed over the previous hour, 10 m above ground, forecast for station Leipzig/Halle (WMO 10469). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, mosmix forecast at station Leipzig/Halle (WMO 10469). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: km/h
         domain: weather
@@ -2731,43 +3172,43 @@ request_groups:
         field: solar
       metadata:
         name: 'DWD MOSMIX forecast: solar Leipzig/Halle'
-        description: 'Solar irradiation over the previous hour, forecast for station Leipzig/Halle (WMO 10469). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        description: 'Solar irradiation over the previous hour, mosmix forecast at station Leipzig/Halle (WMO 10469). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
         category: forecast
         subcategory: solar
-    - unique_id: fc_dwd_mosmix_temperature_duesseldorf_10400_1h
+    - unique_id: fc_dwd_mosmix_temperature_essen_10410_1h
       extract_filter:
-        wmo_station_id: '10400'
+        wmo_station_id: '10410'
         field: temperature
       metadata:
-        name: 'DWD MOSMIX forecast: temperature Düsseldorf'
-        description: 'Air temperature 2 m above ground, forecast for station Düsseldorf (WMO 10400). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        name: 'DWD MOSMIX forecast: temperature Essen-Bredeney'
+        description: 'Air temperature 2 m above ground, mosmix forecast at station Essen-Bredeney (WMO 10410). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: °C
         domain: weather
         category: forecast
         subcategory: temperature
-    - unique_id: fc_dwd_mosmix_wind_speed_duesseldorf_10400_1h
+    - unique_id: fc_dwd_mosmix_wind_speed_essen_10410_1h
       extract_filter:
-        wmo_station_id: '10400'
+        wmo_station_id: '10410'
         field: wind_speed
       metadata:
-        name: 'DWD MOSMIX forecast: wind speed Düsseldorf'
-        description: 'Mean wind speed over the previous hour, 10 m above ground, forecast for station Düsseldorf (WMO 10400). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        name: 'DWD MOSMIX forecast: wind speed Essen-Bredeney'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, mosmix forecast at station Essen-Bredeney (WMO 10410). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: km/h
         domain: weather
         category: forecast
         subcategory: wind_speed
-    - unique_id: fc_dwd_mosmix_solar_duesseldorf_10400_1h
+    - unique_id: fc_dwd_mosmix_solar_essen_10410_1h
       extract_filter:
-        wmo_station_id: '10400'
+        wmo_station_id: '10410'
         field: solar
       metadata:
-        name: 'DWD MOSMIX forecast: solar Düsseldorf'
-        description: 'Solar irradiation over the previous hour, forecast for station Düsseldorf (WMO 10400). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        name: 'DWD MOSMIX forecast: solar Essen-Bredeney'
+        description: 'Solar irradiation over the previous hour, mosmix forecast at station Essen-Bredeney (WMO 10410). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
@@ -2779,7 +3220,7 @@ request_groups:
         field: temperature
       metadata:
         name: 'DWD MOSMIX forecast: temperature Frankfurt/Main'
-        description: 'Air temperature 2 m above ground, forecast for station Frankfurt/Main (WMO 10637). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        description: 'Air temperature 2 m above ground, mosmix forecast at station Frankfurt/Main (WMO 10637). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: °C
         domain: weather
@@ -2791,7 +3232,7 @@ request_groups:
         field: wind_speed
       metadata:
         name: 'DWD MOSMIX forecast: wind speed Frankfurt/Main'
-        description: 'Mean wind speed over the previous hour, 10 m above ground, forecast for station Frankfurt/Main (WMO 10637). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, mosmix forecast at station Frankfurt/Main (WMO 10637). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: km/h
         domain: weather
@@ -2803,43 +3244,43 @@ request_groups:
         field: solar
       metadata:
         name: 'DWD MOSMIX forecast: solar Frankfurt/Main'
-        description: 'Solar irradiation over the previous hour, forecast for station Frankfurt/Main (WMO 10637). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        description: 'Solar irradiation over the previous hour, mosmix forecast at station Frankfurt/Main (WMO 10637). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
         category: forecast
         subcategory: solar
-    - unique_id: fc_dwd_mosmix_temperature_stuttgart_10738_1h
+    - unique_id: fc_dwd_mosmix_temperature_stuttgart_10739_1h
       extract_filter:
-        wmo_station_id: '10738'
+        wmo_station_id: '10739'
         field: temperature
       metadata:
-        name: 'DWD MOSMIX forecast: temperature Stuttgart-Echterdingen'
-        description: 'Air temperature 2 m above ground, forecast for station Stuttgart-Echterdingen (WMO 10738). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        name: 'DWD MOSMIX forecast: temperature Stuttgart-Schnarrenberg'
+        description: 'Air temperature 2 m above ground, mosmix forecast at station Stuttgart-Schnarrenberg (WMO 10739). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: °C
         domain: weather
         category: forecast
         subcategory: temperature
-    - unique_id: fc_dwd_mosmix_wind_speed_stuttgart_10738_1h
+    - unique_id: fc_dwd_mosmix_wind_speed_stuttgart_10739_1h
       extract_filter:
-        wmo_station_id: '10738'
+        wmo_station_id: '10739'
         field: wind_speed
       metadata:
-        name: 'DWD MOSMIX forecast: wind speed Stuttgart-Echterdingen'
-        description: 'Mean wind speed over the previous hour, 10 m above ground, forecast for station Stuttgart-Echterdingen (WMO 10738). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        name: 'DWD MOSMIX forecast: wind speed Stuttgart-Schnarrenberg'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, mosmix forecast at station Stuttgart-Schnarrenberg (WMO 10739). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: km/h
         domain: weather
         category: forecast
         subcategory: wind_speed
-    - unique_id: fc_dwd_mosmix_solar_stuttgart_10738_1h
+    - unique_id: fc_dwd_mosmix_solar_stuttgart_10739_1h
       extract_filter:
-        wmo_station_id: '10738'
+        wmo_station_id: '10739'
         field: solar
       metadata:
-        name: 'DWD MOSMIX forecast: solar Stuttgart-Echterdingen'
-        description: 'Solar irradiation over the previous hour, forecast for station Stuttgart-Echterdingen (WMO 10738). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        name: 'DWD MOSMIX forecast: solar Stuttgart-Schnarrenberg'
+        description: 'Solar irradiation over the previous hour, mosmix forecast at station Stuttgart-Schnarrenberg (WMO 10739). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
@@ -2851,7 +3292,7 @@ request_groups:
         field: temperature
       metadata:
         name: 'DWD MOSMIX forecast: temperature Nürnberg'
-        description: 'Air temperature 2 m above ground, forecast for station Nürnberg (WMO 10763). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        description: 'Air temperature 2 m above ground, mosmix forecast at station Nürnberg (WMO 10763). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: °C
         domain: weather
@@ -2863,7 +3304,7 @@ request_groups:
         field: wind_speed
       metadata:
         name: 'DWD MOSMIX forecast: wind speed Nürnberg'
-        description: 'Mean wind speed over the previous hour, 10 m above ground, forecast for station Nürnberg (WMO 10763). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, mosmix forecast at station Nürnberg (WMO 10763). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: km/h
         domain: weather
@@ -2875,49 +3316,48 @@ request_groups:
         field: solar
       metadata:
         name: 'DWD MOSMIX forecast: solar Nürnberg'
-        description: 'Solar irradiation over the previous hour, forecast for station Nürnberg (WMO 10763). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        description: 'Solar irradiation over the previous hour, mosmix forecast at station Nürnberg (WMO 10763). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
         category: forecast
         subcategory: solar
-    - unique_id: fc_dwd_mosmix_temperature_muenchen_10870_1h
+    - unique_id: fc_dwd_mosmix_temperature_weihenstephan_10863_1h
       extract_filter:
-        wmo_station_id: '10870'
+        wmo_station_id: '10863'
         field: temperature
       metadata:
-        name: 'DWD MOSMIX forecast: temperature München-Flughafen'
-        description: 'Air temperature 2 m above ground, forecast for station München-Flughafen (WMO 10870). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        name: 'DWD MOSMIX forecast: temperature Weihenstephan'
+        description: 'Air temperature 2 m above ground, mosmix forecast at station Weihenstephan (WMO 10863). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: °C
         domain: weather
         category: forecast
         subcategory: temperature
-    - unique_id: fc_dwd_mosmix_wind_speed_muenchen_10870_1h
+    - unique_id: fc_dwd_mosmix_wind_speed_weihenstephan_10863_1h
       extract_filter:
-        wmo_station_id: '10870'
+        wmo_station_id: '10863'
         field: wind_speed
       metadata:
-        name: 'DWD MOSMIX forecast: wind speed München-Flughafen'
-        description: 'Mean wind speed over the previous hour, 10 m above ground, forecast for station München-Flughafen (WMO 10870). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        name: 'DWD MOSMIX forecast: wind speed Weihenstephan'
+        description: 'Mean wind speed over the previous hour, 10 m above ground, mosmix forecast at station Weihenstephan (WMO 10863). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: km/h
         domain: weather
         category: forecast
         subcategory: wind_speed
-    - unique_id: fc_dwd_mosmix_solar_muenchen_10870_1h
+    - unique_id: fc_dwd_mosmix_solar_weihenstephan_10863_1h
       extract_filter:
-        wmo_station_id: '10870'
+        wmo_station_id: '10863'
         field: solar
       metadata:
-        name: 'DWD MOSMIX forecast: solar München-Flughafen'
-        description: 'Solar irradiation over the previous hour, forecast for station München-Flughafen (WMO 10870). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
+        name: 'DWD MOSMIX forecast: solar Weihenstephan'
+        description: 'Solar irradiation over the previous hour, mosmix forecast at station Weihenstephan (WMO 10863). Source: Deutscher Wetterdienst (DWD), via Bright Sky, CC BY 4.0.'
         frequency: 1 hour
         unit: kWh/m²
         domain: weather
         category: forecast
         subcategory: solar
-
 
 timeseries:
   electricity_biomass_power_plant_generation_BZ_AT_quarterhour_4066:

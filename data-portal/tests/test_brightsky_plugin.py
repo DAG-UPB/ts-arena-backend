@@ -1,4 +1,4 @@
-"""Bright Sky forecast plugin: only forecast records, one request per station."""
+"""Bright Sky plugin: observations and forecasts kept apart, one request per station."""
 
 import datetime as dt
 from pathlib import Path
@@ -6,11 +6,13 @@ from pathlib import Path
 import pytest
 
 from src.plugins.base_plugin import TimeSeriesDefinition
-from src.plugins.data_sources.brightsky_plugin import BrightSkyForecastPlugin, forecast_points
+from src.plugins.data_sources.brightsky_plugin import BrightSkyPlugin, station_points
 from src.scheduler.plugin_loader import PluginLoader
 
 UTC = dt.timezone.utc
 SOURCES = Path(__file__).resolve().parents[1] / "src/plugins/configs/sources.yaml"
+NOW = dt.datetime(2026, 11, 2, 13, 33, 8, tzinfo=UTC)
+HOUR = dt.datetime(2026, 11, 2, 13, tzinfo=UTC)
 
 
 def _payload(records, forecast_ids=(1,), observation_ids=(2,)):
@@ -19,21 +21,32 @@ def _payload(records, forecast_ids=(1,), observation_ids=(2,)):
     return {"weather": records, "sources": sources}
 
 
+MIXED = _payload([
+    {"timestamp": "2026-11-02T12:00:00+00:00", "source_id": 2, "temperature": 9.0, "solar": 0.1},
+    {"timestamp": "2026-11-02T13:00:00+00:00", "source_id": 1, "temperature": 8.5, "solar": None},
+    {"timestamp": "2026-11-02T14:00:00+00:00", "source_id": 1, "temperature": 8.0, "solar": 0.05},
+])
+
+
 def _series(uid, station, field):
     return TimeSeriesDefinition(
         unique_id=uid, name=uid, description="", frequency="1 hour", unit="",
-        domain="weather", category="forecast",
+        domain="weather", category="x",
         extract_filter={"wmo_station_id": station, "field": field},
     )
 
 
-def test_forecast_points_drops_observations_and_missing_values():
-    payload = _payload([
-        {"timestamp": "2026-11-02T12:00:00+00:00", "source_id": 2, "temperature": 9.0, "solar": 0.1},
-        {"timestamp": "2026-11-02T13:00:00+00:00", "source_id": 1, "temperature": 8.5, "solar": None},
-        {"timestamp": "2026-11-02T14:00:00+00:00", "source_id": 1, "temperature": 8.0, "solar": 0.05},
-    ])
-    points = forecast_points(payload, ["temperature", "solar"])
+def _plugin(kind):
+    series = [
+        _series("t_a", "10147", "temperature"),
+        _series("w_a", "10147", "wind_speed"),
+        _series("t_b", "10863", "temperature"),
+    ]
+    return BrightSkyPlugin("g", {"kind": kind, "horizon_hours": 48}, series, "30 minutes")
+
+
+def test_forecast_keeps_only_forecast_records():
+    points = station_points(MIXED, ["temperature", "solar"], "forecast")
     assert points["temperature"] == [
         {"ts": "2026-11-02T13:00:00+00:00", "value": 8.5},
         {"ts": "2026-11-02T14:00:00+00:00", "value": 8.0},
@@ -41,80 +54,100 @@ def test_forecast_points_drops_observations_and_missing_values():
     assert points["solar"] == [{"ts": "2026-11-02T14:00:00+00:00", "value": 0.05}]
 
 
-def test_field_filled_from_an_observation_source_is_dropped():
+def test_observation_keeps_only_measured_records():
+    points = station_points(MIXED, ["temperature", "solar"], "observation")
+    assert points["temperature"] == [{"ts": "2026-11-02T12:00:00+00:00", "value": 9.0}]
+    assert points["solar"] == [{"ts": "2026-11-02T12:00:00+00:00", "value": 0.1}]
+
+
+def test_field_filled_from_another_source_is_dropped():
     payload = _payload([
-        {"timestamp": "2026-11-02T13:00:00+00:00", "source_id": 1, "temperature": 8.5,
-         "solar": 0.2, "fallback_source_ids": {"solar": 2}},
-        {"timestamp": "2026-11-02T14:00:00+00:00", "source_id": 1, "temperature": 8.0,
-         "solar": 0.1, "fallback_source_ids": {"solar": 3}},
-    ], forecast_ids=(1, 3))
-    points = forecast_points(payload, ["temperature", "solar"])
-    assert len(points["temperature"]) == 2
-    assert points["solar"] == [{"ts": "2026-11-02T14:00:00+00:00", "value": 0.1}]
+        {"timestamp": "2026-11-02T12:00:00+00:00", "source_id": 2, "temperature": 9.0,
+         "solar": 0.2, "fallback_source_ids": {"solar": 3}},
+    ], observation_ids=(2, 3))
+    points = station_points(payload, ["temperature", "solar"], "observation")
+    assert len(points["temperature"]) == 1
+    assert points["solar"] == []
 
 
-@pytest.fixture
-def plugin():
-    series = [
-        _series("t_a", "10147", "temperature"),
-        _series("w_a", "10147", "wind_speed"),
-        _series("t_b", "10870", "temperature"),
-    ]
-    return BrightSkyForecastPlugin("g", {"horizon_hours": 48}, series, "30 minutes")
+def test_unknown_kind_is_rejected():
+    with pytest.raises(ValueError):
+        _plugin("nowcast")
 
 
-def test_one_request_per_station_over_the_horizon(plugin):
+def _record_calls(plugin, payload):
     calls = []
 
     def fake_fetch(station, start, end):
         calls.append((station, start, end))
-        return _payload([{"timestamp": "2026-11-02T14:00:00+00:00", "source_id": 1,
-                          "temperature": float(station[-1]), "wind_speed": 12.0}])
+        return payload
 
     plugin._fetch_station = fake_fetch
-    result = plugin._fetch_all(dt.datetime(2026, 11, 2, 13, 33, 8, tzinfo=UTC))
+    return calls
 
-    start = dt.datetime(2026, 11, 2, 13, tzinfo=UTC)
-    assert calls == [
-        ("10147", start, start + dt.timedelta(hours=48)),
-        ("10870", start, start + dt.timedelta(hours=48)),
-    ]
+
+def test_forecast_window_runs_from_this_hour_over_the_horizon():
+    plugin = _plugin("forecast")
+    calls = _record_calls(plugin, _payload([
+        {"timestamp": "2026-11-02T14:00:00+00:00", "source_id": 1, "temperature": 7.0, "wind_speed": 12.0},
+    ]))
+    result = plugin._fetch_all(NOW, "2026-10-01T00:00:00")
+    end = HOUR + dt.timedelta(hours=48)
+    assert calls == [("10147", HOUR, end), ("10863", HOUR, end)]
     assert result["t_a"][0]["value"] == 7.0
     assert result["w_a"][0]["value"] == 12.0
-    assert result["t_b"][0]["value"] == 0.0
 
 
-def test_failed_station_is_skipped(plugin):
+def test_observation_window_runs_from_start_date_to_this_hour():
+    plugin = _plugin("observation")
+    calls = _record_calls(plugin, MIXED)
+    result = plugin._fetch_all(NOW, "2026-10-03T13:33:08.5")
+    start = dt.datetime(2026, 10, 3, 13, tzinfo=UTC)
+    assert calls == [("10147", start, HOUR), ("10863", start, HOUR)]
+    assert result["t_a"] == [{"ts": "2026-11-02T12:00:00+00:00", "value": 9.0}]
+
+
+def test_failed_station_is_skipped():
+    plugin = _plugin("forecast")
+
     def fake_fetch(station, start, end):
         if station == "10147":
             raise ConnectionError("boom")
         return _payload([{"timestamp": "2026-11-02T14:00:00+00:00", "source_id": 1, "temperature": 3.0}])
 
     plugin._fetch_station = fake_fetch
-    result = plugin._fetch_all(dt.datetime(2026, 11, 2, 13, tzinfo=UTC))
-    assert set(result) == {"t_b"}
+    assert set(plugin._fetch_all(NOW)) == {"t_b"}
 
 
-def test_all_stations_failing_raises_for_the_retry(plugin):
+def test_all_stations_failing_raises_for_the_retry():
+    plugin = _plugin("observation")
+
     def fake_fetch(station, start, end):
         raise ConnectionError("boom")
 
     plugin._fetch_station = fake_fetch
     with pytest.raises(RuntimeError):
-        plugin._fetch_all(dt.datetime(2026, 11, 2, 13, tzinfo=UTC))
+        plugin._fetch_all(NOW)
 
 
-def test_shipped_config_loads_the_weather_group():
+def test_shipped_config_pairs_observations_with_forecasts():
     plugins = PluginLoader(str(SOURCES)).load_multi_series_plugins()
-    group = plugins["brightsky-dwd-mosmix-forecast"]
-    assert isinstance(group, BrightSkyForecastPlugin)
-    series = group.get_series_definitions()
-    assert len(series) == 36
-    assert len({s.unique_id for s in series}) == 36
-    for s in series:
-        assert s.unique_id.startswith("fc_dwd_mosmix_")
-        assert s.domain == "weather"
-        assert s.frequency == "1 hour"
-        assert s.extract_filter["field"] in {"temperature", "wind_speed", "solar"}
-        assert isinstance(s.extract_filter["wmo_station_id"], str)
-        assert "Deutscher Wetterdienst" in s.description
+    obs = plugins["brightsky-dwd-observation"]
+    fc = plugins["brightsky-dwd-mosmix-forecast"]
+    assert (obs.kind, fc.kind) == ("observation", "forecast")
+
+    def keys(group, prefix):
+        out = set()
+        for s in group.get_series_definitions():
+            assert s.unique_id.startswith(prefix + "_")
+            assert s.domain == "weather"
+            assert s.frequency == "1 hour"
+            assert isinstance(s.extract_filter["wmo_station_id"], str)
+            assert "Deutscher Wetterdienst" in s.description
+            out.add((s.extract_filter["wmo_station_id"], s.extract_filter["field"]))
+        return out
+
+    obs_keys = keys(obs, "dwd_obs")
+    assert obs_keys == keys(fc, "fc_dwd_mosmix")
+    assert len(obs_keys) == 36
+    assert {f for _, f in obs_keys} == {"temperature", "wind_speed", "solar"}
